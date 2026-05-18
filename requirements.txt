@@ -1,0 +1,7 @@
+openai-whisper
+
+pathlib # for making directories and paths
+json
+
+tgt # for making textgrids
+librose # for getting duration of audio for making TextGrids
