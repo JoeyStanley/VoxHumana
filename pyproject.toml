@@ -1,7 +1,7 @@
 [project]
 name = "voxhumana"
 version = "0.1.0"
-description = "Add your description here"
+description = "Web-based pipeline for automated vowel formant extraction from sociolinguistic interviews"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
