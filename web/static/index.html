@@ -35,6 +35,7 @@
       width: 100%;
       max-width: 700px;
       box-shadow: 0 2px 12px rgba(74,46,26,0.10);
+      position: relative; /* needed for drawer/overlay positioning */
     }
 
     /* Accent bar */
@@ -65,6 +66,8 @@
       letter-spacing: -0.01em;
       font-family: Georgia, serif;
       font-style: italic;
+      cursor: pointer;
+      user-select: none;
     }
     .wordmark em { color: var(--pg); font-style: normal; }
     .tagline {
@@ -162,6 +165,25 @@
       font-weight: bold;
     }
     .section-rule { flex: 1; height: 1px; background: var(--pcb); }
+
+    /* Help button */
+    .help-btn {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--pbl);
+      background: transparent;
+      color: var(--pbl);
+      font-size: 10px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-family: Arial, sans-serif;
+      line-height: 1;
+      transition: all 0.15s;
+      padding: 0;
+    }
+    .help-btn:hover { background: var(--pb); border-color: var(--pb); color: var(--pgl); }
 
     /* Upload zone */
     .upload-zone {
@@ -272,7 +294,6 @@
     /* Submit area */
     .submit-area { display: flex; gap: 12px; align-items: flex-end; }
     .submit-area .field { flex: 1; }
-    .privacy-note { margin-top: 8px; font-size: 10px; color: var(--pbl); letter-spacing: 0.03em; }
 
     /* Buttons */
     .btn {
@@ -336,9 +357,7 @@
     .spinner-pipe:nth-child(3) { animation-delay: 0.3s;  height: 16px; }
     .spinner-pipe:nth-child(4) { animation-delay: 0.45s; height: 28px; }
     .spinner-pipe:nth-child(5) { animation-delay: 0.6s;  height: 24px; }
-    .spinner-pipe.active {
-      background: var(--pg);
-    }
+    .spinner-pipe.active { background: var(--pg); }
     @keyframes pipepulse {
       0%, 100% { opacity: 0.3; transform: scaleY(1); }
       50%       { opacity: 1;   transform: scaleY(1.25); transform-origin: bottom; }
@@ -466,6 +485,187 @@
 
     /* Hidden file input */
     #audio-input { display: none; }
+
+    /* ─── Slide-in drawer ───────────────────────────────────────────── */
+    .drawer-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(30,18,9,0.35);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      z-index: 9;
+    }
+    .drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+    .drawer {
+      position: absolute;
+      top: 0; right: 0;
+      width: 75%;
+      height: 100%;
+      background: white;
+      border-left: 1px solid var(--pcb);
+      box-shadow: -4px 0 24px rgba(74,46,26,0.18);
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .drawer.open { transform: translateX(0); }
+
+    .drawer-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--pcb);
+      background: var(--pc);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .drawer-title {
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--pb);
+    }
+    .drawer-close {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--pcb);
+      background: white;
+      color: var(--pbl);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+      font-family: Arial, sans-serif;
+      padding: 0;
+      line-height: 1;
+    }
+    .drawer-close:hover { background: var(--pb); border-color: var(--pb); color: var(--pgl); }
+
+    .drawer-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* ─── Docs tab view ─────────────────────────────────────────────── */
+    .docs-tab-nav {
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid var(--pcb);
+      background: var(--pc);
+      padding: 0 20px;
+    }
+    .docs-back-btn {
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      color: var(--pbl);
+      background: none;
+      border: none;
+      border-right: 1px solid var(--pcb);
+      cursor: pointer;
+      font-family: Arial, sans-serif;
+      padding: 0 14px 0 4px;
+      margin-right: 8px;
+      transition: color 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .docs-back-btn:hover { color: var(--pb); }
+
+    .docs-tab-btn {
+      padding: 10px 14px;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--pbm);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: all 0.15s;
+      font-family: Arial, sans-serif;
+      margin-bottom: -1px;
+    }
+    .docs-tab-btn:hover { opacity: 0.9; }
+    .docs-tab-btn.active { opacity: 1; color: var(--pb); border-bottom-color: var(--pg); }
+
+    /* ─── Prose / documentation content ────────────────────────────── */
+    .prose { color: var(--pd); }
+    .prose h2 {
+      font-size: 17px;
+      font-family: Georgia, serif;
+      font-style: italic;
+      color: var(--pb);
+      margin: 0 0 16px;
+      font-weight: normal;
+    }
+    .prose h3 {
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--pb);
+      margin: 22px 0 8px;
+    }
+    .prose h3:first-child { margin-top: 0; }
+    .prose p { font-size: 12px; color: var(--pbm); margin: 0 0 10px; line-height: 1.75; }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose ul, .prose ol { font-size: 12px; color: var(--pbm); margin: 0 0 10px 18px; line-height: 1.75; }
+    .prose li { margin-bottom: 4px; }
+    .prose a { color: var(--pbm); }
+    .prose a:hover { color: var(--pb); }
+    .prose strong { color: var(--pb); }
+    .prose em { font-style: italic; }
+    .prose code {
+      font-family: monospace;
+      font-size: 11px;
+      background: var(--pc);
+      border: 1px solid var(--pcb);
+      border-radius: 3px;
+      padding: 1px 5px;
+    }
+    .prose pre {
+      font-family: monospace;
+      font-size: 11px;
+      background: var(--pc);
+      border: 1px solid var(--pcb);
+      border-radius: 4px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      margin: 8px 0 12px;
+      line-height: 1.6;
+      color: var(--pd);
+      white-space: pre;
+    }
+    .cite-block {
+      background: var(--pc);
+      border-left: 3px solid var(--pgl);
+      border-radius: 0 4px 4px 0;
+      padding: 10px 14px;
+      margin: 8px 0 20px;
+      font-size: 12px;
+      color: var(--pbm);
+      line-height: 1.8;
+    }
+    .cite-block strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--pbl);
+      font-weight: bold;
+    }
+    .cite-block a { color: var(--pbm); word-break: break-all; }
+    .tab-panel { padding-top: 2px; }
   </style>
 </head>
 <body>
@@ -481,20 +681,20 @@
           <span style="width:5px;height:18px;"></span>
           <span style="width:5px;height:26px;"></span>
         </div>
-        <div class="wordmark">Vox <em>Humana</em></div>
+        <div class="wordmark" onclick="goBack()" title="Back to form">Vox <em>Humana</em></div>
       </div>
       <div class="tagline">Automated Sociophonetic Analysis · BYU Linguistics</div>
     </div>
     <nav class="nav">
-      <a href="#">About</a>
-      <a href="#">Documentation</a>
-      <a href="#">Cite</a>
-      <a href="#">FAQs</a>
+      <a href="#" onclick="showDocs('about'); return false;">About</a>
+      <a href="#" onclick="showDocs('guide'); return false;">User Guide</a>
+      <a href="#" onclick="showDocs('cite'); return false;">Cite</a>
+      <a href="#" onclick="showDocs('faq'); return false;">FAQs</a>
     </nav>
   </div>
 
   <!-- Pipeline progress track -->
-  <div class="pipeline-track">
+  <div class="pipeline-track" id="pipeline-track">
     <div class="pipeline-step" id="track-1">
       <div class="step-name">Transcribe</div>
       <div class="step-tool">Whisper</div>
@@ -522,6 +722,7 @@
           <div class="step-dot">1</div>
           Audio file
           <div class="section-rule"></div>
+          <button type="button" class="help-btn" onclick="openDrawer('audio')" title="Help">?</button>
         </div>
         <input type="file" id="audio-input" accept=".wav,.mp3,.flac,.m4a,.ogg,.aac">
         <div class="upload-zone" id="drop-zone">
@@ -545,6 +746,7 @@
           <div class="step-dot">2</div>
           Transcription
           <div class="section-rule"></div>
+          <button type="button" class="help-btn" onclick="openDrawer('transcription')" title="Help">?</button>
         </div>
         <div class="grid-2">
           <div class="field">
@@ -578,6 +780,7 @@
           <div class="step-dot">3</div>
           Alignment
           <div class="section-rule"></div>
+          <button type="button" class="help-btn" onclick="openDrawer('alignment')" title="Help">?</button>
         </div>
         <div class="grid-2">
           <div class="field">
@@ -600,6 +803,7 @@
           <div class="step-dot">4</div>
           Formant extraction
           <div class="section-rule"></div>
+          <button type="button" class="help-btn" onclick="openDrawer('formants')" title="Help">?</button>
         </div>
         <div class="grid-3">
           <div class="field">
@@ -707,6 +911,275 @@
     </div>
   </div>
 
+  <!-- ════════════════════════════════ DOCS STATE ═══════════════════════════════ -->
+  <div id="state-docs" style="display:none">
+
+    <div class="docs-tab-nav">
+      <button class="docs-back-btn" onclick="goBack()">← Back</button>
+      <button id="tabBtn-about" class="docs-tab-btn active" onclick="switchTab('about')">About</button>
+      <button id="tabBtn-guide" class="docs-tab-btn" onclick="switchTab('guide')">User Guide</button>
+      <button id="tabBtn-cite"  class="docs-tab-btn" onclick="switchTab('cite')">Cite</button>
+      <button id="tabBtn-faq"   class="docs-tab-btn" onclick="switchTab('faq')">FAQs</button>
+    </div>
+
+    <div class="body">
+
+      <!-- ── About ─────────────────────────────────────────────────────── -->
+      <div id="tab-about" class="tab-panel prose">
+        <h2>Automated sociophonetic analysis</h2>
+
+        <p>VoxHumana (VxH) is a web-based pipeline for processing sociolinguistic speech recordings.
+        Upload an audio file and VxH will transcribe it, force-align it, and extract vowel formant
+        measurements — no software installation required.</p>
+
+        <h3>The pipeline</h3>
+        <p>Every recording goes through three steps:</p>
+        <ol>
+          <li><strong>Transcription</strong> — <a href="https://openai.com/index/whisper/" target="_blank">Whisper</a>
+          converts your audio to text with word-level timestamps.</li>
+          <li><strong>Forced alignment</strong> — <a href="https://montreal-forced-aligner.readthedocs.io" target="_blank">Montreal
+          Forced Aligner (MFA)</a> finds the precise start and end time of every word and phone.</li>
+          <li><strong>Formant extraction</strong> — <a href="https://forced-alignment-and-vowel-extraction.github.io/new-fave/" target="_blank">new-fave</a>
+          measures F1, F2, F3, and F4 for every vowel token.</li>
+        </ol>
+        <p>The result is a CSV of vowel measurements ready for analysis in R, Python, or any statistical software.</p>
+
+        <h3>Comparison to DARLA</h3>
+        <p>VoxHumana is the spiritual successor to <a href="http://darla.dartmouth.edu" target="_blank">DARLA</a>
+        (Dartmouth Linguistic Automation). Key differences:</p>
+        <ul>
+          <li><strong>Whisper transcription</strong> — state-of-the-art accuracy, especially for dialectal
+          and accented speech</li>
+          <li><strong>new-fave extraction</strong> — the modern successor to FAVE, with improved
+          measurement stability and active maintenance</li>
+          <li><strong>Open source</strong> — the full pipeline is available on
+          <a href="https://github.com/JoeyStanley/VoxHumana" target="_blank">GitHub</a></li>
+        </ul>
+
+        <h3>The name</h3>
+        <p><em>Vox Humana</em> is Latin for "human voice" (Modern Ecclesiastical pronunciation:
+        [ˈvɔks uˈmaː.na]). It is also the name of a classic pipe organ stop — a nod to the
+        organ-inspired color palette and to the tool's connection with
+        <a href="https://github.com/JoeyStanley/pipeline" target="_blank">Pipeline</a>,
+        a broader sociophonetic data project. Learn more about the Vox Humana organ stop
+        <a href="http://www.organstops.org/v/VoxHumana.html" target="_blank">here</a>.</p>
+
+        <h3>About the project</h3>
+        <p>VoxHumana is developed and maintained by
+        <a href="https://joeystanley.com" target="_blank">Joey Stanley</a> in the BYU Linguistics
+        department. Questions and bug reports:
+        <a href="mailto:joey_stanley@byu.edu">joey_stanley@byu.edu</a>.</p>
+      </div>
+
+      <!-- ── User Guide ─────────────────────────────────────────────────── -->
+      <div id="tab-guide" class="tab-panel prose" style="display:none">
+        <h2>User guide</h2>
+
+        <h3>What you need</h3>
+        <p>A browser and an audio recording — that's it. No software installation is required.
+        Accepted formats: WAV, MP3, FLAC, M4A, OGG, AAC, up to 1&nbsp;GB.</p>
+
+        <h3>Step 1 — Upload your audio</h3>
+        <p>Drag and drop your file onto the upload zone, or click it to browse. Click the
+        <strong>?</strong> button next to "Audio file" for tips on large files and supported formats.</p>
+
+        <h3>Step 2 — Configure transcription</h3>
+        <p>Leave <strong>Language</strong> on Auto-detect for most recordings. Choose a
+        <strong>Whisper model</strong>: Turbo is the recommended default — fast and nearly as
+        accurate as Large. See the ? button for a full speed–accuracy comparison.</p>
+
+        <h3>Step 3 — Configure alignment</h3>
+        <p>The defaults work for standard American English data. Leave them as-is unless you
+        have a specific reason to change the acoustic model or dictionary. See the ? button for
+        an explanation of what forced alignment does and when you might need different settings.</p>
+
+        <h3>Step 4 — Configure formant extraction</h3>
+        <p>Set <strong>Speaker voice</strong> to match the speaker's voice type — Low for adult
+        men and lower voices, High for women and children. Leave <strong>Stop words</strong> and
+        <strong>Unstressed vowels</strong> on Filter for standard sociophonetic research (this
+        excludes function words and reduced vowels from the output). See the ? button for details
+        on each option.</p>
+
+        <h3>Submit and wait</h3>
+        <p>Click <strong>Submit</strong> and keep the tab open. Processing time scales with
+        recording length: a 60-minute interview takes roughly 60 minutes on a CPU-only server.
+        The page updates automatically when results are ready.</p>
+
+        <h3>Output files</h3>
+        <p>Your download is a ZIP file containing:</p>
+        <ul>
+          <li><strong>transcript.json</strong> — Whisper output: full text plus word-level
+          timestamps and segment confidence scores.</li>
+          <li><strong>*.TextGrid</strong> — MFA-aligned Praat TextGrid with a word tier and a
+          phone tier. Open in <a href="https://www.praat.org" target="_blank">Praat</a> alongside
+          your audio to inspect the alignment.</li>
+          <li><strong>newfave_output/</strong> — new-fave results directory. The main file is a
+          CSV with one row per vowel token. Key columns: <code>word</code>, <code>phone</code>,
+          <code>F1</code>–<code>F4</code> (Hz), normalized values, <code>duration</code> (seconds),
+          and <code>time</code> (midpoint timestamp).</li>
+        </ul>
+
+        <h3>Analyzing your results</h3>
+        <p>The formants CSV imports directly into R or Python:</p>
+        <pre>vowels &lt;- read_csv("newfave_output/results.csv")   # R / tidyverse
+vowels  = pd.read_csv("newfave_output/results.csv")  # Python / pandas</pre>
+        <p>For vowel plotting in R, <a href="https://cran.r-project.org/package=ggplot2" target="_blank">ggplot2</a>
+        is recommended. The <code>F1</code> axis is conventionally plotted inverted (high values at the
+        bottom) to match IPA vowel chart orientation.</p>
+
+        <h3>If your file is over 1 GB</h3>
+        <p>Split the recording into segments and run each separately, then combine the output CSVs.
+        Using ffmpeg (splits into 30-minute chunks):</p>
+        <pre>ffmpeg -i interview.wav -f segment -segment_time 1800 -c copy part%03d.wav</pre>
+        <p>Or use Audacity: File → Export → Export Multiple, splitting by time interval.
+        Adjust the time as needed for your recordings.</p>
+
+        <h3>If processing is taking too long</h3>
+        <p>Whisper is the bottleneck: without a GPU it runs at roughly 1× real-time. Options:</p>
+        <ul>
+          <li>Switch to the <strong>Small</strong> or <strong>Medium</strong> Whisper model
+          (significantly faster, slightly less accurate on dialectal speech)</li>
+          <li>Split into shorter segments and process them in parallel on separate machines</li>
+          <li>Run VoxHumana locally on a machine with a GPU — see the
+          <a href="https://github.com/JoeyStanley/VoxHumana" target="_blank">README</a>
+          for setup instructions</li>
+        </ul>
+
+        <h3>If your transcription has errors</h3>
+        <p>Minor errors — a few wrong words, fillers missed, proper names misspelled — generally
+        have little effect on MFA alignment. MFA is designed to be robust to small transcript
+        mismatches. Significant errors (whole sentences wrong, or long stretches with no
+        corresponding transcript) can degrade alignment quality. If alignment looks off, inspect
+        the TextGrid in Praat and consider correcting the transcript before rerunning.</p>
+      </div>
+
+      <!-- ── Cite ───────────────────────────────────────────────────────── -->
+      <div id="tab-cite" class="tab-panel prose" style="display:none">
+        <h2>How to cite</h2>
+
+        <p>If you use VoxHumana in published research, please cite both the tool itself and the
+        underlying components that do the work. Verify all citations before submission — software
+        versions and publication details may change.</p>
+
+        <h3>VoxHumana</h3>
+        <div class="cite-block">
+          <strong>APA 7</strong>
+          Stanley, J. A. (in preparation). <em>VoxHumana: Automated sociophonetic analysis.</em>
+          Brigham Young University.
+        </div>
+
+        <h3>Whisper</h3>
+        <p>OpenAI's automatic speech recognition model, used for transcription.</p>
+        <div class="cite-block">
+          <strong>APA 7</strong>
+          Radford, A., Kim, J. W., Xu, T., Brockman, G., McLeavey, C., &amp; Sutskever, I. (2023).
+          Robust speech recognition via large-scale weak supervision.
+          <em>Proceedings of the 40th International Conference on Machine Learning (ICML).</em>
+          <a href="https://arxiv.org/abs/2212.04356" target="_blank">https://arxiv.org/abs/2212.04356</a>
+        </div>
+
+        <h3>Montreal Forced Aligner (MFA)</h3>
+        <p>Used for forced alignment to produce word- and phone-level timing.</p>
+        <div class="cite-block">
+          <strong>APA 7</strong>
+          McAuliffe, M., Socolof, M., Mihuc, S., Wagner, M., &amp; Sonderegger, M. (2017).
+          Montreal Forced Aligner: Trainable text-speech alignment using Kaldi.
+          <em>Proceedings of Interspeech 2017,</em> 498–502.
+          <a href="https://doi.org/10.21437/Interspeech.2017-1386" target="_blank">https://doi.org/10.21437/Interspeech.2017-1386</a>
+        </div>
+
+        <h3>new-fave</h3>
+        <p>Used for vowel formant extraction.</p>
+        <div class="cite-block">
+          <strong>APA 7</strong>
+          Fruehwald, J. (n.d.). <em>new-fave: Forced alignment and vowel extraction</em> [Software].
+          <a href="https://forced-alignment-and-vowel-extraction.github.io/new-fave/" target="_blank">https://forced-alignment-and-vowel-extraction.github.io/new-fave/</a>
+        </div>
+
+        <h3>Praat</h3>
+        <p>new-fave uses <a href="https://www.praat.org" target="_blank">Praat</a> for acoustic
+        measurement. If your work depends on Praat directly, you may also wish to cite:</p>
+        <div class="cite-block">
+          <strong>APA 7</strong>
+          Boersma, P., &amp; Weenink, D. (2024). <em>Praat: Doing phonetics by computer</em>
+          [Software]. <a href="https://www.praat.org" target="_blank">https://www.praat.org</a>
+        </div>
+      </div>
+
+      <!-- ── FAQs ───────────────────────────────────────────────────────── -->
+      <div id="tab-faq" class="tab-panel prose" style="display:none">
+        <h2>Frequently asked questions</h2>
+
+        <h3>My file is larger than 1 GB. What do I do?</h3>
+        <p>Split the recording into segments and process each one separately, then combine the
+        output CSVs. You can split with Audacity (File → Export → Export Multiple, split by time)
+        or with ffmpeg:</p>
+        <pre>ffmpeg -i interview.wav -f segment -segment_time 1800 -c copy part%03d.wav</pre>
+        <p>This creates 30-minute chunks. Adjust <code>-segment_time</code> as needed (value is
+        in seconds).</p>
+
+        <h3>Processing is taking a very long time.</h3>
+        <p>Whisper transcription without a GPU runs at roughly 1× real-time — a 60-minute
+        interview can take about 60 minutes. Switching to the <strong>Small</strong> model is
+        the quickest way to speed things up. You can also split the recording into shorter
+        segments and run them in parallel on separate machines, or run VoxHumana locally on
+        a GPU-equipped machine.</p>
+
+        <h3>My transcription has errors. Will that affect the results?</h3>
+        <p>Minor errors — a few wrong words, fillers missed — generally have little effect on
+        MFA alignment. MFA is designed to be robust to small mismatches. Significant errors
+        (whole sentences wrong, or long stretches with no corresponding transcript) can degrade
+        alignment quality, which in turn affects formant accuracy. If alignment looks off in
+        the TextGrid, consider correcting the transcript and rerunning.</p>
+
+        <h3>What languages are supported?</h3>
+        <p>Whisper supports 99 languages for transcription. Forced alignment currently uses
+        MFA's English US model, so phone-level alignment is only reliable for English at this
+        time. Support for additional MFA language models is planned for future releases.</p>
+
+        <h3>What do the output files contain?</h3>
+        <p>Your ZIP download includes:</p>
+        <ul>
+          <li><strong>transcript.json</strong> — Whisper's transcript: text, word-level
+          timestamps, and segment confidence scores.</li>
+          <li><strong>*.TextGrid</strong> — Praat TextGrid with word and phone tiers from
+          MFA forced alignment.</li>
+          <li><strong>newfave_output/</strong> — new-fave's CSV of vowel formant measurements
+          (F1–F4 in Hz, normalized values, duration, timestamp, word, and phone label).</li>
+        </ul>
+        <p>See the User Guide for a fuller description of the CSV columns.</p>
+
+        <h3>Can I run VoxHumana locally?</h3>
+        <p>Yes. Clone the repository and run:</p>
+        <pre>python main.py &lt;audio_path&gt; &lt;output_dir&gt;</pre>
+        <p>Running locally lets you use a GPU for faster Whisper transcription and avoids
+        upload time for large files. See the
+        <a href="https://github.com/JoeyStanley/VoxHumana" target="_blank">README</a>
+        for full setup instructions, including MFA environment setup.</p>
+
+        <h3>Is my audio stored on the server?</h3>
+        <p>Your audio file is automatically deleted as soon as processing completes — success
+        or failure. The server retains only the output files (transcript, TextGrid, formants CSV),
+        which remain available for download for a limited time. Sociolinguistic recordings
+        contain identifiable personal conversations; we take this seriously and do not retain audio.</p>
+
+        <h3>What is a TextGrid?</h3>
+        <p>A TextGrid is the standard annotation format for
+        <a href="https://www.praat.org" target="_blank">Praat</a>, the acoustic phonetics
+        software. The MFA output contains two tiers: one for words and one for phones, each
+        with a start time, end time, and label for every token. Opening the TextGrid in Praat
+        alongside your audio lets you inspect the forced alignment before relying on the
+        formant measurements.</p>
+
+        <h3>Can VoxHumana handle multi-speaker recordings?</h3>
+        <p>VoxHumana is currently optimized for single-speaker recordings. Multi-speaker
+        diarization is not yet supported. For best results, use a recording of a single
+        speaker, or a recording where you want measurements across all audible speech.</p>
+      </div>
+
+    </div><!-- /.body -->
+  </div><!-- /#state-docs -->
+
   <div class="footer">
     <div class="footer-left">Brigham Young University · Linguistics · Vox Humana v0.1</div>
     <div class="pipe-row-footer">
@@ -719,17 +1192,147 @@
       <span style="width:3px;height:12px;"></span>
     </div>
   </div>
-</div>
+
+  <!-- ─── Slide-in drawer ─────────────────────────────────────────────────── -->
+  <div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+  <div class="drawer" id="drawer">
+    <div class="drawer-header">
+      <div class="drawer-title" id="drawer-title"></div>
+      <button class="drawer-close" onclick="closeDrawer()">✕</button>
+    </div>
+    <div class="drawer-body prose" id="drawer-body"></div>
+  </div>
+
+</div><!-- /.shell -->
 
 <script>
+  // ─── Drawer content ───────────────────────────────────────────────────────────
+  const DRAWER_CONTENT = {
+    audio: {
+      title: 'Audio file',
+      body: `
+        <h3>Accepted formats</h3>
+        <p>WAV, MP3, FLAC, M4A, OGG, and AAC. WAV is preferred — it is uncompressed and
+        avoids any quality loss from transcoding.</p>
+        <h3>File size</h3>
+        <p>Maximum upload is 1&nbsp;GB. A 60-minute WAV at 44.1&nbsp;kHz stereo is about
+        600&nbsp;MB — well within the limit for most interviews.</p>
+        <h3>Files larger than 1 GB</h3>
+        <p>Split the recording into segments and run each one separately, then combine the
+        output CSVs.</p>
+        <p>Using Audacity: File → Export → Export Multiple, split by time interval.</p>
+        <p>Using ffmpeg (30-minute chunks):</p>
+        <pre>ffmpeg -i interview.wav -f segment \\
+  -segment_time 1800 -c copy part%03d.wav</pre>
+        <h3>Audio quality tips</h3>
+        <p>16&nbsp;kHz or higher sample rate is recommended. Mono and stereo both work.
+        For two-channel recordings with speaker and interviewer on separate channels,
+        consider mixing down to mono or extracting the speaker's channel for cleaner
+        transcription.</p>
+      `
+    },
+    transcription: {
+      title: 'Transcription · Whisper',
+      body: `
+        <h3>About Whisper</h3>
+        <p>Whisper is OpenAI's automatic speech recognition system, trained on 680,000 hours
+        of multilingual audio. It is state-of-the-art for general transcription, particularly
+        on accented and dialectal speech.</p>
+        <h3>Language</h3>
+        <p>Leave on <strong>Auto-detect</strong> for most recordings — Whisper identifies the
+        language from the first 30 seconds of audio. Set it explicitly to skip detection or
+        for short recordings where auto-detect may misfire.</p>
+        <h3>Model size</h3>
+        <ul>
+          <li><strong>Turbo</strong> (recommended) — Fast and nearly as accurate as Large.
+          The best default for fieldwork recordings.</li>
+          <li><strong>Large</strong> — Most accurate, but significantly slower (~1× real-time
+          without a GPU). Worth trying if Turbo produces problematic transcripts.</li>
+          <li><strong>Medium</strong> — A useful middle ground when Turbo misses content and
+          Large is too slow.</li>
+          <li><strong>Small</strong> — Fastest option. Accuracy degrades noticeably on
+          dialectal and accented speech; use only when speed is critical.</li>
+        </ul>
+        <p>All models run on CPU by default. GPU access makes Whisper 5–10× faster.</p>
+      `
+    },
+    alignment: {
+      title: 'Forced alignment · MFA',
+      body: `
+        <h3>What is forced alignment?</h3>
+        <p>Forced alignment maps a transcript to an audio file, finding the precise start and
+        end time of every word — and every phone within each word. VoxHumana needs phone-level
+        timing to measure formants at the right point in each vowel.</p>
+        <h3>Montreal Forced Aligner</h3>
+        <p>MFA is the standard forced alignment tool in linguistics research. It uses an acoustic
+        model (a statistical description of how sounds are produced) paired with a pronunciation
+        dictionary.</p>
+        <h3>Acoustic model</h3>
+        <p>The default <strong>English US — arpa</strong> model is trained on American English
+        and works well for most North American data. Additional models for other varieties and
+        languages are planned for future releases.</p>
+        <h3>Dictionary</h3>
+        <p>Maps each word to a sequence of phonemes. The dictionary must match the acoustic
+        model — leave this on the default unless you have a custom dictionary for your
+        specific data.</p>
+        <h3>Note on accuracy</h3>
+        <p>Minor transcription errors rarely affect alignment quality. Words not found in the
+        dictionary get a guessed pronunciation, which is slightly less reliable. If alignment
+        looks off, inspect the TextGrid in Praat alongside your audio.</p>
+      `
+    },
+    formants: {
+      title: 'Formant extraction · new-fave',
+      body: `
+        <h3>What are formants?</h3>
+        <p>Formants are resonant frequencies of the vocal tract. The first two — F1 and F2 —
+        are the primary acoustic cues to vowel quality: F1 correlates with vowel height
+        (low vs. high) and F2 with backness (front vs. back). VoxHumana records F1–F4
+        for every vowel token.</p>
+        <h3>new-fave</h3>
+        <p>new-fave is the modern successor to the FAVE toolkit. It uses Praat's formant
+        tracker with improved measurement-point selection and output organization.</p>
+        <h3>Speaker voice</h3>
+        <p>Sets the formant ceiling — the maximum frequency Praat searches for formants.</p>
+        <ul>
+          <li><strong>Low</strong> — ~5000&nbsp;Hz ceiling, appropriate for adult men and
+          lower voices.</li>
+          <li><strong>High</strong> — ~5500&nbsp;Hz ceiling, appropriate for women and
+          children.</li>
+        </ul>
+        <p>Choosing the wrong type can cause F1–F2 tracking errors. When in doubt, inspect
+        the output formant tracks in Praat.</p>
+        <h3>Stop words</h3>
+        <p>Common function words (<em>the, a, is, to…</em>) are usually unstressed and reduced,
+        making their vowels less representative of underlying categories.
+        <strong>Filter</strong> removes them (recommended for most research).
+        <strong>Keep</strong> includes all words.</p>
+        <h3>Unstressed vowels</h3>
+        <p>Vowels in unstressed syllables often reduce toward schwa, obscuring their underlying
+        vowel category. <strong>Filter</strong> excludes them from the output (recommended).
+        <strong>Keep</strong> includes all vowel tokens.</p>
+        <h3>Formant ceiling — advanced</h3>
+        <p>Overrides the ceiling set by Speaker voice. Typical values: 4500–5000&nbsp;Hz for
+        men, 5000–5500&nbsp;Hz for women. Adjust if formant tracks in your output look
+        incorrect.</p>
+        <h3>Number of formants — advanced</h3>
+        <p>How many formants Praat tracks simultaneously. 4 is standard. Setting this to 5
+        can help for high-pitched voices or certain language varieties where F3 and F4
+        get conflated.</p>
+      `
+    }
+  };
+
   // ─── State ────────────────────────────────────────────────────────────────────
-  let selectedFile = null;
-  let currentJobId = null;
-  let pollTimer    = null;
+  let selectedFile  = null;
+  let currentJobId  = null;
+  let pollTimer     = null;
+  let inDocs        = false;
+  let appViewState  = 'form'; // tracks current app state even when viewing docs
 
   // ─── File selection ───────────────────────────────────────────────────────────
-  const dropZone   = document.getElementById('drop-zone');
-  const fileInput  = document.getElementById('audio-input');
+  const dropZone  = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('audio-input');
 
   dropZone.addEventListener('click', () => fileInput.click());
 
@@ -750,14 +1353,14 @@
   function setFile(file) {
     selectedFile = file;
     dropZone.classList.add('has-file');
-    document.getElementById('drop-primary').textContent   = 'File selected';
+    document.getElementById('drop-primary').textContent    = 'File selected';
     document.getElementById('drop-secondary').style.display = 'none';
     const fn = document.getElementById('drop-filename');
-    fn.textContent = file.name;
-    fn.style.display = 'block';
+    fn.textContent    = file.name;
+    fn.style.display  = 'block';
   }
 
-  // ─── Advanced toggle ─────────────────────────────────────────────────────────
+  // ─── Advanced toggle ──────────────────────────────────────────────────────────
   function toggleAdvanced() {
     document.getElementById('adv-toggle').classList.toggle('open');
     document.getElementById('adv-panel').classList.toggle('open');
@@ -774,16 +1377,16 @@
     }
 
     const btn = document.getElementById('submit-btn');
-    btn.disabled = true;
+    btn.disabled    = true;
     btn.textContent = 'Submitting…';
 
     const form = document.getElementById('vxh-form');
     const data = new FormData();
-    data.append('audio',         selectedFile);
-    data.append('whisper_model', form.whisper_model.value);
-    data.append('language',      form.language.value);
+    data.append('audio',          selectedFile);
+    data.append('whisper_model',  form.whisper_model.value);
+    data.append('language',       form.language.value);
     data.append('acoustic_model', form.acoustic_model.value);
-    data.append('dictionary',    form.dictionary.value);
+    data.append('dictionary',     form.dictionary.value);
 
     try {
       const res  = await fetch('/api/jobs', { method: 'POST', body: data });
@@ -794,7 +1397,7 @@
       document.getElementById('progress-filename').textContent = selectedFile.name;
       startPolling();
     } catch (err) {
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = 'Submit';
       showError(err.message);
     }
@@ -803,7 +1406,7 @@
   // ─── Polling ──────────────────────────────────────────────────────────────────
   function startPolling() {
     pollTimer = setInterval(pollJob, 3000);
-    pollJob(); // immediate first poll
+    pollJob();
   }
 
   async function pollJob() {
@@ -827,7 +1430,6 @@
   }
 
   // ─── Pipeline track ───────────────────────────────────────────────────────────
-  // Maps job step (1-5) to the four UI track tabs
   const stepToTrack = { 0: 0, 1: 1, 2: 1, 3: 2, 4: 3, 5: 4 };
 
   function updateTrack(jobStep) {
@@ -835,8 +1437,8 @@
     for (let i = 1; i <= 4; i++) {
       const el = document.getElementById('track-' + i);
       el.classList.remove('active', 'done');
-      if (i === activeTab)      el.classList.add('active');
-      else if (i < activeTab)   el.classList.add('done');
+      if (i === activeTab)    el.classList.add('active');
+      else if (i < activeTab) el.classList.add('done');
     }
   }
 
@@ -846,18 +1448,32 @@
   }
 
   // ─── View switching ───────────────────────────────────────────────────────────
-  function showState(state, message) {
-    document.getElementById('state-form').style.display    = state === 'form'    ? '' : 'none';
-    document.getElementById('state-running').style.display = state === 'running' ? '' : 'none';
-    document.getElementById('state-done').style.display    = state === 'done'    ? '' : 'none';
-    document.getElementById('state-error').style.display   = state === 'error'   ? '' : 'none';
+  function showState(state) {
+    appViewState = state;
+    const d = inDocs;
+    document.getElementById('state-form').style.display    = (!d && state === 'form')    ? '' : 'none';
+    document.getElementById('state-running').style.display = (!d && state === 'running') ? '' : 'none';
+    document.getElementById('state-done').style.display    = (!d && state === 'done')    ? '' : 'none';
+    document.getElementById('state-error').style.display   = (!d && state === 'error')   ? '' : 'none';
+    document.getElementById('state-docs').style.display    = d ? '' : 'none';
+    document.getElementById('pipeline-track').style.display = d ? 'none' : '';
+    if (state === 'done' && !d) updateTrack(5);
+  }
 
-    if (state === 'done') updateTrack(5);
+  function showDocs(tab) {
+    inDocs = true;
+    showState(appViewState);
+    switchTab(tab);
+  }
+
+  function goBack() {
+    inDocs = false;
+    showState(appViewState);
   }
 
   function showError(message, files) {
     document.getElementById('error-message').textContent = message;
-    document.getElementById('error-job-id').textContent = currentJobId || '(unavailable)';
+    document.getElementById('error-job-id').textContent  = currentJobId || '(unavailable)';
     const fileList = document.getElementById('error-uploaded-files');
     fileList.innerHTML = '';
     (files || []).forEach(name => {
@@ -874,21 +1490,48 @@
     currentJobId = null;
     selectedFile = null;
 
-    // Reset file drop zone
     dropZone.classList.remove('has-file');
     document.getElementById('drop-primary').textContent     = 'Drop audio here or click to browse';
     document.getElementById('drop-secondary').style.display = '';
     document.getElementById('drop-filename').style.display  = 'none';
     fileInput.value = '';
 
-    // Reset submit button
     const btn = document.getElementById('submit-btn');
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = 'Submit';
 
     updateTrack(0);
+    inDocs = false;
     showState('form');
   }
+
+  // ─── Docs tabs ────────────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    ['about', 'guide', 'cite', 'faq'].forEach(t => {
+      document.getElementById('tab-' + t).style.display = t === tab ? '' : 'none';
+      document.getElementById('tabBtn-' + t).classList.toggle('active', t === tab);
+    });
+  }
+
+  // ─── Slide-in drawer ──────────────────────────────────────────────────────────
+  function openDrawer(section) {
+    const content = DRAWER_CONTENT[section];
+    if (!content) return;
+    document.getElementById('drawer-title').textContent = content.title;
+    document.getElementById('drawer-body').innerHTML    = content.body;
+    document.getElementById('drawer').classList.add('open');
+    document.getElementById('drawer-overlay').classList.add('open');
+  }
+
+  function closeDrawer() {
+    document.getElementById('drawer').classList.remove('open');
+    document.getElementById('drawer-overlay').classList.remove('open');
+  }
+
+  // Close drawer on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDrawer();
+  });
 </script>
 </body>
 </html>
