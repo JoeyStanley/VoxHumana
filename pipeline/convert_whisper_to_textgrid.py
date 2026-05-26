@@ -14,10 +14,14 @@ def convert_whisper_to_textgrid(result, audio_path, job_dir):
     tier = tgt.IntervalTier(name='utterances', start_time=0, end_time=duration)
 
     # Add each segment as an interval.
+    # Whisper occasionally places the final segment's end past the true audio
+    # duration by a few milliseconds. Clamp to avoid tgt rejecting the interval.
     for segment in result["segments"]:
-        tier.add_interval(tgt.Interval(segment["start"],
-                                        segment["end"], 
-                                        segment["text"].strip()))
+        start = segment["start"]
+        end = min(segment["end"], duration)
+        if end <= start:
+            continue
+        tier.add_interval(tgt.Interval(start, end, segment["text"].strip()))
     
     # Add tier to TextGrid 
     tg.add_tier(tier)

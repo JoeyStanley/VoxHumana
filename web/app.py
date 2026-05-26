@@ -1,6 +1,7 @@
 """VoxHumana web server — FastAPI app that wraps the processing pipeline."""
 
 import io
+import shutil
 import uuid
 import zipfile
 import traceback
@@ -36,6 +37,16 @@ jobs: dict[str, dict] = {}
 executor = ThreadPoolExecutor(max_workers=1)
 
 
+def _cleanup_intermediates(job_dir: Path) -> None:
+    """Delete large files that are no longer needed once the pipeline finishes."""
+    for f in job_dir.glob("audio.*"):
+        f.unlink(missing_ok=True)
+    for dirname in ("mfa_corpus", "mfa_temp"):
+        d = job_dir / dirname
+        if d.exists():
+            shutil.rmtree(d)
+
+
 def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
     """Run all pipeline steps in a background thread, updating job status as we go."""
     job_dir = JOBS_DIR / job_id
@@ -61,11 +72,14 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         jobs[job_id].update(status="done", step=5, step_name="Complete")
 
     except Exception as exc:
+        # Write the full traceback to disk for debugging; never send it to the client.
+        (JOBS_DIR / job_id / "error.log").write_text(traceback.format_exc())
         jobs[job_id].update(
             status="error",
             error=str(exc),
-            detail=traceback.format_exc(),
         )
+    finally:
+        _cleanup_intermediates(job_dir)
 
 
 @app.post("/api/jobs")
@@ -75,7 +89,6 @@ async def create_job(
     language: Optional[str] = Form(None),
     acoustic_model: str = Form("english_us_arpa"),
     dictionary: str = Form("english_us_arpa"),
-    email: Optional[str] = Form(None),
 ):
     job_id = str(uuid.uuid4())
     job_dir = JOBS_DIR / job_id
@@ -116,8 +129,7 @@ async def create_job(
         "step": 0,
         "step_name": "Queued",
         "error": None,
-        "detail": None,
-        "original_filename": audio.filename or "audio.wav",
+        "uploaded_files": [audio.filename or "audio.wav"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -146,14 +158,14 @@ async def download_results(job_id: str):
     # Zip all output files except the mfa_corpus dir (just a copy of the input audio)
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in job_dir.rglob("*"):
-            if f.is_file() and "mfa_corpus" not in f.parts:
+            if f.is_file() and "mfa_corpus" not in f.parts and "mfa_temp" not in f.parts:
                 # Skip the raw audio copy we saved server-side
                 if f.name.startswith("audio."):
                     continue
                 zf.write(f, f.relative_to(job_dir))
 
     buf.seek(0)
-    stem = Path(jobs[job_id]["original_filename"]).stem
+    stem = Path(jobs[job_id]["uploaded_files"][0]).stem
     return StreamingResponse(
         buf,
         media_type="application/zip",
