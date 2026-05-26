@@ -1,4 +1,63 @@
 
+## Email notification + close-tab workflow (not yet built)
+
+The email field and notification section have been removed from the UI for now.
+The full intended workflow, when built:
+
+### Two submission modes (user's choice, both require email)
+1. **Close-tab mode** — user submits, sees a confirmation that processing will
+   continue server-side, and can safely close the browser. When the job finishes,
+   VxH emails the results as a zip attachment (or a download link if the file is
+   too large for email).
+2. **Keep-open mode** — current behaviour: user keeps the tab open, watches the
+   progress pipeline track, and downloads results when done.
+
+### UI changes needed
+- Restore the Notification section (step 5) with email as a *required* field
+- Add a radio/toggle to choose between the two modes
+- In close-tab mode: after submit, show a "You can safely close this tab" screen
+  instead of the progress view
+- In keep-open mode: current progress view, unchanged
+- On the progress note, mention both options
+
+### Backend changes needed
+- Wire up an email library (e.g. `smtplib` with BYU SMTP, or SendGrid)
+- Store email in the job record for logging; do not persist it after the email is sent
+- After job completion in close-tab mode: zip results and send/link via email
+- Queue system: the single-threaded executor already serialises jobs, but users
+  in close-tab mode need to know their position. Consider a simple queue-position
+  field in the job status response.
+
+### Privacy wording (for the UI)
+"Your email is used to deliver your results and is recorded in our job log alongside
+your Job ID. It is not shared or used for any other purpose."
+
+---
+
+## Processing time estimation (not yet built)
+
+Currently shows: "Processing time scales with recording length — a 1-hour interview
+may take up to an hour." Replace with a real estimate when enough data exists.
+
+### How to build it
+1. Record two values for every completed job: audio duration (seconds) and total
+   wall-clock processing time (seconds). Store these alongside the job log.
+2. Once ~20–30 jobs have completed, fit a simple linear regression:
+   estimated_time = a × audio_duration + b
+   (or separate models per Whisper model size, since turbo ≠ large-v3 speed)
+3. Show the estimate on the progress screen: "Estimated time remaining: ~12 min"
+   Update it as steps complete and actual step times are known.
+4. Ask Claude to help build/tune the model once the data exists.
+
+### Notes
+- Whisper is the dominant cost (~1× real-time without GPU, ~0.1× with GPU)
+- MFA is fast (<1 min for most interviews)
+- new-fave is fast (<1 min)
+- Estimate should probably be shown *before* submit (on the form) so users can
+  decide whether to use close-tab mode or keep the tab open
+
+---
+
 ## some fun names for loading messages
 coupling the manuals, laying out the console, registering the swell box, drawing console, warming up pipes, tuning the reeds, lacing up organ shoes, Adjusting the wind pressure, Opening the expression box, voicing the flue pipes, Warming up the pipes...
 

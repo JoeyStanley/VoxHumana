@@ -76,7 +76,6 @@ async def create_job(
     language: Optional[str] = Form(None),
     acoustic_model: str = Form("english_us_arpa"),
     dictionary: str = Form("english_us_arpa"),
-    email: Optional[str] = Form(None),
 ):
     job_id = str(uuid.uuid4())
     job_dir = JOBS_DIR / job_id

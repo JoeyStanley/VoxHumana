@@ -645,19 +645,9 @@
       </div>
 
       <div class="section" style="margin-bottom:0">
-        <div class="section-head">
-          <div class="step-dot">5</div>
-          Notification
-          <div class="section-rule"></div>
-        </div>
         <div class="submit-area">
-          <div class="field">
-            <label for="email">Email address <span style="font-weight:normal;opacity:0.7">(optional)</span></label>
-            <input type="email" id="email" name="email" placeholder="your@email.edu">
-          </div>
           <button type="submit" class="btn" id="submit-btn">Submit</button>
         </div>
-        <p class="privacy-note">Your email is used only to deliver results and is not stored or shared.</p>
       </div>
 
     </form>
@@ -676,8 +666,8 @@
       <div class="progress-filename" id="progress-filename"></div>
       <div class="progress-step-label" id="progress-step-label">Starting…</div>
       <div class="progress-note">
-        Processing typically takes 2–10 minutes depending on file length and your chosen Whisper model.
-        This page will update automatically — you can leave it open in the background.
+        Processing time scales with recording length — a 1-hour interview may take up to an hour.
+        Keep this tab open; the page will update automatically when results are ready.
       </div>
     </div>
   </div>
@@ -794,7 +784,6 @@
     data.append('language',      form.language.value);
     data.append('acoustic_model', form.acoustic_model.value);
     data.append('dictionary',    form.dictionary.value);
-    data.append('email',         form.email.value);
 
     try {
       const res  = await fetch('/api/jobs', { method: 'POST', body: data });
