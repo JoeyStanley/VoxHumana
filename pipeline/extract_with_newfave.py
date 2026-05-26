@@ -32,11 +32,17 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
     # MFA names the TextGrid after the source audio file, which may differ from
     # audio_path.stem (e.g. when the web server renames uploads, or when MFA
     # pulls utterance IDs from its global corpus cache). Glob for whatever is there.
-    textgrid_files = list(mfa_output_dir.glob("*.TextGrid"))
+    textgrid_files = sorted(mfa_output_dir.glob("*.TextGrid"))
     if not textgrid_files:
         raise FileNotFoundError(
             f"No MFA TextGrid found in {mfa_output_dir}. "
             "Make sure align_with_mfa() completed successfully."
+        )
+    if len(textgrid_files) > 1:
+        names = ", ".join(f.name for f in textgrid_files)
+        raise RuntimeError(
+            f"Expected one TextGrid in {mfa_output_dir} but found {len(textgrid_files)}: {names}. "
+            "VoxHumana processes one speaker per job."
         )
     textgrid_path = textgrid_files[0]
 
