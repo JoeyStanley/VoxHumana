@@ -2,32 +2,29 @@
 
 ### What you need
 
-A browser and an audio recording — that's it. No software installation is required.
+All you need to run VoxHumana is a browser and an audio recording. No software installation is required.
 Accepted formats: WAV, MP3, FLAC, M4A, OGG, AAC, up to 1 GB.
 
-### Step 1 — Upload your audio
+### Step 1: Upload your audio
 
 Drag and drop your file onto the upload zone, or click it to browse. Click the **?** button
 next to "Audio file" for tips on large files and supported formats.
 
-### Step 2 — Configure transcription
+### Step 2: Configure transcription
 
 Leave **Language** on Auto-detect for most recordings. Choose a **Whisper model**: Turbo is
-the recommended default — fast and nearly as accurate as Large. See the ? button for a full
+the recommended default. It is fast and nearly as accurate as Large. See the **?** button for a full
 speed–accuracy comparison.
 
-### Step 3 — Configure alignment
+### Step 3: Configure alignment
 
 The defaults work for standard American English data. Leave them as-is unless you have a
-specific reason to change the acoustic model or dictionary. See the ? button for an explanation
+specific reason to change the acoustic model or dictionary. See the **?** button for an explanation
 of what forced alignment does and when you might need different settings.
 
-### Step 4 — Configure formant extraction
+### Step 4: Configure formant extraction
 
-Set **Speaker voice** to match the speaker's voice type — Low for adult men and lower voices,
-High for women and children. Leave **Stop words** and **Unstressed vowels** on Filter for
-standard sociophonetic research (this excludes function words and reduced vowels from the
-output). See the ? button for details on each option.
+**These options are coming soon.**
 
 ### Submit and wait
 

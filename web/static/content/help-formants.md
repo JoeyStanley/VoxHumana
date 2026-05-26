@@ -9,34 +9,10 @@ F2 with backness (front vs. back). VoxHumana records F1–F4 for every vowel tok
 new-fave is the modern successor to the FAVE toolkit. It uses Praat's formant tracker with
 improved measurement-point selection and output organization.
 
-### Speaker voice
+### Formant ceiling and number of formants — coming soon
 
-Sets the formant ceiling — the maximum frequency Praat searches for formants.
-
-- **Low** — ~5000 Hz ceiling, appropriate for adult men and lower voices.
-- **High** — ~5500 Hz ceiling, appropriate for women and children.
-
-Choosing the wrong type can cause F1–F2 tracking errors. When in doubt, inspect the output
-formant tracks in Praat.
-
-### Stop words
-
-Common function words (*the, a, is, to…*) are usually unstressed and reduced, making their
-vowels less representative of underlying categories. **Filter** removes them (recommended for
-most research). **Keep** includes all words.
-
-### Unstressed vowels
-
-Vowels in unstressed syllables often reduce toward schwa, obscuring their underlying vowel
-category. **Filter** excludes them from the output (recommended). **Keep** includes all vowel
-tokens.
-
-### Formant ceiling — advanced
-
-Overrides the ceiling set by Speaker voice. Typical values: 4500–5000 Hz for men,
-5000–5500 Hz for women. Adjust if formant tracks in your output look incorrect.
-
-### Number of formants — advanced
-
-How many formants Praat tracks simultaneously. 4 is standard. Setting this to 5 can help for
-high-pitched voices or certain language varieties where F3 and F4 get conflated.
+These advanced overrides are planned for a future release. The formant ceiling controls the
+maximum frequency Praat searches (typical values: 4500–5000 Hz for lower voices, 5000–5500 Hz
+for higher voices). The number of formants controls how many Praat tracks simultaneously
+(4 is standard; 5 can help for high-pitched voices). For now, new-fave's FastTrack algorithm
+selects appropriate settings automatically.

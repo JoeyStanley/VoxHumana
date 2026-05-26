@@ -290,6 +290,7 @@
     .adv-toggle.open .chevron { transform: rotate(90deg); }
     .adv-panel { display: none; background: var(--pc); border: 1px solid var(--pcb); border-radius: 4px; padding: 16px; }
     .adv-panel.open { display: block; }
+    .adv-coming-soon { font-size: 12px; font-style: italic; color: var(--pbl); margin: 0 0 12px; }
 
     /* Submit area */
     .submit-area { display: flex; gap: 12px; align-items: flex-end; }
@@ -828,29 +829,6 @@
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('formants')" title="Help">?</button>
         </div>
-        <div class="grid-3">
-          <div class="field">
-            <label>Speaker voice</label>
-            <div class="segmented">
-              <div class="seg-opt"><input type="radio" name="voice_type" id="vt-low"  value="low"  checked><label for="vt-low">Low</label></div>
-              <div class="seg-opt"><input type="radio" name="voice_type" id="vt-high" value="high"         ><label for="vt-high">High</label></div>
-            </div>
-          </div>
-          <div class="field">
-            <label>Stop-words</label>
-            <div class="segmented">
-              <div class="seg-opt"><input type="radio" name="stopwords" id="sw-filter" value="filter" checked><label for="sw-filter">Filter</label></div>
-              <div class="seg-opt"><input type="radio" name="stopwords" id="sw-keep"   value="keep"         ><label for="sw-keep">Keep</label></div>
-            </div>
-          </div>
-          <div class="field">
-            <label>Unstressed vowels</label>
-            <div class="segmented">
-              <div class="seg-opt"><input type="radio" name="unstressed" id="us-filter" value="filter" checked><label for="us-filter">Filter</label></div>
-              <div class="seg-opt"><input type="radio" name="unstressed" id="us-keep"   value="keep"         ><label for="us-keep">Keep</label></div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div class="section">
@@ -858,14 +836,15 @@
           <span class="chevron">▸</span> Advanced options
         </div>
         <div class="adv-panel" id="adv-panel">
-          <div class="grid-2">
+          <p class="adv-coming-soon">Formant ceiling and number of formants overrides are coming soon.</p>
+          <div class="grid-2" style="opacity:0.4; pointer-events:none">
             <div class="field">
               <label for="formant-ceiling">Formant ceiling (Hz)</label>
-              <input type="text" id="formant-ceiling" name="formant_ceiling" value="5500">
+              <input type="text" id="formant-ceiling" name="formant_ceiling" value="5500" disabled>
             </div>
             <div class="field">
               <label for="num-formants">Number of formants</label>
-              <input type="text" id="num-formants" name="num_formants" value="4">
+              <input type="text" id="num-formants" name="num_formants" value="4" disabled>
             </div>
           </div>
         </div>
