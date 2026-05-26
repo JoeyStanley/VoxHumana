@@ -61,6 +61,29 @@ may take up to an hour." Replace with a real estimate when enough data exists.
 ## some fun names for loading messages
 coupling the manuals, laying out the console, registering the swell box, drawing console, warming up pipes, tuning the reeds, lacing up organ shoes, Adjusting the wind pressure, Opening the expression box, voicing the flue pipes, Warming up the pipes...
 
+## CLI debugging tool (explore whether this is needed)
+
+The web UI already shows step-by-step progress and surfaces error messages with
+a job ID. Before building a separate debug tool, check whether the UI + error.log
+is sufficient for diagnosing user-reported failures.
+
+If a dedicated tool turns out to be useful, it could accept a job ID or a path to
+an audio file and re-run individual steps with verbose output — useful for replaying
+a failed job locally without going through the web interface. Options to consider:
+  - `python debug.py --job <job_id>` — re-run pipeline on an existing job directory
+  - `python debug.py --audio <file> --step whisper` — run just one step with full logging
+  - Flags for overriding config (model size, language, MFA env, etc.)
+  - Print full Whisper output, MFA stdout/stderr, new-fave warnings
+
+Ask: does the existing `tests/test_pipeline.py` + the web error screen already cover
+the debugging workflow well enough? If users can report a job ID and you can find
+the error.log, a separate CLI debug tool may not be worth the maintenance cost.
+
+Potentially make it so that the log files themselves can be read in by the debugging tool 
+so that processing is completely replicable. 
+
+---
+
 ## Output files
 
 Make sure they're all there, that they are organized by job (Whisper, MFA, new-fave), and that they have the original filename in them. 
