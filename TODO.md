@@ -1,4 +1,23 @@
 
+## Formant ceiling and number-of-formants overrides (not yet wired up)
+
+The Advanced options panel in the UI shows these controls with a "coming soon" note and the
+inputs disabled. The backend work needed before enabling them:
+
+- **new-fave side**: confirm that `fave_audio_textgrid()` exposes formant ceiling and number
+  of formants via its `ft_config` parameter (check new-fave docs / source). If so, build a
+  small config dict to pass those values through.
+- **API side** (`web/app.py`): accept `formant_ceiling` and `num_formants` as `Form(...)` fields
+  in `create_job()`, validate them (integers/floats in sane ranges), and populate
+  `config["newfave"]` rather than leaving it `{}`.
+- **JS side** (`web/static/index.html`): re-enable the inputs (remove `disabled` and
+  `pointer-events:none`), and append the values to `FormData` alongside the other fields.
+- Once wired up, remove the `.adv-coming-soon` note and update `help-formants.md` to describe
+  the settings properly (typical values: 4500–5000 Hz men, 5000–5500 Hz women; 4 formants
+  standard, 5 useful for high-pitched voices).
+
+---
+
 ## Email notification + close-tab workflow (not yet built)
 
 The email field and notification section have been removed from the UI for now.
