@@ -1,8 +1,8 @@
 ### What is forced alignment?
 
 Forced alignment maps a transcript to an audio file, finding the precise start and end time
-of every word — and every phone within each word. VoxHumana needs phone-level timing to
-measure formants at the right point in each vowel.
+of every word and every phone within each word. VoxHumana needs phone-level timing to
+measure formants at the right point in each vowel. This must be in the form of a Praat TextGrid.
 
 ### Montreal Forced Aligner
 
