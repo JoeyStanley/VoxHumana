@@ -426,6 +426,27 @@
       word-break: break-word;
       font-family: monospace;
     }
+    .error-contact {
+      font-size: 12px;
+      color: var(--pbm);
+      background: var(--pc);
+      border: 1px solid var(--pcb);
+      border-radius: 4px;
+      padding: 12px 16px;
+      max-width: 480px;
+      text-align: left;
+      line-height: 1.8;
+    }
+    .error-contact a { color: var(--pbm); }
+    .error-contact ul { margin: 4px 0 0 18px; }
+    .error-contact code {
+      font-family: monospace;
+      font-size: 11px;
+      background: var(--pcb);
+      padding: 1px 5px;
+      border-radius: 3px;
+      user-select: all;
+    }
 
     /* Footer */
     .footer {
@@ -683,6 +704,15 @@
       <div class="error-icon">✕</div>
       <div class="error-title">Processing failed</div>
       <div class="error-message" id="error-message"></div>
+      <div class="error-contact">
+        <p>Need help? Email <a href="mailto:joey_stanley@byu.edu">joey_stanley@byu.edu</a> and include:</p>
+        <ul>
+          <li>Your <strong>Job ID</strong>: <code id="error-job-id"></code></li>
+          <li>The files you uploaded:
+            <ul id="error-uploaded-files"></ul>
+          </li>
+        </ul>
+      </div>
       <button class="btn" onclick="resetForm()">Try again</button>
     </div>
   </div>
@@ -800,7 +830,7 @@
         showState('done');
       } else if (job.status === 'error') {
         clearInterval(pollTimer);
-        showError(job.error || 'An unknown error occurred.');
+        showError(job.error || 'An unknown error occurred.', job.uploaded_files || []);
       }
     } catch (err) {
       // Network hiccup — keep polling
@@ -836,8 +866,16 @@
     if (state === 'done') updateTrack(5);
   }
 
-  function showError(message) {
+  function showError(message, files) {
     document.getElementById('error-message').textContent = message;
+    document.getElementById('error-job-id').textContent = currentJobId || '(unavailable)';
+    const fileList = document.getElementById('error-uploaded-files');
+    fileList.innerHTML = '';
+    (files || []).forEach(name => {
+      const li = document.createElement('li');
+      li.textContent = name;
+      fileList.appendChild(li);
+    });
     showState('error');
     updateTrack(0);
   }

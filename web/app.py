@@ -61,10 +61,11 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         jobs[job_id].update(status="done", step=5, step_name="Complete")
 
     except Exception as exc:
+        # Write the full traceback to disk for debugging; never send it to the client.
+        (JOBS_DIR / job_id / "error.log").write_text(traceback.format_exc())
         jobs[job_id].update(
             status="error",
             error=str(exc),
-            detail=traceback.format_exc(),
         )
 
 
@@ -116,8 +117,7 @@ async def create_job(
         "step": 0,
         "step_name": "Queued",
         "error": None,
-        "detail": None,
-        "original_filename": audio.filename or "audio.wav",
+        "uploaded_files": [audio.filename or "audio.wav"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -153,7 +153,7 @@ async def download_results(job_id: str):
                 zf.write(f, f.relative_to(job_dir))
 
     buf.seek(0)
-    stem = Path(jobs[job_id]["original_filename"]).stem
+    stem = Path(jobs[job_id]["uploaded_files"][0]).stem
     return StreamingResponse(
         buf,
         media_type="application/zip",
