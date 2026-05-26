@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vox Humana — BYU Linguistics</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --pb:  #4a2e1a;
+      --pbm: #7a4a2a;
+      --pbl: #c4956a;
+      --pg:  #c9a84c;
+      --pgl: #e8d5a3;
+      --pc:  #f9f5ee;
+      --pd:  #1e1209;
+      --pcb: #e0d5c0;
+    }
+
+    html, body {
+      min-height: 100vh;
+      background: #e8e0d0;
+      font-family: Arial, sans-serif;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 20px 60px;
+    }
+
+    .shell {
+      background: white;
+      border: 1px solid var(--pcb);
+      border-radius: 6px;
+      overflow: hidden;
+      width: 100%;
+      max-width: 700px;
+      box-shadow: 0 2px 12px rgba(74,46,26,0.10);
+    }
+
+    /* Accent bar */
+    .accent-bar {
+      height: 4px;
+      background: linear-gradient(to right, var(--pb) 0%, var(--pg) 40%, var(--pbl) 70%, var(--pgl) 100%);
+    }
+
+    /* Header */
+    .header {
+      padding: 20px 28px 18px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--pcb);
+    }
+    .logo-area { display: flex; flex-direction: column; gap: 4px; }
+    .logo-row  { display: flex; align-items: center; gap: 12px; }
+    .pipe-glyph { display: flex; align-items: flex-end; gap: 3px; }
+    .pipe-glyph span {
+      background: var(--pg);
+      border-radius: 1px 1px 0 0;
+      display: block;
+    }
+    .wordmark {
+      font-size: 26px;
+      color: var(--pb);
+      letter-spacing: -0.01em;
+      font-family: Georgia, serif;
+      font-style: italic;
+    }
+    .wordmark em { color: var(--pg); font-style: normal; }
+    .tagline {
+      font-size: 11px;
+      color: var(--pbl);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding-left: 2px;
+    }
+    .nav { display: flex; gap: 20px; padding-top: 4px; }
+    .nav a {
+      font-size: 11px;
+      color: var(--pbm);
+      text-decoration: none;
+      letter-spacing: 0.06em;
+      opacity: 0.7;
+    }
+    .nav a:hover { opacity: 1; color: var(--pb); }
+
+    /* Pipeline track */
+    .pipeline-track {
+      display: flex;
+      align-items: stretch;
+      background: var(--pc);
+      border-bottom: 1px solid var(--pcb);
+      overflow: hidden;
+    }
+    .pipeline-step {
+      flex: 1;
+      padding: 10px 12px 9px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      position: relative;
+    }
+    .pipeline-step::after {
+      content: '▸';
+      position: absolute;
+      right: -6px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 10px;
+      color: var(--pbl);
+      opacity: 0.5;
+      z-index: 2;
+    }
+    .pipeline-step:last-child::after { display: none; }
+    .pipeline-step.active {
+      background: white;
+      border-bottom: 2px solid var(--pg);
+      margin-bottom: -1px;
+    }
+    .step-name {
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--pb);
+      opacity: 0.4;
+    }
+    .pipeline-step.active .step-name { opacity: 1; }
+    .pipeline-step.done .step-name { opacity: 0.7; }
+    .step-tool {
+      font-size: 9px;
+      color: var(--pbl);
+      letter-spacing: 0.04em;
+      font-style: italic;
+    }
+    .pipeline-step.done .step-tool { color: var(--pg); }
+
+    /* Body */
+    .body { padding: 24px 28px 28px; }
+
+    .section { margin-bottom: 22px; }
+    .section-head {
+      font-size: 11px;
+      font-weight: bold;
+      color: var(--pb);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .step-dot {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--pb);
+      color: var(--pgl);
+      font-size: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-weight: bold;
+    }
+    .section-rule { flex: 1; height: 1px; background: var(--pcb); }
+
+    /* Upload zone */
+    .upload-zone {
+      border: 1.5px dashed var(--pcb);
+      border-radius: 6px;
+      padding: 32px 20px;
+      text-align: center;
+      background: var(--pc);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      user-select: none;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--pg);
+      background: #fdf9f2;
+    }
+    .upload-zone.has-file { border-color: var(--pbl); background: #fdf9f2; }
+    .upload-icon-row {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      gap: 3px;
+      margin-bottom: 10px;
+      height: 32px;
+    }
+    .upload-pipe { background: var(--pgl); border-radius: 2px 2px 0 0; }
+    .upload-primary {
+      font-size: 13px;
+      color: var(--pb);
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .upload-secondary { font-size: 11px; color: var(--pbl); }
+    .upload-filename {
+      font-size: 12px;
+      color: var(--pb);
+      font-weight: bold;
+      margin-top: 6px;
+    }
+
+    /* Form layout */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+    .field label {
+      display: block;
+      font-size: 11px;
+      color: var(--pbm);
+      margin-bottom: 5px;
+      font-weight: bold;
+      letter-spacing: 0.03em;
+    }
+    .field select, .field input[type="text"], .field input[type="email"] {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--pcb);
+      border-radius: 4px;
+      background: white;
+      font-size: 12px;
+      color: var(--pd);
+      outline: none;
+      font-family: Arial, sans-serif;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .field select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23c4956a'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+    .field select:focus, .field input:focus {
+      border-color: var(--pg);
+      box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
+    }
+
+    /* Segmented control */
+    .segmented { display: flex; border: 1px solid var(--pcb); border-radius: 4px; overflow: hidden; }
+    .seg-opt { flex: 1; }
+    .seg-opt input[type="radio"] { display: none; }
+    .seg-opt label {
+      display: block;
+      text-align: center;
+      padding: 7px 4px;
+      font-size: 11px;
+      color: var(--pbm);
+      cursor: pointer;
+      border-right: 1px solid var(--pcb);
+      background: white;
+      transition: all 0.15s;
+      font-weight: bold;
+    }
+    .seg-opt:last-child label { border-right: none; }
+    .seg-opt input:checked + label { background: var(--pb); color: var(--pgl); }
+
+    /* Advanced toggle */
+    .adv-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--pbl);
+      cursor: pointer;
+      user-select: none;
+      margin-bottom: 10px;
+      letter-spacing: 0.05em;
+    }
+    .adv-toggle .chevron { transition: transform 0.2s; font-size: 9px; }
+    .adv-toggle.open .chevron { transform: rotate(90deg); }
+    .adv-panel { display: none; background: var(--pc); border: 1px solid var(--pcb); border-radius: 4px; padding: 16px; }
+    .adv-panel.open { display: block; }
+
+    /* Submit area */
+    .submit-area { display: flex; gap: 12px; align-items: flex-end; }
+    .submit-area .field { flex: 1; }
+    .privacy-note { margin-top: 8px; font-size: 10px; color: var(--pbl); letter-spacing: 0.03em; }
+
+    /* Buttons */
+    .btn {
+      padding: 9px 24px;
+      background: var(--pb);
+      color: var(--pgl);
+      border: none;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background 0.15s;
+      font-family: Arial, sans-serif;
+    }
+    .btn:hover { background: var(--pbm); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-outline {
+      padding: 9px 24px;
+      background: transparent;
+      color: var(--pbm);
+      border: 1px solid var(--pcb);
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+      font-family: Arial, sans-serif;
+    }
+    .btn-outline:hover { border-color: var(--pbl); color: var(--pb); }
+
+    /* Progress view */
+    .progress-view {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 48px 28px;
+      gap: 20px;
+    }
+    .progress-spinner {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      height: 40px;
+    }
+    .spinner-pipe {
+      width: 6px;
+      border-radius: 2px 2px 0 0;
+      background: var(--pgl);
+      animation: pipepulse 1.2s ease-in-out infinite;
+    }
+    .spinner-pipe:nth-child(1) { animation-delay: 0s;    height: 20px; }
+    .spinner-pipe:nth-child(2) { animation-delay: 0.15s; height: 32px; }
+    .spinner-pipe:nth-child(3) { animation-delay: 0.3s;  height: 16px; }
+    .spinner-pipe:nth-child(4) { animation-delay: 0.45s; height: 28px; }
+    .spinner-pipe:nth-child(5) { animation-delay: 0.6s;  height: 24px; }
+    .spinner-pipe.active {
+      background: var(--pg);
+    }
+    @keyframes pipepulse {
+      0%, 100% { opacity: 0.3; transform: scaleY(1); }
+      50%       { opacity: 1;   transform: scaleY(1.25); transform-origin: bottom; }
+    }
+    .progress-step-label {
+      font-size: 13px;
+      font-weight: bold;
+      color: var(--pb);
+      letter-spacing: 0.03em;
+    }
+    .progress-note {
+      font-size: 11px;
+      color: var(--pbl);
+      max-width: 360px;
+      line-height: 1.5;
+    }
+    .progress-filename {
+      font-size: 11px;
+      color: var(--pbm);
+      background: var(--pc);
+      border: 1px solid var(--pcb);
+      border-radius: 4px;
+      padding: 5px 12px;
+      letter-spacing: 0.02em;
+    }
+
+    /* Results view */
+    .results-view {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 40px 28px;
+      gap: 20px;
+    }
+    .success-mark {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: var(--pgl);
+      border: 2px solid var(--pg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      color: var(--pg);
+    }
+    .results-title {
+      font-size: 18px;
+      font-family: Georgia, serif;
+      font-style: italic;
+      color: var(--pb);
+    }
+    .results-title em { color: var(--pg); font-style: normal; }
+    .results-note { font-size: 12px; color: var(--pbm); max-width: 400px; line-height: 1.6; }
+    .results-actions { display: flex; gap: 12px; align-items: center; }
+
+    /* Error view */
+    .error-view {
+      padding: 40px 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      text-align: center;
+    }
+    .error-icon {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: #fff5f0;
+      border: 2px solid #d4856a;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      color: #c4603a;
+    }
+    .error-title { font-size: 15px; font-weight: bold; color: var(--pd); }
+    .error-message {
+      font-size: 11px;
+      color: var(--pbm);
+      background: var(--pc);
+      border: 1px solid var(--pcb);
+      border-radius: 4px;
+      padding: 12px 16px;
+      max-width: 480px;
+      text-align: left;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: monospace;
+    }
+
+    /* Footer */
+    .footer {
+      border-top: 1px solid var(--pcb);
+      padding: 10px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .footer-left { font-size: 10px; color: var(--pbl); letter-spacing: 0.06em; }
+    .pipe-row-footer { display: flex; gap: 2px; align-items: flex-end; }
+    .pipe-row-footer span {
+      background: var(--pcb);
+      border-radius: 1px 1px 0 0;
+      display: block;
+    }
+
+    /* Hidden file input */
+    #audio-input { display: none; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <div class="accent-bar"></div>
+
+  <div class="header">
+    <div class="logo-area">
+      <div class="logo-row">
+        <div class="pipe-glyph">
+          <span style="width:5px;height:22px;"></span>
+          <span style="width:5px;height:30px;"></span>
+          <span style="width:5px;height:18px;"></span>
+          <span style="width:5px;height:26px;"></span>
+        </div>
+        <div class="wordmark">Vox <em>Humana</em></div>
+      </div>
+      <div class="tagline">Automated Sociophonetic Analysis · BYU Linguistics</div>
+    </div>
+    <nav class="nav">
+      <a href="#">About</a>
+      <a href="#">Documentation</a>
+      <a href="#">Cite</a>
+      <a href="#">FAQs</a>
+    </nav>
+  </div>
+
+  <!-- Pipeline progress track -->
+  <div class="pipeline-track">
+    <div class="pipeline-step" id="track-1">
+      <div class="step-name">Transcribe</div>
+      <div class="step-tool">Whisper</div>
+    </div>
+    <div class="pipeline-step" id="track-2">
+      <div class="step-name">Align</div>
+      <div class="step-tool">MFA</div>
+    </div>
+    <div class="pipeline-step" id="track-3">
+      <div class="step-name">Extract</div>
+      <div class="step-tool">new-fave</div>
+    </div>
+    <div class="pipeline-step" id="track-4">
+      <div class="step-name">Results</div>
+      <div class="step-tool">Download</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ FORM STATE ═══════════════════════════════ -->
+  <div id="state-form" class="body">
+    <form id="vxh-form" onsubmit="handleSubmit(event)">
+
+      <div class="section">
+        <div class="section-head">
+          <div class="step-dot">1</div>
+          Audio file
+          <div class="section-rule"></div>
+        </div>
+        <input type="file" id="audio-input" accept=".wav,.mp3,.flac,.m4a,.ogg,.aac">
+        <div class="upload-zone" id="drop-zone">
+          <div class="upload-icon-row">
+            <div class="upload-pipe" style="width:6px;height:20px;"></div>
+            <div class="upload-pipe" style="width:6px;height:28px;"></div>
+            <div class="upload-pipe" style="width:6px;height:16px;"></div>
+            <div class="upload-pipe" style="width:6px;height:24px;"></div>
+            <div class="upload-pipe" style="width:6px;height:32px;"></div>
+            <div class="upload-pipe" style="width:6px;height:18px;"></div>
+            <div class="upload-pipe" style="width:6px;height:26px;"></div>
+          </div>
+          <div class="upload-primary" id="drop-primary">Drop audio here or click to browse</div>
+          <div class="upload-secondary" id="drop-secondary">WAV · MP3 · FLAC · M4A &nbsp;·&nbsp; Max 500 MB</div>
+          <div class="upload-filename" id="drop-filename" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="step-dot">2</div>
+          Transcription
+          <div class="section-rule"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="language">Language</label>
+            <select id="language" name="language">
+              <option value="">Auto-detect (recommended)</option>
+              <option value="en">English</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="it">Italian</option>
+              <option value="pt">Portuguese</option>
+              <option value="zh">Chinese</option>
+              <option value="ja">Japanese</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="whisper-model">Whisper model</label>
+            <select id="whisper-model" name="whisper_model">
+              <option value="turbo">Turbo (recommended)</option>
+              <option value="large">Large (most accurate)</option>
+              <option value="medium">Medium</option>
+              <option value="small">Small (fastest)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="step-dot">3</div>
+          Alignment
+          <div class="section-rule"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="acoustic-model">Acoustic model</label>
+            <select id="acoustic-model" name="acoustic_model">
+              <option value="english_us_arpa">English US — arpa</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="dictionary">Dictionary</label>
+            <select id="dictionary" name="dictionary">
+              <option value="english_us_arpa">English US — arpa</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="step-dot">4</div>
+          Formant extraction
+          <div class="section-rule"></div>
+        </div>
+        <div class="grid-3">
+          <div class="field">
+            <label>Speaker voice</label>
+            <div class="segmented">
+              <div class="seg-opt"><input type="radio" name="voice_type" id="vt-low"  value="low"  checked><label for="vt-low">Low</label></div>
+              <div class="seg-opt"><input type="radio" name="voice_type" id="vt-high" value="high"         ><label for="vt-high">High</label></div>
+            </div>
+          </div>
+          <div class="field">
+            <label>Stop-words</label>
+            <div class="segmented">
+              <div class="seg-opt"><input type="radio" name="stopwords" id="sw-filter" value="filter" checked><label for="sw-filter">Filter</label></div>
+              <div class="seg-opt"><input type="radio" name="stopwords" id="sw-keep"   value="keep"         ><label for="sw-keep">Keep</label></div>
+            </div>
+          </div>
+          <div class="field">
+            <label>Unstressed vowels</label>
+            <div class="segmented">
+              <div class="seg-opt"><input type="radio" name="unstressed" id="us-filter" value="filter" checked><label for="us-filter">Filter</label></div>
+              <div class="seg-opt"><input type="radio" name="unstressed" id="us-keep"   value="keep"         ><label for="us-keep">Keep</label></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="adv-toggle" id="adv-toggle" onclick="toggleAdvanced()">
+          <span class="chevron">▸</span> Advanced options
+        </div>
+        <div class="adv-panel" id="adv-panel">
+          <div class="grid-2">
+            <div class="field">
+              <label for="formant-ceiling">Formant ceiling (Hz)</label>
+              <input type="text" id="formant-ceiling" name="formant_ceiling" value="5500">
+            </div>
+            <div class="field">
+              <label for="num-formants">Number of formants</label>
+              <input type="text" id="num-formants" name="num_formants" value="4">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" style="margin-bottom:0">
+        <div class="section-head">
+          <div class="step-dot">5</div>
+          Notification
+          <div class="section-rule"></div>
+        </div>
+        <div class="submit-area">
+          <div class="field">
+            <label for="email">Email address <span style="font-weight:normal;opacity:0.7">(optional)</span></label>
+            <input type="email" id="email" name="email" placeholder="your@email.edu">
+          </div>
+          <button type="submit" class="btn" id="submit-btn">Submit</button>
+        </div>
+        <p class="privacy-note">Your email is used only to deliver results and is not stored or shared.</p>
+      </div>
+
+    </form>
+  </div>
+
+  <!-- ══════════════════════════════ RUNNING STATE ══════════════════════════════ -->
+  <div id="state-running" class="body" style="display:none">
+    <div class="progress-view">
+      <div class="progress-spinner">
+        <div class="spinner-pipe"></div>
+        <div class="spinner-pipe active"></div>
+        <div class="spinner-pipe"></div>
+        <div class="spinner-pipe active"></div>
+        <div class="spinner-pipe"></div>
+      </div>
+      <div class="progress-filename" id="progress-filename"></div>
+      <div class="progress-step-label" id="progress-step-label">Starting…</div>
+      <div class="progress-note">
+        Processing typically takes 2–10 minutes depending on file length and your chosen Whisper model.
+        This page will update automatically — you can leave it open in the background.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ DONE STATE ════════════════════════════════ -->
+  <div id="state-done" class="body" style="display:none">
+    <div class="results-view">
+      <div class="success-mark">✓</div>
+      <div class="results-title">Processing complete</div>
+      <div class="results-note">
+        Your results are ready. The download includes the Whisper transcript, MFA-aligned TextGrid,
+        and new-fave formant measurements.
+      </div>
+      <div class="results-actions">
+        <button class="btn" id="download-btn" onclick="downloadResults()">Download results</button>
+        <button class="btn-outline" onclick="resetForm()">Submit another file</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════ ERROR STATE ════════════════════════════════ -->
+  <div id="state-error" class="body" style="display:none">
+    <div class="error-view">
+      <div class="error-icon">✕</div>
+      <div class="error-title">Processing failed</div>
+      <div class="error-message" id="error-message"></div>
+      <button class="btn" onclick="resetForm()">Try again</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-left">Brigham Young University · Linguistics · Vox Humana v0.1</div>
+    <div class="pipe-row-footer">
+      <span style="width:3px;height:9px;"></span>
+      <span style="width:3px;height:13px;"></span>
+      <span style="width:3px;height:7px;"></span>
+      <span style="width:3px;height:11px;"></span>
+      <span style="width:3px;height:15px;"></span>
+      <span style="width:3px;height:8px;"></span>
+      <span style="width:3px;height:12px;"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ─── State ────────────────────────────────────────────────────────────────────
+  let selectedFile = null;
+  let currentJobId = null;
+  let pollTimer    = null;
+
+  // ─── File selection ───────────────────────────────────────────────────────────
+  const dropZone   = document.getElementById('drop-zone');
+  const fileInput  = document.getElementById('audio-input');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) setFile(fileInput.files[0]);
+  });
+
+  function setFile(file) {
+    selectedFile = file;
+    dropZone.classList.add('has-file');
+    document.getElementById('drop-primary').textContent   = 'File selected';
+    document.getElementById('drop-secondary').style.display = 'none';
+    const fn = document.getElementById('drop-filename');
+    fn.textContent = file.name;
+    fn.style.display = 'block';
+  }
+
+  // ─── Advanced toggle ─────────────────────────────────────────────────────────
+  function toggleAdvanced() {
+    document.getElementById('adv-toggle').classList.toggle('open');
+    document.getElementById('adv-panel').classList.toggle('open');
+  }
+
+  // ─── Submit ───────────────────────────────────────────────────────────────────
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!selectedFile) {
+      dropZone.classList.add('drag-over');
+      setTimeout(() => dropZone.classList.remove('drag-over'), 600);
+      return;
+    }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+
+    const form = document.getElementById('vxh-form');
+    const data = new FormData();
+    data.append('audio',         selectedFile);
+    data.append('whisper_model', form.whisper_model.value);
+    data.append('language',      form.language.value);
+    data.append('acoustic_model', form.acoustic_model.value);
+    data.append('dictionary',    form.dictionary.value);
+    data.append('email',         form.email.value);
+
+    try {
+      const res  = await fetch('/api/jobs', { method: 'POST', body: data });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.detail || 'Submission failed');
+      currentJobId = body.job_id;
+      showState('running');
+      document.getElementById('progress-filename').textContent = selectedFile.name;
+      startPolling();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+      showError(err.message);
+    }
+  }
+
+  // ─── Polling ──────────────────────────────────────────────────────────────────
+  function startPolling() {
+    pollTimer = setInterval(pollJob, 3000);
+    pollJob(); // immediate first poll
+  }
+
+  async function pollJob() {
+    try {
+      const res = await fetch(`/api/jobs/${currentJobId}`);
+      const job = await res.json();
+
+      updateTrack(job.step);
+      document.getElementById('progress-step-label').textContent = job.step_name || 'Processing…';
+
+      if (job.status === 'done') {
+        clearInterval(pollTimer);
+        showState('done');
+      } else if (job.status === 'error') {
+        clearInterval(pollTimer);
+        showError(job.error || 'An unknown error occurred.');
+      }
+    } catch (err) {
+      // Network hiccup — keep polling
+    }
+  }
+
+  // ─── Pipeline track ───────────────────────────────────────────────────────────
+  // Maps job step (1-5) to the four UI track tabs
+  const stepToTrack = { 0: 0, 1: 1, 2: 1, 3: 2, 4: 3, 5: 4 };
+
+  function updateTrack(jobStep) {
+    const activeTab = stepToTrack[jobStep] || 0;
+    for (let i = 1; i <= 4; i++) {
+      const el = document.getElementById('track-' + i);
+      el.classList.remove('active', 'done');
+      if (i === activeTab)      el.classList.add('active');
+      else if (i < activeTab)   el.classList.add('done');
+    }
+  }
+
+  // ─── Download ─────────────────────────────────────────────────────────────────
+  function downloadResults() {
+    window.location.href = `/api/jobs/${currentJobId}/download`;
+  }
+
+  // ─── View switching ───────────────────────────────────────────────────────────
+  function showState(state, message) {
+    document.getElementById('state-form').style.display    = state === 'form'    ? '' : 'none';
+    document.getElementById('state-running').style.display = state === 'running' ? '' : 'none';
+    document.getElementById('state-done').style.display    = state === 'done'    ? '' : 'none';
+    document.getElementById('state-error').style.display   = state === 'error'   ? '' : 'none';
+
+    if (state === 'done') updateTrack(5);
+  }
+
+  function showError(message) {
+    document.getElementById('error-message').textContent = message;
+    showState('error');
+    updateTrack(0);
+  }
+
+  function resetForm() {
+    clearInterval(pollTimer);
+    currentJobId = null;
+    selectedFile = null;
+
+    // Reset file drop zone
+    dropZone.classList.remove('has-file');
+    document.getElementById('drop-primary').textContent     = 'Drop audio here or click to browse';
+    document.getElementById('drop-secondary').style.display = '';
+    document.getElementById('drop-filename').style.display  = 'none';
+    fileInput.value = '';
+
+    // Reset submit button
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = false;
+    btn.textContent = 'Submit';
+
+    updateTrack(0);
+    showState('form');
+  }
+</script>
+</body>
+</html>
