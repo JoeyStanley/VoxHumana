@@ -23,6 +23,8 @@ from pipeline.extract_with_newfave import extract_with_newfave
 
 app = FastAPI(title="VoxHumana")
 
+MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
+
 BASE_DIR = Path(__file__).parent.parent
 JOBS_DIR = BASE_DIR / "data" / "jobs"
 JOBS_DIR.mkdir(parents=True, exist_ok=True)
@@ -81,7 +83,21 @@ async def create_job(
 
     suffix = Path(audio.filename or "audio.wav").suffix or ".wav"
     audio_path = job_dir / f"audio{suffix}"
-    audio_path.write_bytes(await audio.read())
+
+    total = 0
+    with audio_path.open("wb") as fh:
+        while chunk := await audio.read(1024 * 1024):  # stream 1 MB at a time
+            total += len(chunk)
+            if total > MAX_UPLOAD_BYTES:
+                fh.close()
+                audio_path.unlink(missing_ok=True)
+                job_dir.rmdir()
+                raise HTTPException(
+                    status_code=413,
+                    detail="File too large. Maximum upload size is 1 GB. "
+                           "See the User Guide for tips on splitting long recordings.",
+                )
+            fh.write(chunk)
 
     config = {
         "whisper": {
