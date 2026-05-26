@@ -61,6 +61,10 @@ may take up to an hour." Replace with a real estimate when enough data exists.
 ## some fun names for loading messages
 coupling the manuals, laying out the console, registering the swell box, drawing console, warming up pipes, tuning the reeds, lacing up organ shoes, Adjusting the wind pressure, Opening the expression box, voicing the flue pipes, Warming up the pipes...
 
+## Output files
+
+Make sure they're all there, that they are organized by job (Whisper, MFA, new-fave), and that they have the original filename in them. 
+
 ## User Guide tab (does not exist yet — needs to be built)
 Add a "User Guide" tab to the UI (alongside the main upload form). Content to include:
 
