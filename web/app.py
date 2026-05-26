@@ -146,7 +146,7 @@ async def download_results(job_id: str):
     # Zip all output files except the mfa_corpus dir (just a copy of the input audio)
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in job_dir.rglob("*"):
-            if f.is_file() and "mfa_corpus" not in f.parts:
+            if f.is_file() and "mfa_corpus" not in f.parts and "mfa_temp" not in f.parts:
                 # Skip the raw audio copy we saved server-side
                 if f.name.startswith("audio."):
                     continue

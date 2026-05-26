@@ -44,6 +44,10 @@ def align_with_mfa(audio_path, whisper_result, job_dir, config=None):
     output_dir = job_dir / "mfa_output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Job-specific temp dir prevents MFA from merging this corpus with cached
+    # data from previous runs stored in ~/Documents/MFA (the global default).
+    temp_dir = job_dir / "mfa_temp"
+
     dictionary = config.get("dictionary", "english_us_arpa")
     acoustic_model = config.get("acoustic_model", "english_us_arpa")
     num_jobs = config.get("num_jobs", 1)
@@ -62,6 +66,7 @@ def align_with_mfa(audio_path, whisper_result, job_dir, config=None):
             dictionary,
             acoustic_model,
             "/data/mfa_output",
+            "--temporary_directory", "/data/mfa_temp",
             "--num_jobs", str(num_jobs),
             "--output_format", output_format,
         ]
@@ -76,6 +81,7 @@ def align_with_mfa(audio_path, whisper_result, job_dir, config=None):
             dictionary,
             acoustic_model,
             str(output_dir),
+            "--temporary_directory", str(temp_dir),
             "--num_jobs", str(num_jobs),
             "--output_format", output_format,
         ]
