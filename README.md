@@ -2,7 +2,7 @@
 
 VoxHumana (VxH) is an all-in-one sociophonetics processing tool for processing speech. It will include transcription via Whisper, forced alignment via MFA, and formant extraction via new-fave. Basically, I'm trying to make a DARLA 2.0 that uses the latest and greatest tools. 
 
-*Vox Humana* is Latin for "human voice". I'm opting for the Modern Ecclesiastical [pronunciation](https://en.wiktionary.org/wiki/vox_humana) [ˈvɔks uˈmaː.na]. I chose this name because this tool will feed into (if not fully integrate with) [Pipeline](https://github.com/JoeyStanley/pipeline). Pipeline is literally a pipeline of sociophonetic data processing, and since I play the organ, I thought I'd go with a subtle nod at a classic pipe organ look when I designed the colors. *Vox Humana* is the name of one of the stops on many pipe organ, which you can learn more about [here](http://www.organstops.org/v/VoxHumana.html), and I think seves as as suitable name for a tool that processes audio of the human voice.
+*Vox Humana* is Latin for "human voice". I'm opting for the Modern Ecclesiastical [pronunciation](https://en.wiktionary.org/wiki/vox_humana) [ˈvɔks uˈmaː.na]. I chose this name because this tool will feed into (if not fully integrate with) [Pipeline](https://github.com/JoeyStanley/pipeline). Pipeline is literally a pipeline of sociophonetic data processing, and since I play the organ, I thought I'd go with a subtle nod at a classic pipe organ look when I designed the colors. *Vox Humana* is the name of one of the stops on many pipe organs, which you can learn more about [here](http://www.organstops.org/v/VoxHumana.html), and I think seves as as suitable name for a tool that processes audio of the human voice.
 
 
 ## System Dependencies
