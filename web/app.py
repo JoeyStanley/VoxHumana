@@ -1,6 +1,7 @@
 """VoxHumana web server — FastAPI app that wraps the processing pipeline."""
 
 import io
+import shutil
 import uuid
 import zipfile
 import traceback
@@ -36,6 +37,16 @@ jobs: dict[str, dict] = {}
 executor = ThreadPoolExecutor(max_workers=1)
 
 
+def _cleanup_intermediates(job_dir: Path) -> None:
+    """Delete large files that are no longer needed once the pipeline finishes."""
+    for f in job_dir.glob("audio.*"):
+        f.unlink(missing_ok=True)
+    for dirname in ("mfa_corpus", "mfa_temp"):
+        d = job_dir / dirname
+        if d.exists():
+            shutil.rmtree(d)
+
+
 def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
     """Run all pipeline steps in a background thread, updating job status as we go."""
     job_dir = JOBS_DIR / job_id
@@ -67,6 +78,8 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
             status="error",
             error=str(exc),
         )
+    finally:
+        _cleanup_intermediates(job_dir)
 
 
 @app.post("/api/jobs")

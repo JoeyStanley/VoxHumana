@@ -92,6 +92,36 @@ Options:
     and lets you run on your own hardware with a GPU.
   - Contact the lab for access to a GPU-equipped server if you have many recordings.
 
+## File management and security (partially done — needs completion)
+
+### What's already cleaned up
+After every job (success or failure), the pipeline now deletes the large intermediates
+that are no longer needed: the uploaded audio file, `mfa_corpus/` (copy of audio),
+and `mfa_temp/` (MFA working data). This recovers 1–3 GB per job immediately.
+
+### What still needs to be done
+- **Result files expire**: job result directories (`data/jobs/<uuid>/`) currently
+  accumulate forever. Once a user has downloaded their results (or after a set
+  retention window, e.g. 24–48 hours), the entire job directory should be deleted.
+  Coordinate with the logging system below — logs must be written to `data/logs/`
+  *before* the job directory is removed, so the record survives cleanup.
+
+- **Logs live separately**: job logs (`data/logs/`) must never be deleted as part
+  of job directory cleanup. They are the audit trail. Keep them indefinitely (or
+  archive to cold storage after a year).
+
+- **Uploaded audio is sensitive**: sociolinguistic recordings contain identifiable
+  voices and personal conversations. The audio file is already deleted as soon as
+  the pipeline finishes, which is correct. Verify this holds even if the server
+  crashes mid-job (on restart, scan for job dirs that have an audio file but no
+  `error.log` and no results — these are orphaned and should be cleaned up).
+
+- **No world-readable job directories**: confirm that `data/jobs/` is not served
+  as a static directory. Currently it is not (only `web/static/` is mounted), but
+  double-check this after any nginx or static-file config changes.
+
+---
+
 ## Job logging system (does not exist yet — ask Claude before building)
 Currently, errors are written to `data/jobs/<job_id>/error.log` and the job ID is
 shown to the user on the error screen. That's a stopgap. The full system should:
