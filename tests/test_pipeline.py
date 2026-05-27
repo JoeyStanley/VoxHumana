@@ -43,7 +43,7 @@ def run():
 
     # Step 3: MFA alignment
     print("Step 3: Aligning with MFA...")
-    mfa_output_dir = align_with_mfa(str(AUDIO), whisper_result, str(JOB_DIR))
+    mfa_output_dir = align_with_mfa(str(AUDIO), str(JOB_DIR))
     mfa_textgrids = list(Path(mfa_output_dir).glob("*.TextGrid"))
     assert mfa_textgrids, f"No TextGrid found in MFA output: {mfa_output_dir}"
 

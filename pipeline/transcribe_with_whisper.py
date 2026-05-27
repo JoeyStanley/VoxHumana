@@ -25,7 +25,7 @@ def transcribe(audio_path, job_dir, config=None):
     )
 
     stem = Path(audio_path).stem
-    whisper_dir = Path(job_dir) / "whisper"
+    whisper_dir = Path(job_dir) / "whisper_output"
     whisper_dir.mkdir(parents=True, exist_ok=True)
 
     output_path = whisper_dir / f"{stem}.json"

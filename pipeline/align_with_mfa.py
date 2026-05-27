@@ -3,14 +3,19 @@ import shutil
 from pathlib import Path
 
 
-def align_with_mfa(audio_path, whisper_result, job_dir, config=None):
+def align_with_mfa(audio_path, job_dir, config=None):
     """
-    Run Montreal Forced Aligner on an audio file using its Whisper transcription.
+    Run Montreal Forced Aligner on an audio file using its Whisper TextGrid.
 
     Requires MFA installed in a conda environment (default env name: "aligner").
     To set up: conda create -n aligner -c conda-forge montreal-forced-aligner
     Then download models once: conda run -n aligner mfa model download acoustic english_us_arpa
                                 conda run -n aligner mfa model download dictionary english_us_arpa
+
+    MFA reads the Whisper utterance TextGrid (whisper/{stem}.TextGrid) as its
+    transcript input. Using a TextGrid with utterance-level intervals lets MFA
+    align each segment independently rather than treating the whole recording as
+    one block — more accurate and memory-efficient for long interviews.
 
     Config options:
         runner (str):         "conda" (default) or "docker"
@@ -31,15 +36,18 @@ def align_with_mfa(audio_path, whisper_result, job_dir, config=None):
     audio_path = Path(audio_path)
     job_dir = Path(job_dir)
 
-    # MFA needs a corpus directory containing the audio file and a matching
-    # .lab file (plain-text transcription with the same stem as the audio).
+    # MFA corpus directory: audio file + matching TextGrid transcript.
     corpus_dir = job_dir / "mfa_corpus"
     corpus_dir.mkdir(parents=True, exist_ok=True)
 
     shutil.copy2(audio_path, corpus_dir / audio_path.name)
 
-    lab_path = corpus_dir / (audio_path.stem + ".lab")
-    lab_path.write_text(whisper_result["text"].strip())
+    # Copy the Whisper utterance TextGrid as MFA's transcript input.
+    # MFA accepts .TextGrid files in the corpus directory the same way it accepts
+    # .lab files, and uses the interval boundaries to align each utterance
+    # independently rather than the full recording as one unit.
+    textgrid_src = job_dir / "whisper" / f"{audio_path.stem}.TextGrid"
+    shutil.copy2(textgrid_src, corpus_dir / textgrid_src.name)
 
     output_dir = job_dir / "mfa_output"
     output_dir.mkdir(parents=True, exist_ok=True)

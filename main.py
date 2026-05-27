@@ -31,7 +31,7 @@ def run_pipeline(audio_path, job_dir, config=None):
     convert_whisper_to_textgrid(whisper_result, audio_path, job_dir)
 
     print("Step 3: Aligning with MFA...")
-    mfa_output_dir = align_with_mfa(audio_path, whisper_result, job_dir)
+    mfa_output_dir = align_with_mfa(audio_path, job_dir)
 
     print("Step 4: Extracting vowel formants with new-fave...")
     newfave_output_dir = extract_with_newfave(
