@@ -61,7 +61,7 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
             override["max_max_formant"] = formant_ceiling
         if num_formants is not None:
             override["n_formants"] = num_formants
-        ft_config_path = job_dir / "ft_config.yml"
+        ft_config_path = output_dir / "ft_config.yml"
         ft_config_path.write_text(yaml.dump(override))
         ft_config = str(ft_config_path)
 

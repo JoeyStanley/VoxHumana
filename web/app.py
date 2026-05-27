@@ -270,6 +270,9 @@ def _write_processing_log(
     ln("  *_param.csv        — DCT coefficients of the formant tracks (Hz scale)")
     ln("  *_logparam.csv     — DCT coefficients of the formant tracks (log Hz scale)")
     ln("  *_recoded.TextGrid — Praat TextGrid with Labov vowel-class labels applied")
+    if has_ft_override:
+        ln("  ft_config.yml      — FastTrack parameter overrides used for this run;")
+        ln("                       only needed if you want to rerun the extraction offline")
     ln("")
     ln("Parameters:")
     ln(f"  - speakers:           {speakers}{dflt(speakers, 'all')}")
@@ -286,6 +289,9 @@ def _write_processing_log(
     ln("    from new_fave import fave_audio_textgrid, write_data")
     ln("")
     if has_ft_override:
+        ln("    # ft_config.yml is included in your download and contains the FastTrack")
+        ln("    # overrides used for this run. You can use it directly instead of")
+        ln("    # recreating it, or regenerate it with the code below:")
         ln("    import yaml")
         ln("    ft_override = {}")
         if formant_ceiling is not None:
