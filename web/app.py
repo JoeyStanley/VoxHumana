@@ -1,8 +1,10 @@
 """VoxHumana web server — FastAPI app that wraps the processing pipeline."""
 
+import importlib.metadata
 import io
 import re
 import shutil
+import subprocess
 import uuid
 import zipfile
 import traceback
@@ -55,6 +57,267 @@ def _cleanup_intermediates(job_dir: Path, audio_path: Path) -> None:
             shutil.rmtree(d)
 
 
+def _get_mfa_version(conda_env: str) -> str:
+    """Return the MFA version string from the conda env, or 'unknown'."""
+    try:
+        proc = subprocess.run(
+            ["conda", "run", "-n", conda_env, "mfa", "version"],
+            capture_output=True, text=True, timeout=15,
+        )
+        out = (proc.stdout + proc.stderr).strip()
+        match = re.search(r'\d+\.\d+[\.\d]*', out)
+        if match:
+            return match.group(0)
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _write_processing_log(
+    job_dir: Path,
+    job_id: str,
+    config: dict,
+    audio_filename: str,
+    submitted_at: str,
+) -> None:
+    """Write processing_log.txt documenting every parameter and how to replicate offline."""
+    completed_at = datetime.now(timezone.utc)
+    submitted_dt = datetime.fromisoformat(submitted_at)
+    total_s = int((completed_at - submitted_dt).total_seconds())
+    h, rem = divmod(total_s, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        duration_str = f"{h}h {m:02d}m {s:02d}s"
+    elif m:
+        duration_str = f"{m}m {s:02d}s"
+    else:
+        duration_str = f"{s}s"
+
+    # Tool versions
+    try:
+        whisper_ver = importlib.metadata.version("openai-whisper")
+    except Exception:
+        whisper_ver = "unknown"
+    try:
+        newfave_ver = importlib.metadata.version("new-fave")
+    except Exception:
+        newfave_ver = "unknown"
+    conda_env = config.get("mfa", {}).get("conda_env", "aligner")
+    mfa_ver = _get_mfa_version(conda_env)
+
+    # Output file list (excludes audio, working dirs, and the log itself)
+    output_files = sorted(
+        str(f.relative_to(job_dir))
+        for f in job_dir.rglob("*")
+        if f.is_file()
+        and "mfa_corpus" not in f.parts
+        and "mfa_temp" not in f.parts
+        and f.name != audio_filename
+        and f.name != "processing_log.txt"
+    )
+
+    stem = Path(audio_filename).stem
+    w_cfg = config.get("whisper", {})
+    m_cfg = config.get("mfa", {})
+    nf_cfg = config.get("newfave", {})
+
+    BAR = "=" * 72
+    bar = "-" * 40
+
+    def dflt(val, default) -> str:
+        return "  [VoxHumana default]" if val == default else ""
+
+    out: list[str] = []
+    ln = out.append
+
+    # Header
+    ln(BAR)
+    ln("VoxHumana Processing Log")
+    ln(BAR)
+    ln("")
+    ln("This file documents how your audio was processed by VoxHumana.")
+    ln("It lists every parameter used at each step (including pipeline defaults")
+    ln("you did not set), tool version numbers, and code you can run locally to")
+    ln("reproduce or extend the analysis.")
+    ln("")
+    ln(f"Job ID:    {job_id}")
+    ln(f"Submitted: {submitted_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    ln(f"Completed: {completed_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    ln(f"Duration:  {duration_str}")
+
+    # Input / output
+    ln("")
+    ln(bar)
+    ln("INPUT FILE")
+    ln(bar)
+    ln(f"  {audio_filename}")
+    ln("")
+    ln(bar)
+    ln("OUTPUT FILES")
+    ln(bar)
+    for f in output_files:
+        ln(f"  {f}")
+
+    # ── WHISPER ──────────────────────────────────────────────────────────────
+    model = w_cfg.get("model", "turbo")
+    language = w_cfg.get("language") or None
+    initial_prompt = w_cfg.get("initial_prompt") or None
+    copt = w_cfg.get("condition_on_previous_text", True)
+
+    ln("")
+    ln("")
+    ln(BAR)
+    ln(f"STEP 1 — TRANSCRIPTION: OpenAI Whisper  v{whisper_ver}")
+    ln(BAR)
+    ln("")
+    ln("Whisper is an automatic speech recognition model that converts audio to")
+    ln("text with segment-level timestamps. VoxHumana saves three outputs:")
+    ln("  • a .json file with full segment detail (timings, detected language)")
+    ln("  • a .txt file with the plain-text transcript")
+    ln("  • a Praat TextGrid (.TextGrid), created with the TextGridTools package")
+    ln("in Python, with one interval per segment")
+    ln("This TextGrid is the input to MFA alignment Step 2.")
+    ln("")
+    ln("Parameters:")
+    ln(f"  - model:                       {model}{dflt(model, 'turbo')}")
+    ln(f"  - language:                    {language or '(auto-detect)'}{dflt(language, None)}")
+    ln(f"  - initial_prompt:              {repr(initial_prompt) if initial_prompt else '(none)'}{dflt(initial_prompt, None)}")
+    ln(f"  - condition_on_previous_text:  {copt}{dflt(copt, True)}")
+    ln("")
+    ln("To replicate what VoxHumana did offline in a Python script:")
+    ln("")
+    ln("    import whisper, json")
+    ln(f"    model = whisper.load_model({model!r})")
+    ln(f"    result = model.transcribe(")
+    ln(f"        {audio_filename!r},")
+    if language:
+        ln(f"        language={language!r},")
+    if initial_prompt:
+        ln(f"        initial_prompt={initial_prompt!r},")
+    ln(f"        condition_on_previous_text={copt},")
+    ln(f"    )")
+    ln(f"    with open({(stem + '.json')!r}, 'w') as f:")
+    ln(f"        json.dump(result, f, indent=2)")
+    ln(f"    with open({(stem + '.txt')!r}, 'w') as f:")
+    ln(f"        f.write(result['text'].strip())")
+
+    # ── MFA ──────────────────────────────────────────────────────────────────
+    acoustic_model = m_cfg.get("acoustic_model", "english_us_arpa")
+    dictionary = m_cfg.get("dictionary", "english_us_arpa")
+    fine_tune = m_cfg.get("fine_tune", False)
+    num_jobs = m_cfg.get("num_jobs", 1)
+    output_format = m_cfg.get("output_format", "long_textgrid")
+
+    ln("")
+    ln("")
+    ln(BAR)
+    ln(f"STEP 2 — FORCED ALIGNMENT: Montreal Forced Aligner (MFA)  v{mfa_ver}")
+    ln(BAR)
+    ln("")
+    ln("MFA takes the audio and the Whisper/TextGridTools-generated Textgrid and")
+    ln("produces another Praat TextGrid with word- and phone-level time-aligned")
+    ln("intervals. This TextGrid is the primary input to new-fave in Step 3.")
+    ln("")
+    ln("Parameters:")
+    ln(f"  - acoustic_model:   {acoustic_model}{dflt(acoustic_model, 'english_us_arpa')}")
+    ln(f"  - dictionary:       {dictionary}{dflt(dictionary, 'english_us_arpa')}")
+    ln(f"  - fine_tune:        {fine_tune}{dflt(fine_tune, False)}")
+    ln(f"  - num_jobs:         {num_jobs}{dflt(num_jobs, 1)}")
+    ln(f"  - output_format:    {output_format}{dflt(output_format, 'long_textgrid')}")
+    ln("")
+    ln("To replicate what VoxHumana did offline in the command line:")
+    ln("")
+    ln(f"    # 1. Create corpus_dir/ containing:")
+    ln(f"    #      {audio_filename}")
+    ln(f"    #      {stem}.TextGrid   (the Whisper utterance TextGrid from Step 1)")
+    ln(f"    # 2. Run:")
+    ln(f"    mfa align corpus_dir/ \\")
+    ln(f"             {dictionary} \\")
+    ln(f"             {acoustic_model} \\")
+    ln(f"             mfa_output/ \\")
+    if fine_tune:
+        ln(f"             --fine_tune \\")
+    ln(f"             --output_format {output_format}")
+
+    # ── new-fave ──────────────────────────────────────────────────────────────
+    speakers = nf_cfg.get("speakers", "all")
+    recode_rules = nf_cfg.get("recode_rules", "cmu2labov")
+    labelset_parser = nf_cfg.get("labelset_parser", "cmu_parser")
+    point_heuristic = nf_cfg.get("point_heuristic", "fave")
+    formant_ceiling = nf_cfg.get("formant_ceiling")
+    num_formants = nf_cfg.get("num_formants")
+    include_overlaps = nf_cfg.get("include_overlaps", True)
+
+    has_ft_override = formant_ceiling is not None or num_formants is not None
+    ft_display = "custom YAML (see formant_ceiling / num_formants below)" if has_ft_override else "default"
+    fc_str = str(formant_ceiling) if formant_ceiling is not None else "(not set — new-fave default applies)"
+    nf_str = str(num_formants) if num_formants is not None else "(not set — new-fave default applies)"
+
+    ln("")
+    ln("")
+    ln(BAR)
+    ln(f"STEP 3 — VOWEL FORMANT EXTRACTION: new-fave  v{newfave_ver}")
+    ln(BAR)
+    ln("")
+    ln("new-fave locates vowel tokens in the MFA-aligned TextGrid, estimates")
+    ln("formant trajectories across each vowel using FastTrack, and applies the")
+    ln("FAVE point-measurement heuristic to pick a single representative F1/F2")
+    ln("value per token. Phonetic labels are recoded from CMU ARPABET to Labov")
+    ln("vowel-class notation. Five output files are written:")
+    ln("")
+    ln("  *_points.csv       — one row per vowel token (single-point measurement)")
+    ln("  *_tracks.csv       — formant trajectories (multiple time points per token)")
+    ln("  *_param.csv        — DCT coefficients of the formant tracks (Hz scale)")
+    ln("  *_logparam.csv     — DCT coefficients of the formant tracks (log Hz scale)")
+    ln("  *_recoded.TextGrid — Praat TextGrid with Labov vowel-class labels applied")
+    ln("")
+    ln("Parameters:")
+    ln(f"  - speakers:           {speakers}{dflt(speakers, 'all')}")
+    ln(f"  - recode_rules:       {recode_rules}{dflt(recode_rules, 'cmu2labov')}")
+    ln(f"  - labelset_parser:    {labelset_parser}{dflt(labelset_parser, 'cmu_parser')}")
+    ln(f"  - point_heuristic:    {point_heuristic}{dflt(point_heuristic, 'fave')}")
+    ln(f"  - ft_config:          {ft_display}{dflt(ft_display, 'default')}")
+    ln(f"  - formant_ceiling:    {fc_str}")
+    ln(f"  - num_formants:       {nf_str}")
+    ln(f"  - include_overlaps:   {include_overlaps}{dflt(include_overlaps, True)}")
+    ln("")
+    ln("To replicate what VoxHumana did offline in a Python script:")
+    ln("")
+    ln("    from new_fave import fave_audio_textgrid, write_data")
+    ln("")
+    if has_ft_override:
+        ln("    import yaml")
+        ln("    ft_override = {}")
+        if formant_ceiling is not None:
+            ln(f"    ft_override['max_max_formant'] = {formant_ceiling}")
+        if num_formants is not None:
+            ln(f"    ft_override['n_formants'] = {num_formants}")
+        ln("    with open('ft_config.yml', 'w') as f:")
+        ln("        yaml.dump(ft_override, f)")
+        ln("")
+        ft_repr = "'ft_config.yml'"
+    else:
+        ft_repr = "'default'"
+
+    ln(f"    speakers = fave_audio_textgrid(")
+    ln(f"        {audio_filename!r},")
+    ln(f"        'mfa_output/{stem}.TextGrid',")
+    ln(f"        speakers={speakers!r},")
+    ln(f"        recode_rules={recode_rules!r},")
+    ln(f"        labelset_parser={labelset_parser!r},")
+    ln(f"        point_heuristic={point_heuristic!r},")
+    ln(f"        ft_config={ft_repr},")
+    ln(f"        include_overlaps={include_overlaps},")
+    ln(f"    )")
+    ln(f"    write_data(speakers, destination='newfave_output/')")
+
+    ln("")
+    ln(BAR)
+    ln("")
+
+    (job_dir / "processing_log.txt").write_text("\n".join(out))
+
+
 def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
     """Run all pipeline steps in a background thread, updating job status as we go."""
     job_dir = JOBS_DIR / job_id
@@ -69,7 +332,7 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
 
         jobs[job_id].update(step=3, step_name="Aligning with MFA")
         mfa_output_dir = align_with_mfa(
-            str(audio_path), whisper_result, str(job_dir), config.get("mfa")
+            str(audio_path), str(job_dir), config.get("mfa")
         )
 
         jobs[job_id].update(step=4, step_name="Extracting vowel formants with new-fave")
@@ -77,6 +340,11 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
             str(audio_path), mfa_output_dir, str(job_dir), config.get("newfave")
         )
 
+        _write_processing_log(
+            job_dir, job_id, config,
+            audio_filename=audio_path.name,
+            submitted_at=jobs[job_id]["created_at"],
+        )
         jobs[job_id].update(status="done", step=5, step_name="Complete")
 
     except Exception as exc:
