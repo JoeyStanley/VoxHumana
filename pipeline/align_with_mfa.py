@@ -50,6 +50,7 @@ def align_with_mfa(audio_path, whisper_result, job_dir, config=None):
 
     dictionary = config.get("dictionary", "english_us_arpa")
     acoustic_model = config.get("acoustic_model", "english_us_arpa")
+    fine_tune = config.get("fine_tune", False)
     num_jobs = config.get("num_jobs", 1)
     output_format = config.get("output_format", "long_textgrid")
     runner = config.get("runner", "conda")
@@ -70,6 +71,8 @@ def align_with_mfa(audio_path, whisper_result, job_dir, config=None):
             "--num_jobs", str(num_jobs),
             "--output_format", output_format,
         ]
+        if fine_tune:
+            cmd.append("--fine_tune")
     else:
         conda_env = config.get("conda_env", "aligner")
         # --no-capture-output lets MFA's stdout/stderr pass through conda
@@ -85,6 +88,8 @@ def align_with_mfa(audio_path, whisper_result, job_dir, config=None):
             "--num_jobs", str(num_jobs),
             "--output_format", output_format,
         ]
+        if fine_tune:
+            cmd.append("--fine_tune")
 
     timeout = config.get("timeout", 7200)  # 2 hours default
 

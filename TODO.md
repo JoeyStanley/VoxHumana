@@ -1,4 +1,119 @@
 
+## User Guide: single-speaker recordings
+
+Add a note to the User Guide explaining that VoxHumana is designed for single-speaker
+recordings (one participant, one interviewer) and that this is the optimal input for MFA.
+Include a concrete example of what that looks like:
+- One audio file per speaker or per interview session
+- The target speaker should be the dominant voice
+- Background noise, cross-talk, and multiple simultaneous speakers will degrade alignment quality
+
+Also explain what "single speaker" means in MFA terms (`--single_speaker` mode) and why
+VoxHumana doesn't expose it as a toggle: for typical fieldwork interviews, MFA's default
+speaker-adaptive mode performs better and the distinction is unlikely to matter unless the
+user is processing something unusual (e.g., a group conversation or a read-aloud wordlist
+with no inter-speaker variation).
+
+---
+
+## MFA: additional acoustic models and dictionaries (coming soon — blocked on multi-language)
+
+The Alignment section's acoustic model and dictionary dropdowns currently have only one
+option each (`english_us_arpa`) and are disabled in the UI with a "coming soon" note.
+Expanding them is blocked on the same multi-language MFA work described above.
+
+When adding a new language:
+1. Install the MFA acoustic model and dictionary (`mfa model download acoustic <name>`,
+   `mfa model download dictionary <name>`).
+2. Add the new `<option>` to both dropdowns in the Alignment section.
+3. Decide whether to auto-pair model and dictionary based on the Whisper language selection,
+   or let the user choose them independently (independent choice is more flexible but
+   requires more UI guidance to avoid mismatched pairs).
+4. Re-enable both dropdowns and remove the "coming soon" note once at least two options exist.
+
+---
+
+## Investigate how new-fave detects overlapping speech
+
+The `include_overlaps` parameter in `fave_audio_textgrid` excludes vowels that occur during
+overlapping speech when set to False. It's not yet clear how new-fave determines what counts
+as "overlapping" — specifically:
+
+- Does it look at other tiers in the TextGrid? If so, which ones, and what label conventions
+  does it expect?
+- VoxHumana currently produces a single-speaker TextGrid from MFA (one Word tier, one Phone
+  tier). If new-fave's overlap detection requires a second speaker tier to be present, the
+  `include_overlaps=False` option may have no effect for our use case.
+- If it does require a second tier: would it be worth adding an interviewer transcript tier
+  to the TextGrid so that back-channels and interviewer overlaps are flagged? This would
+  require either a separate transcription pass for the interviewer or manual annotation.
+
+Check new-fave source (`mark_overlaps` in `new_fave/utils/textgrid.py`) to understand the
+detection logic before advertising this option to users.
+
+---
+
+## MFA: OOV words file and custom dictionaries
+
+Two related features worth adding when there is demand:
+
+### OOV words file
+MFA can output a list of out-of-vocabulary (OOV) words — words in the transcript that are
+not in the pronunciation dictionary and received a guessed pronunciation. Surfacing this
+file in the VoxHumana download would help users identify transcription or alignment problems
+early (e.g. a misspelled name that MFA couldn't look up).
+
+To implement: check MFA's output directory for an OOV file after alignment and include it
+in the results zip if present.
+
+### Custom dictionaries
+Power users (e.g., researchers working with a specific dialect community) may want to
+upload a custom pronunciation dictionary alongside their audio. MFA accepts a plain-text
+dictionary file as the `DICTIONARY_PATH` argument instead of a model name.
+
+To implement: add an optional file upload field in the Alignment section, validate that
+it's a `.txt` or `.dict` file, and pass its path to MFA instead of the default model name.
+Consider whether to allow this alongside or instead of the built-in dictionaries.
+
+---
+
+## Multi-language support (coming soon — blocked on MFA)
+
+The Whisper transcription step already supports any language via the `language` parameter,
+and the UI language field is wired up end-to-end. However, the forced alignment step (MFA)
+currently only has English acoustic models and dictionaries configured, so the full pipeline
+only works for English recordings. The language selector is disabled in the UI with a
+"coming soon" note until this is resolved.
+
+### What's needed to enable a new language
+1. Install the MFA acoustic model and dictionary for the target language
+   (e.g. `mfa model download acoustic spanish_mfa`, `mfa model download dictionary spanish_mfa`).
+2. Add the language option to the Alignment section dropdowns in the UI.
+3. Re-enable the Language dropdown in the Transcription section and wire language →
+   acoustic model selection (either automatically or via user choice).
+4. Test end-to-end on a real recording in that language.
+
+### Also consider
+- The `task` parameter in Whisper: setting `task="translate"` outputs an English transcript
+  even for non-English audio. This could be a useful intermediate mode (transcribe → English
+  → MFA with English models) before full multi-language MFA support is ready.
+- Documenting which languages MFA supports out of the box.
+
+---
+
+## Transcription hint / initial_prompt expansion
+
+The `initial_prompt` field is wired up and working. Possible future enhancements:
+
+- **Per-speaker prompts**: if the recording has multiple speakers, allow separate hints
+  per speaker (requires diarization, which is a larger feature).
+- **Saved prompts**: let users save commonly used hints (e.g. a fieldwork community name
+  and set of local vocabulary) and recall them from a dropdown.
+- **Auto-prompt from metadata**: if the upload form eventually collects speaker/location
+  metadata, pre-populate the hint field automatically.
+
+---
+
 ## Formant ceiling and number-of-formants overrides (not yet wired up)
 
 The Advanced options panel in the UI shows these controls with a "coming soon" note and the

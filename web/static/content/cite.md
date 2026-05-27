@@ -30,7 +30,11 @@ Used for vowel formant extraction.
 
 > Fruehwald, J. (2026). *new-fave: Forced alignment and vowel extraction* [Software]. <https://forced-alignment-and-vowel-extraction.github.io/new-fave/>
 
-new-fave uses [Praat](https://www.praat.org) for acoustic measurements. If your work depends on Praat directly, you may also wish to cite:
+new-fave uses [Fast Track](https://github.com/santiagobarreda/FastTrack) to help with formant extraction. 
+
+> Barreda, Santiago. (2021). Fast Track: fast (nearly) automatic formant-tracking using Praat. *Linguistics Vanguard*, 7(1). <https://doi.org/10.1515/lingvan-2020-0051>
+
+Both new-fave and Fast Track use [Praat](https://www.praat.org) for acoustic measurements. If your work depends on Praat directly, you may also wish to cite:
 
 > Paul Boersma, David Weenink, & Anastasia Shchupak (2026). Praat: doing phonetics by computer [Computer program]. Version 6.4.67, retrieved 21 May 2026 from https://praat.org.
 

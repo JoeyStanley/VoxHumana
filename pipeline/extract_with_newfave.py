@@ -1,4 +1,5 @@
 from pathlib import Path
+import yaml
 from new_fave import fave_audio_textgrid, write_data
 
 
@@ -49,6 +50,21 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
     output_dir = job_dir / "newfave_output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    formant_ceiling = config.get("formant_ceiling", None)
+    num_formants = config.get("num_formants", None)
+    include_overlaps = config.get("include_overlaps", True)
+
+    ft_config = "default"
+    if formant_ceiling is not None or num_formants is not None:
+        override = {}
+        if formant_ceiling is not None:
+            override["max_max_formant"] = formant_ceiling
+        if num_formants is not None:
+            override["n_formants"] = num_formants
+        ft_config_path = job_dir / "ft_config.yml"
+        ft_config_path.write_text(yaml.dump(override))
+        ft_config = str(ft_config_path)
+
     speakers = fave_audio_textgrid(
         audio_path,
         textgrid_path,
@@ -56,7 +72,8 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
         recode_rules=config.get("recode_rules", "cmu2labov"),
         labelset_parser=config.get("labelset_parser", "cmu_parser"),
         point_heuristic=config.get("point_heuristic", "fave"),
-        ft_config=config.get("ft_config", "default"),
+        ft_config=ft_config,
+        include_overlaps=include_overlaps,
     )
 
     write_data(speakers, destination=str(output_dir))

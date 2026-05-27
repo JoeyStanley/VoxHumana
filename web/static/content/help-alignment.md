@@ -20,6 +20,17 @@ releases.
 Maps each word to a sequence of phonemes. The dictionary must match the acoustic model — leave
 this on the default unless you have a custom dictionary for your specific data.
 
+### Fine tune? (Advanced)
+
+Toggles MFA's `--fine_tune` flag. When checked, MFA runs an extra refinement pass after the
+initial alignment — the aligner re-estimates its parameters against the corpus and re-aligns,
+which typically produces tighter phone boundaries.
+
+The trade-off is straightforwardly accuracy vs. speed: fine-tuning adds processing time
+(roughly 50–100% longer for a typical interview) in exchange for better precision at phone
+boundaries. Leave it unchecked for a first pass; enable it when you need the tightest
+possible alignment, such as for detailed acoustic measurements of short segments.
+
 ### Note on accuracy
 
 Minor transcription errors rarely affect alignment quality. Words not found in the dictionary

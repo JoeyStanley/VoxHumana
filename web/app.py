@@ -87,8 +87,14 @@ async def create_job(
     audio: UploadFile = File(...),
     whisper_model: str = Form("turbo"),
     language: Optional[str] = Form(None),
+    initial_prompt: Optional[str] = Form(None),
+    condition_on_previous_text: bool = Form(True),
     acoustic_model: str = Form("english_us_arpa"),
     dictionary: str = Form("english_us_arpa"),
+    fine_tune: bool = Form(False),
+    formant_ceiling: Optional[str] = Form(None),
+    num_formants: Optional[str] = Form(None),
+    include_overlaps: bool = Form(True),
 ):
     job_id = str(uuid.uuid4())
     job_dir = JOBS_DIR / job_id
@@ -116,12 +122,19 @@ async def create_job(
         "whisper": {
             "model": whisper_model,
             "language": language or None,
+            "initial_prompt": initial_prompt or None,
+            "condition_on_previous_text": condition_on_previous_text,
         },
         "mfa": {
             "acoustic_model": acoustic_model,
             "dictionary": dictionary,
+            "fine_tune": fine_tune,
         },
-        "newfave": {},
+        "newfave": {
+            "formant_ceiling": int(formant_ceiling) if formant_ceiling else None,
+            "num_formants": int(num_formants) if num_formants else None,
+            "include_overlaps": include_overlaps,
+        },
     }
 
     jobs[job_id] = {
