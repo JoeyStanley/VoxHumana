@@ -87,6 +87,8 @@ async def create_job(
     audio: UploadFile = File(...),
     whisper_model: str = Form("turbo"),
     language: Optional[str] = Form(None),
+    initial_prompt: Optional[str] = Form(None),
+    condition_on_previous_text: bool = Form(True),
     acoustic_model: str = Form("english_us_arpa"),
     dictionary: str = Form("english_us_arpa"),
 ):
@@ -116,6 +118,8 @@ async def create_job(
         "whisper": {
             "model": whisper_model,
             "language": language or None,
+            "initial_prompt": initial_prompt or None,
+            "condition_on_previous_text": condition_on_previous_text,
         },
         "mfa": {
             "acoustic_model": acoustic_model,

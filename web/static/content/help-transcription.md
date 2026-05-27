@@ -6,9 +6,18 @@ accented and dialectal speech.
 
 ### Language
 
-Leave on **Auto-detect** for most recordings — Whisper identifies the language from the first
-30 seconds of audio. Set it explicitly to skip detection or for short recordings where
-auto-detect may misfire.
+Multi-language support is coming soon. VoxHumana currently processes English recordings only,
+as the forced alignment step (MFA) requires a language-matched acoustic model and dictionary.
+
+### Transcription hint
+
+An optional free-text field that primes Whisper before transcription begins. Use it to
+improve accuracy on names, places, or unusual vocabulary that Whisper might otherwise mishear:
+
+- Speaker or interviewer names (e.g. *"Interviewer: Sarah. Participant: MecKenzie."*)
+- Location or community (e.g. *"Heber, Utah; Buena Vista, Virginia"*)
+- Topic keywords or unusual words (e.g. *"oystering, longshoreman, pyroclastic"*)
+- Dialect-specific spellings you want Whisper to prefer
 
 ### Model size
 
@@ -18,3 +27,19 @@ auto-detect may misfire.
 - **Small** — Fastest option. Accuracy degrades noticeably on dialectal and accented speech; use only when speed is critical.
 
 All models run on CPU by default. GPU access makes Whisper 5–10× faster.
+
+### Carry context across chunks (Advanced)
+
+Whisper processes audio in 30-second chunks. When this option is checked (the default),
+each chunk is fed the text from the previous chunk as context. This means that names stay consistently
+spelled, sentences flow naturally across boundaries, and the transcription stays coherent
+over a long recording.
+
+Turn it off when context between chunks isn't useful or could cause problems:
+
+- **Wordlists or elicitation tasks**: Since each item is independent, carrying context from the
+  previous item adds noise rather than signal.
+- **Short audio files**: There is little or no overlap between chunks anyway.
+- **Repetition loops**: If a transcript comes back with a passage repeated many times,
+  Whisper got stuck in a feedback loop. Unchecking this and resubmitting will reset the
+  model every 30 seconds and usually clears it up.

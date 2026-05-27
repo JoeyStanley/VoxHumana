@@ -1,4 +1,41 @@
 
+## Multi-language support (coming soon — blocked on MFA)
+
+The Whisper transcription step already supports any language via the `language` parameter,
+and the UI language field is wired up end-to-end. However, the forced alignment step (MFA)
+currently only has English acoustic models and dictionaries configured, so the full pipeline
+only works for English recordings. The language selector is disabled in the UI with a
+"coming soon" note until this is resolved.
+
+### What's needed to enable a new language
+1. Install the MFA acoustic model and dictionary for the target language
+   (e.g. `mfa model download acoustic spanish_mfa`, `mfa model download dictionary spanish_mfa`).
+2. Add the language option to the Alignment section dropdowns in the UI.
+3. Re-enable the Language dropdown in the Transcription section and wire language →
+   acoustic model selection (either automatically or via user choice).
+4. Test end-to-end on a real recording in that language.
+
+### Also consider
+- The `task` parameter in Whisper: setting `task="translate"` outputs an English transcript
+  even for non-English audio. This could be a useful intermediate mode (transcribe → English
+  → MFA with English models) before full multi-language MFA support is ready.
+- Documenting which languages MFA supports out of the box.
+
+---
+
+## Transcription hint / initial_prompt expansion
+
+The `initial_prompt` field is wired up and working. Possible future enhancements:
+
+- **Per-speaker prompts**: if the recording has multiple speakers, allow separate hints
+  per speaker (requires diarization, which is a larger feature).
+- **Saved prompts**: let users save commonly used hints (e.g. a fieldwork community name
+  and set of local vocabulary) and recall them from a dropdown.
+- **Auto-prompt from metadata**: if the upload form eventually collects speaker/location
+  metadata, pre-populate the hint field automatically.
+
+---
+
 ## Formant ceiling and number-of-formants overrides (not yet wired up)
 
 The Advanced options panel in the UI shows these controls with a "coming soon" note and the
