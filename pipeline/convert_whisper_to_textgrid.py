@@ -27,7 +27,7 @@ def convert_whisper_to_textgrid(result, audio_path, job_dir):
     tg.add_tier(tier)
 
     # Write it out
-    whisper_dir = Path(job_dir) / "whisper"
+    whisper_dir = Path(job_dir) / "whisper_output"
     whisper_dir.mkdir(parents=True, exist_ok=True)
     output_path = whisper_dir / f"{Path(audio_path).stem}.TextGrid"
     tgt.write_to_file(tg, str(output_path))
