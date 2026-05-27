@@ -1,6 +1,7 @@
 """VoxHumana web server — FastAPI app that wraps the processing pipeline."""
 
 import io
+import re
 import shutil
 import uuid
 import zipfile
@@ -37,10 +38,17 @@ jobs: dict[str, dict] = {}
 executor = ThreadPoolExecutor(max_workers=1)
 
 
-def _cleanup_intermediates(job_dir: Path) -> None:
+def _sanitize_stem(filename: str) -> str:
+    """Return a filesystem-safe stem from an uploaded filename, capped at 40 chars."""
+    stem = Path(filename).stem
+    stem = re.sub(r'[^\w\-]', '', stem)   # keep alphanumeric, underscore, hyphen
+    stem = re.sub(r'_+', '_', stem).strip('_')
+    return stem[:40] or "audio"
+
+
+def _cleanup_intermediates(job_dir: Path, audio_path: Path) -> None:
     """Delete large files that are no longer needed once the pipeline finishes."""
-    for f in job_dir.glob("audio.*"):
-        f.unlink(missing_ok=True)
+    audio_path.unlink(missing_ok=True)
     for dirname in ("mfa_corpus", "mfa_temp"):
         d = job_dir / dirname
         if d.exists():
@@ -79,7 +87,7 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
             error=str(exc),
         )
     finally:
-        _cleanup_intermediates(job_dir)
+        _cleanup_intermediates(job_dir, audio_path)
 
 
 @app.post("/api/jobs")
@@ -100,8 +108,10 @@ async def create_job(
     job_dir = JOBS_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    suffix = Path(audio.filename or "audio.wav").suffix or ".wav"
-    audio_path = job_dir / f"audio{suffix}"
+    original_name = audio.filename or "audio.wav"
+    suffix = Path(original_name).suffix or ".wav"
+    safe_stem = _sanitize_stem(original_name)
+    audio_path = job_dir / f"{safe_stem}{suffix}"
 
     total = 0
     with audio_path.open("wb") as fh:
@@ -142,7 +152,8 @@ async def create_job(
         "step": 0,
         "step_name": "Queued",
         "error": None,
-        "uploaded_files": [audio.filename or "audio.wav"],
+        "uploaded_files": [original_name],
+        "audio_filename": audio_path.name,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -166,16 +177,20 @@ async def download_results(job_id: str):
         raise HTTPException(status_code=400, detail="Job not complete")
 
     job_dir = JOBS_DIR / job_id
+    audio_filename = jobs[job_id].get("audio_filename", "")
     buf = io.BytesIO()
 
-    # Zip all output files except the mfa_corpus dir (just a copy of the input audio)
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in job_dir.rglob("*"):
-            if f.is_file() and "mfa_corpus" not in f.parts and "mfa_temp" not in f.parts:
-                # Skip the raw audio copy we saved server-side
-                if f.name.startswith("audio."):
-                    continue
-                zf.write(f, f.relative_to(job_dir))
+            if not f.is_file():
+                continue
+            # Skip MFA working directories (large, not useful to users)
+            if "mfa_corpus" in f.parts or "mfa_temp" in f.parts:
+                continue
+            # Skip the uploaded audio file kept server-side
+            if f.name == audio_filename:
+                continue
+            zf.write(f, f.relative_to(job_dir))
 
     buf.seek(0)
     stem = Path(jobs[job_id]["uploaded_files"][0]).stem

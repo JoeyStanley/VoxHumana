@@ -31,13 +31,15 @@ def run():
     # Step 1: Whisper
     print("Step 1: Transcribing with Whisper...")
     whisper_result = transcribe(str(AUDIO), str(JOB_DIR))
-    assert (JOB_DIR / "transcript.json").exists(), "transcript.json not created"
+    stem = AUDIO.stem
+    assert (JOB_DIR / "whisper" / f"{stem}.json").exists(), f"whisper/{stem}.json not created"
+    assert (JOB_DIR / "whisper" / f"{stem}.txt").exists(), f"whisper/{stem}.txt not created"
     assert whisper_result.get("segments"), "Whisper returned no segments"
 
     # Step 2: TextGrid conversion
     print("Step 2: Converting transcript to TextGrid...")
     tg_path = convert_whisper_to_textgrid(whisper_result, str(AUDIO), str(JOB_DIR))
-    assert Path(tg_path).exists(), "transcript.TextGrid not created"
+    assert Path(tg_path).exists(), f"whisper/{stem}.TextGrid not created"
 
     # Step 3: MFA alignment
     print("Step 3: Aligning with MFA...")

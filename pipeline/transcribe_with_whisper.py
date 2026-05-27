@@ -24,8 +24,14 @@ def transcribe(audio_path, job_dir, config=None):
         condition_on_previous_text=condition_on_previous_text,
     )
 
-    output_path = Path(job_dir) / "transcript.json"
+    stem = Path(audio_path).stem
+    whisper_dir = Path(job_dir) / "whisper"
+    whisper_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = whisper_dir / f"{stem}.json"
     with open(output_path, "w") as f:
         json.dump(result, f, indent=2)
+
+    (whisper_dir / f"{stem}.txt").write_text(result["text"].strip())
 
     return result
