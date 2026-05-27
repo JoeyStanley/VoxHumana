@@ -799,6 +799,16 @@
           <label for="initial-prompt">Transcription hint <span style="font-weight:normal">(optional)</span></label>
           <input type="text" id="initial-prompt" name="initial_prompt" placeholder="Put names, locations, topic keywords, or unusual vocabulary here to help guide the transcription.">
         </div>
+        <div class="adv-toggle" id="adv-toggle-transcription" onclick="toggleAdvanced('transcription')" style="margin-top:12px">
+          <span class="chevron">▸</span> Advanced Whisper options
+        </div>
+        <div class="adv-panel" id="adv-panel-transcription">
+          <div class="field-check">
+            <input type="checkbox" id="condition-on-prev" name="condition_on_previous_text" checked>
+            <label for="condition-on-prev">Carry context across 30-second chunks</label>
+          </div>
+          <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When checked, each chunk is aware of what came before — good for interviews. Uncheck for wordlists or short files, or if the transcript contains repeating loops.</p>
+        </div>
       </div>
 
       <div class="section">
@@ -808,20 +818,26 @@
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('alignment')" title="Help">?</button>
         </div>
-        <div class="grid-2">
+        <p class="adv-coming-soon">Additional acoustic models and dictionaries are coming soon. Currently English only.</p>
+        <div class="grid-2" style="opacity:0.4; pointer-events:none">
           <div class="field">
             <label for="acoustic-model">Acoustic model</label>
-            <select id="acoustic-model" name="acoustic_model">
+            <select id="acoustic-model" name="acoustic_model" disabled>
               <option value="english_us_arpa">English US — arpa</option>
             </select>
           </div>
           <div class="field">
             <label for="dictionary">Dictionary</label>
-            <select id="dictionary" name="dictionary">
+            <select id="dictionary" name="dictionary" disabled>
               <option value="english_us_arpa">English US — arpa</option>
             </select>
           </div>
         </div>
+        <div class="field-check" style="margin-top:14px">
+          <input type="checkbox" id="fine-tune" name="fine_tune">
+          <label for="fine-tune">Fine tune</label>
+        </div>
+        <p class="adv-coming-soon" style="margin: 2px 0 0 22px">Runs an extra MFA refinement pass after the initial alignment. This improves accuracy, but is slower.</p>
       </div>
 
       <div class="section">
@@ -831,21 +847,10 @@
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('formants')" title="Help">?</button>
         </div>
-      </div>
-
-      <div class="section">
-        <div class="adv-toggle" id="adv-toggle" onclick="toggleAdvanced()">
-          <span class="chevron">▸</span> Advanced options
+        <div class="adv-toggle" id="adv-toggle-formants" onclick="toggleAdvanced('formants')">
+          <span class="chevron">▸</span> Advanced new-fave options
         </div>
-        <div class="adv-panel" id="adv-panel">
-          <p class="adv-label">Transcription</p>
-          <div class="field-check">
-            <input type="checkbox" id="condition-on-prev" name="condition_on_previous_text" checked>
-            <label for="condition-on-prev">Carry context across 30-second chunks</label>
-          </div>
-          <p class="adv-coming-soon" style="margin: 2px 0 16px 22px">When checked, each chunk is aware of what came before, which is good for interviews. Uncheck for wordlists or short files, or if the transcript contains repeating loops.</p>
-          <hr class="adv-rule">
-          <p class="adv-label">Formant extraction</p>
+        <div class="adv-panel" id="adv-panel-formants">
           <p class="adv-coming-soon">Formant ceiling and number of formants overrides are coming soon.</p>
           <div class="grid-2" style="opacity:0.4; pointer-events:none">
             <div class="field">
@@ -1041,9 +1046,9 @@
   }
 
   // ─── Advanced toggle ──────────────────────────────────────────────────────────
-  function toggleAdvanced() {
-    document.getElementById('adv-toggle').classList.toggle('open');
-    document.getElementById('adv-panel').classList.toggle('open');
+  function toggleAdvanced(id) {
+    document.getElementById('adv-toggle-' + id).classList.toggle('open');
+    document.getElementById('adv-panel-' + id).classList.toggle('open');
   }
 
   // ─── Submit ───────────────────────────────────────────────────────────────────
@@ -1068,6 +1073,7 @@
     data.append('initial_prompt',            form.initial_prompt.value);
     data.append('condition_on_previous_text', form.condition_on_previous_text.checked);
     data.append('acoustic_model',            form.acoustic_model.value);
+    data.append('fine_tune',                 form.fine_tune.checked);
     data.append('dictionary',               form.dictionary.value);
 
     try {

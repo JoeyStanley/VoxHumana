@@ -91,6 +91,7 @@ async def create_job(
     condition_on_previous_text: bool = Form(True),
     acoustic_model: str = Form("english_us_arpa"),
     dictionary: str = Form("english_us_arpa"),
+    fine_tune: bool = Form(False),
 ):
     job_id = str(uuid.uuid4())
     job_dir = JOBS_DIR / job_id
@@ -124,6 +125,7 @@ async def create_job(
         "mfa": {
             "acoustic_model": acoustic_model,
             "dictionary": dictionary,
+            "fine_tune": fine_tune,
         },
         "newfave": {},
     }
