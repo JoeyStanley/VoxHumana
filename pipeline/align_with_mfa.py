@@ -12,10 +12,9 @@ def align_with_mfa(audio_path, job_dir, config=None):
     Then download models once: conda run -n aligner mfa model download acoustic english_us_arpa
                                 conda run -n aligner mfa model download dictionary english_us_arpa
 
-    MFA reads the Whisper utterance TextGrid (whisper/{stem}.TextGrid) as its
-    transcript input. Using a TextGrid with utterance-level intervals lets MFA
-    align each segment independently rather than treating the whole recording as
-    one block — more accurate and memory-efficient for long interviews.
+    MFA reads the Whisper utterance TextGrid (whisper_output/{stem}.TextGrid) as
+    its transcript input. Each non-empty interval is aligned as a separate utterance,
+    which is more efficient than a flat .lab file for long recordings.
 
     Config options:
         runner (str):         "conda" (default) or "docker"
@@ -43,9 +42,8 @@ def align_with_mfa(audio_path, job_dir, config=None):
     shutil.copy2(audio_path, corpus_dir / audio_path.name)
 
     # Copy the Whisper utterance TextGrid as MFA's transcript input.
-    # MFA accepts .TextGrid files in the corpus directory the same way it accepts
-    # .lab files, and uses the interval boundaries to align each utterance
-    # independently rather than the full recording as one unit.
+    # MFA accepts .TextGrid files alongside audio; each non-empty interval is
+    # treated as a separate utterance to align.
     textgrid_src = job_dir / "whisper_output" / f"{audio_path.stem}.TextGrid"
     shutil.copy2(textgrid_src, corpus_dir / textgrid_src.name)
 
@@ -65,7 +63,6 @@ def align_with_mfa(audio_path, job_dir, config=None):
 
     if runner == "docker":
         docker_image = config.get("docker_image", "mmcauliffe/montreal-forced-aligner:latest")
-        # Mount job_dir as /data inside the container so MFA can read/write it.
         cmd = [
             "docker", "run", "--rm",
             "-v", f"{job_dir.resolve()}:/data",
@@ -76,6 +73,7 @@ def align_with_mfa(audio_path, job_dir, config=None):
             acoustic_model,
             "/data/mfa_output",
             "--temporary_directory", "/data/mfa_temp",
+            "--clean",
             "--num_jobs", str(num_jobs),
             "--output_format", output_format,
         ]
@@ -83,8 +81,6 @@ def align_with_mfa(audio_path, job_dir, config=None):
             cmd.append("--fine_tune")
     else:
         conda_env = config.get("conda_env", "aligner")
-        # --no-capture-output lets MFA's stdout/stderr pass through conda
-        # so Popen's communicate() can collect it.
         cmd = [
             "conda", "run", "-n", conda_env, "--no-capture-output",
             "mfa", "align",
@@ -93,6 +89,7 @@ def align_with_mfa(audio_path, job_dir, config=None):
             acoustic_model,
             str(output_dir),
             "--temporary_directory", str(temp_dir),
+            "--clean",
             "--num_jobs", str(num_jobs),
             "--output_format", output_format,
         ]
@@ -113,10 +110,22 @@ def align_with_mfa(audio_path, job_dir, config=None):
             )
 
     if proc.returncode != 0:
+        # Surface MFA's own validator/aligner log for better diagnostics.
+        mfa_log_snippets = []
+        for log_file in sorted(temp_dir.rglob("*.log")):
+            try:
+                text = log_file.read_text(errors="replace").strip()
+                if text:
+                    mfa_log_snippets.append(f"--- {log_file.relative_to(temp_dir)} ---\n{text}")
+            except Exception:
+                pass
+        mfa_log = ("\n\nMFA internal logs:\n" + "\n\n".join(mfa_log_snippets)) if mfa_log_snippets else ""
+
         raise RuntimeError(
             f"MFA alignment failed (exit code {proc.returncode}).\n"
             f"STDOUT:\n{stdout}\n"
             f"STDERR:\n{stderr}"
+            f"{mfa_log}"
         )
 
     return output_dir

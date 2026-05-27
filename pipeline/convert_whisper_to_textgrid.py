@@ -10,15 +10,20 @@ def convert_whisper_to_textgrid(result, audio_path, job_dir):
     # Create a new TextGrid object.
     tg = tgt.TextGrid()
     
+    # Round duration to 3 decimal places (1 ms) for consistent float comparison.
+    duration = round(duration, 3)
+
     # Create an interval tier.
     tier = tgt.IntervalTier(name='utterances', start_time=0, end_time=duration)
 
     # Add each segment as an interval.
-    # Whisper occasionally places the final segment's end past the true audio
-    # duration by a few milliseconds. Clamp to avoid tgt rejecting the interval.
+    # Whisper timestamps are raw floats and can differ by sub-millisecond amounts
+    # (e.g. 25.06 vs 25.060000000000002). Rounding to 3 decimal places prevents
+    # tiny float overlaps that praatio/MFA reject as malformed TextGrids.
+    # Also clamp end to duration in case Whisper overshoots by a few ms.
     for segment in result["segments"]:
-        start = segment["start"]
-        end = min(segment["end"], duration)
+        start = round(segment["start"], 3)
+        end = round(min(segment["end"], duration), 3)
         if end <= start:
             continue
         tier.add_interval(tgt.Interval(start, end, segment["text"].strip()))
