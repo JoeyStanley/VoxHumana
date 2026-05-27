@@ -1,4 +1,11 @@
 
+## Add a license (MIT is probably fine)
+
+- Add a `LICENSE` file to the repo root (MIT license, copyright Joey Stanley)
+- Add a one-liner to `README.md` at the bottom: `## License` + "MIT — see [LICENSE](LICENSE)"
+
+---
+
 ## User Guide: single-speaker recordings
 
 Add a note to the User Guide explaining that VoxHumana is designed for single-speaker

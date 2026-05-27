@@ -1,12 +1,69 @@
 # VoxHumana
 
-VoxHumana (VxH) is an all-in-one sociophonetics tool for processing speech. It transcribes audio using [Whisper](https://openai.com/index/whisper/), force aligns using [MFA](https://montreal-forced-aligner.readthedocs.io/en/latest/), and extracts formants using [new-fave](https://forced-alignment-and-vowel-extraction.github.io/new-fave/). 
+VoxHumana (VxH) is a web-based pipeline for processing sociolinguistic speech recordings.
+With just a few clicks, VxH will transcribe your audio, force-align it, and extract vowel formant
+measurements automatically. In a short time, you can go from raw audio to a spreadsheet
+of formant measurements without having to download software or code anything yourself.
 
-VxH is inteded to be the spiritual successor to [DARLA](http://darla.dartmouth.edu) (Dartmouth Linguistic Automation). The main benefits of using VxH over DARLA is that it uses Whisper for transcription, which is state-of-the-art, and uses new-fave for formant extraction. 
+## The pipeline
 
-*Vox Humana* is Latin for "human voice". I'm opting for the Modern Ecclesiastical [pronunciation](https://en.wiktionary.org/wiki/vox_humana) [ˈvɔks uˈmaː.na]. I chose this name because this tool will feed into (if not fully integrate with) [Pipeline](https://github.com/JoeyStanley/pipeline). Pipeline is literally a pipeline of sociophonetic data processing, and since I play the organ, I thought I'd go with a subtle nod at a classic pipe organ look when I designed the colors. *Vox Humana* is the name of one of the stops on many pipe organs, which you can learn more about [here](http://www.organstops.org/v/VoxHumana.html), and I think seves as as suitable name for a tool that processes audio of the human voice.
+Every recording submitted to VxH goes through three steps:
 
+1. **Transcription** — [Whisper](https://openai.com/index/whisper/) converts your audio to text with word-level timestamps.
+2. **Forced alignment** — [Montreal Forced Aligner (MFA)](https://montreal-forced-aligner.readthedocs.io) gets the precise start and end time of every word and phone.
+3. **Formant extraction** — [new-fave](https://forced-alignment-and-vowel-extraction.github.io/new-fave/) measures F1, F2, F3, and F4 for every vowel token.
 
-## System Dependencies
-- ffmpeg (install via Homebrew on Mac, apt on Linux)
-- [MFA will go here later]
+The result is a CSV of vowel measurements ready for analysis in R, Python, or other statistical software.
+
+## Comparison to DARLA
+
+VxH is a [spiritual successor](https://en.wikipedia.org/wiki/Spiritual_successor) to [DARLA](http://darla.dartmouth.edu). It is clearly inspired by DARLA and seeks to replicate much of its functionality. However, the creators of DARLA were not involved in the development of VxH (outside of a small consulting role), and it is an independent development by its creator, Joey Stanley.
+
+Key differences:
+
+- Transcriptions are done using Whisper instead of an in-house system, YouTube, or BedWord.
+- Formant extractions are done using new-fave, the modern successor to [FAVE-Extract](https://github.com/JoFrhwld/FAVE).
+- VxH is fully open-source; everything is available on GitHub, which means you can download it and run it offline if you have the necessary software.
+
+## Running locally
+
+VoxHumana runs as a local web server. You will need:
+
+- Python 3.13+
+- [ffmpeg](https://ffmpeg.org) (`brew install ffmpeg` on Mac, `apt install ffmpeg` on Linux)
+- [Montreal Forced Aligner](https://montreal-forced-aligner.readthedocs.io) (installed separately via conda — see MFA docs)
+
+```bash
+git clone https://github.com/JoeyStanley/VoxHumana.git
+cd VoxHumana
+pip install -e .
+uvicorn web.app:app --reload
+```
+
+Then open [http://localhost:8000](http://localhost:8000) in your browser.
+
+**Command-line use.** You can also run the pipeline directly on a file without the web interface:
+
+```bash
+python main.py path/to/audio.wav path/to/output/dir
+```
+
+## The name
+
+*Vox Humana* is Latin for "human voice" (Modern Ecclesiastical [pronunciation](https://en.wiktionary.org/wiki/vox_humana): [ˈvɔks uˈmaː.na]).
+It is also the name of a classic pipe organ stop. This organ motif appears in several places in VxH — the color palette is inspired by the façade of the [Salt Lake Tabernacle organ](https://en.wikipedia.org/wiki/Salt_Lake_Tabernacle_organ).
+This theme is shared with [Pipeline](https://stanley.byu.edu/pipeline/), another web-based tool that takes the output of VxH and creates interactive vowel plots.
+
+I chose the organ theme in part because of the play on words with *pipeline*, but also because I play the organ and wanted to add a personal flair to this tool. *Vox Humana* was a natural choice for a project that intersects nerdy organ knowledge with the human voice; you can learn more about the Vox Humana organ stop [here](http://www.organstops.org/v/VoxHumana.html).
+
+## AI disclosure
+
+Much of VxH was written using [Claude](https://claude.ai/) by [Anthropic](https://www.anthropic.com). This includes pretty much all of the back-end and the UI. The documentation is my own.
+
+I used AI to write VxH because I felt that there was great need for a replacement for DARLA and that it would be best written in Python. But my Python skills are extremely limited. Ideally, I would learn Python well enough to code everything by hand or hire someone else to do so. But I do not have the time or resources for those options, and the growing pressure for a tool like this means the field couldn't wait.
+
+I acknowledge that some users may feel uncomfortable with this use of AI; I recognize your concerns. Please make the best choice for you and your data.
+
+## About the project
+
+VoxHumana is developed and maintained by [Joey Stanley](https://joeystanley.com), associate professor in the [linguistics department](https://ling.byu.edu) at [Brigham Young University](https://www.byu.edu). Please send questions and bug reports to [joey_stanley@byu.edu](mailto:joey_stanley@byu.edu).
