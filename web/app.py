@@ -92,6 +92,9 @@ async def create_job(
     acoustic_model: str = Form("english_us_arpa"),
     dictionary: str = Form("english_us_arpa"),
     fine_tune: bool = Form(False),
+    formant_ceiling: Optional[str] = Form(None),
+    num_formants: Optional[str] = Form(None),
+    include_overlaps: bool = Form(True),
 ):
     job_id = str(uuid.uuid4())
     job_dir = JOBS_DIR / job_id
@@ -127,7 +130,11 @@ async def create_job(
             "dictionary": dictionary,
             "fine_tune": fine_tune,
         },
-        "newfave": {},
+        "newfave": {
+            "formant_ceiling": int(formant_ceiling) if formant_ceiling else None,
+            "num_formants": int(num_formants) if num_formants else None,
+            "include_overlaps": include_overlaps,
+        },
     }
 
     jobs[job_id] = {

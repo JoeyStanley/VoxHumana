@@ -847,21 +847,25 @@
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('formants')" title="Help">?</button>
         </div>
-        <div class="adv-toggle" id="adv-toggle-formants" onclick="toggleAdvanced('formants')">
-          <span class="chevron">▸</span> Advanced new-fave options
+        <div class="grid-2">
+          <div class="field">
+            <label for="formant-ceiling">Formant ceiling (Hz) <span style="font-weight:normal">(optional)</span></label>
+            <input type="text" id="formant-ceiling" name="formant_ceiling" placeholder="Default: 10000">
+          </div>
+          <div class="field">
+            <label for="num-formants">Number of formants <span style="font-weight:normal">(optional)</span></label>
+            <input type="text" id="num-formants" name="num_formants" placeholder="Default: 3">
+          </div>
+        </div>
+        <div class="adv-toggle" id="adv-toggle-formants" onclick="toggleAdvanced('formants')" style="margin-top:12px">
+          <span class="chevron">▸</span> Advanced options
         </div>
         <div class="adv-panel" id="adv-panel-formants">
-          <p class="adv-coming-soon">Formant ceiling and number of formants overrides are coming soon.</p>
-          <div class="grid-2" style="opacity:0.4; pointer-events:none">
-            <div class="field">
-              <label for="formant-ceiling">Formant ceiling (Hz)</label>
-              <input type="text" id="formant-ceiling" name="formant_ceiling" value="5500" disabled>
-            </div>
-            <div class="field">
-              <label for="num-formants">Number of formants</label>
-              <input type="text" id="num-formants" name="num_formants" value="4" disabled>
-            </div>
+          <div class="field-check">
+            <input type="checkbox" id="include-overlaps" name="include_overlaps" checked>
+            <label for="include-overlaps">Include vowels during overlapping speech</label>
           </div>
+          <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When unchecked, vowels that occur while another speaker is talking are excluded from measurement.</p>
         </div>
       </div>
 
@@ -1075,6 +1079,9 @@
     data.append('acoustic_model',            form.acoustic_model.value);
     data.append('fine_tune',                 form.fine_tune.checked);
     data.append('dictionary',               form.dictionary.value);
+    data.append('formant_ceiling',           form.formant_ceiling.value);
+    data.append('num_formants',              form.num_formants.value);
+    data.append('include_overlaps',          form.include_overlaps.checked);
 
     try {
       const res  = await fetch('/api/jobs', { method: 'POST', body: data });

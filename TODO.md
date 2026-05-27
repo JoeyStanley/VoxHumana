@@ -33,6 +33,26 @@ When adding a new language:
 
 ---
 
+## Investigate how new-fave detects overlapping speech
+
+The `include_overlaps` parameter in `fave_audio_textgrid` excludes vowels that occur during
+overlapping speech when set to False. It's not yet clear how new-fave determines what counts
+as "overlapping" — specifically:
+
+- Does it look at other tiers in the TextGrid? If so, which ones, and what label conventions
+  does it expect?
+- VoxHumana currently produces a single-speaker TextGrid from MFA (one Word tier, one Phone
+  tier). If new-fave's overlap detection requires a second speaker tier to be present, the
+  `include_overlaps=False` option may have no effect for our use case.
+- If it does require a second tier: would it be worth adding an interviewer transcript tier
+  to the TextGrid so that back-channels and interviewer overlaps are flagged? This would
+  require either a separate transcription pass for the interviewer or manual annotation.
+
+Check new-fave source (`mark_overlaps` in `new_fave/utils/textgrid.py`) to understand the
+detection logic before advertising this option to users.
+
+---
+
 ## MFA: OOV words file and custom dictionaries
 
 Two related features worth adding when there is demand:
