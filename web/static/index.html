@@ -35,6 +35,7 @@
       width: 100%;
       max-width: 700px;
       box-shadow: 0 2px 12px rgba(74,46,26,0.10);
+      position: relative; /* needed for drawer/overlay positioning */
     }
 
     /* Accent bar */
@@ -65,6 +66,8 @@
       letter-spacing: -0.01em;
       font-family: Georgia, serif;
       font-style: italic;
+      cursor: pointer;
+      user-select: none;
     }
     .wordmark em { color: var(--pg); font-style: normal; }
     .tagline {
@@ -162,6 +165,25 @@
       font-weight: bold;
     }
     .section-rule { flex: 1; height: 1px; background: var(--pcb); }
+
+    /* Help button */
+    .help-btn {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--pbl);
+      background: transparent;
+      color: var(--pbl);
+      font-size: 10px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-family: Arial, sans-serif;
+      line-height: 1;
+      transition: all 0.15s;
+      padding: 0;
+    }
+    .help-btn:hover { background: var(--pb); border-color: var(--pb); color: var(--pgl); }
 
     /* Upload zone */
     .upload-zone {
@@ -268,11 +290,11 @@
     .adv-toggle.open .chevron { transform: rotate(90deg); }
     .adv-panel { display: none; background: var(--pc); border: 1px solid var(--pcb); border-radius: 4px; padding: 16px; }
     .adv-panel.open { display: block; }
+    .adv-coming-soon { font-size: 12px; font-style: italic; color: var(--pbl); margin: 0 0 12px; }
 
     /* Submit area */
     .submit-area { display: flex; gap: 12px; align-items: flex-end; }
     .submit-area .field { flex: 1; }
-    .privacy-note { margin-top: 8px; font-size: 10px; color: var(--pbl); letter-spacing: 0.03em; }
 
     /* Buttons */
     .btn {
@@ -336,9 +358,7 @@
     .spinner-pipe:nth-child(3) { animation-delay: 0.3s;  height: 16px; }
     .spinner-pipe:nth-child(4) { animation-delay: 0.45s; height: 28px; }
     .spinner-pipe:nth-child(5) { animation-delay: 0.6s;  height: 24px; }
-    .spinner-pipe.active {
-      background: var(--pg);
-    }
+    .spinner-pipe.active { background: var(--pg); }
     @keyframes pipepulse {
       0%, 100% { opacity: 0.3; transform: scaleY(1); }
       50%       { opacity: 1;   transform: scaleY(1.25); transform-origin: bottom; }
@@ -466,7 +486,211 @@
 
     /* Hidden file input */
     #audio-input { display: none; }
+
+    /* ─── Slide-in drawer ───────────────────────────────────────────── */
+    .drawer-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(30,18,9,0.35);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      z-index: 9;
+    }
+    .drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+    .drawer {
+      position: absolute;
+      top: 0; right: 0;
+      width: 75%;
+      height: 100%;
+      background: white;
+      border-left: 1px solid var(--pcb);
+      box-shadow: -4px 0 24px rgba(74,46,26,0.18);
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .drawer.open { transform: translateX(0); }
+
+    .drawer-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--pcb);
+      background: var(--pc);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .drawer-title {
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--pb);
+    }
+    .drawer-close {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--pcb);
+      background: white;
+      color: var(--pbl);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+      font-family: Arial, sans-serif;
+      padding: 0;
+      line-height: 1;
+    }
+    .drawer-close:hover { background: var(--pb); border-color: var(--pb); color: var(--pgl); }
+
+    .drawer-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* ─── Docs tab view ─────────────────────────────────────────────── */
+    .docs-tab-nav {
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid var(--pcb);
+      background: var(--pc);
+      padding: 0 20px;
+    }
+    .docs-back-btn {
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      color: var(--pbl);
+      background: none;
+      border: none;
+      border-right: 1px solid var(--pcb);
+      cursor: pointer;
+      font-family: Arial, sans-serif;
+      padding: 0 14px 0 4px;
+      margin-right: 8px;
+      transition: color 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .docs-back-btn:hover { color: var(--pb); }
+
+    .docs-tab-btn {
+      padding: 10px 14px;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--pbm);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: all 0.15s;
+      font-family: Arial, sans-serif;
+      margin-bottom: -1px;
+    }
+    .docs-tab-btn:hover { opacity: 0.9; }
+    .docs-tab-btn.active { opacity: 1; color: var(--pb); border-bottom-color: var(--pg); }
+
+    /* ─── Prose / documentation content ────────────────────────────── */
+    .prose { color: var(--pd); }
+    .prose h2 {
+      font-size: 17px;
+      font-family: Georgia, serif;
+      font-style: italic;
+      color: var(--pb);
+      margin: 0 0 16px;
+      font-weight: normal;
+    }
+    .prose h3 {
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--pb);
+      margin: 22px 0 8px;
+    }
+    .prose h3:first-child { margin-top: 0; }
+    .prose p { font-size: 12px; color: var(--pbm); margin: 0 0 10px; line-height: 1.75; }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose ul, .prose ol { font-size: 12px; color: var(--pbm); margin: 0 0 10px 18px; line-height: 1.75; }
+    .prose li { margin-bottom: 4px; }
+    .prose a { color: var(--pbm); }
+    .prose a:hover { color: var(--pb); }
+    .prose strong { color: var(--pb); }
+    .prose em { font-style: italic; }
+    .prose code {
+      font-family: monospace;
+      font-size: 11px;
+      background: var(--pc);
+      border: 1px solid var(--pcb);
+      border-radius: 3px;
+      padding: 1px 5px;
+    }
+    .prose pre {
+      font-family: monospace;
+      font-size: 11px;
+      background: var(--pc);
+      border: 1px solid var(--pcb);
+      border-radius: 4px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      margin: 8px 0 12px;
+      line-height: 1.6;
+      color: var(--pd);
+      white-space: pre;
+    }
+    .cite-block {
+      background: var(--pc);
+      border-left: 3px solid var(--pgl);
+      border-radius: 0 4px 4px 0;
+      padding: 10px 14px;
+      margin: 8px 0 20px;
+      font-size: 12px;
+      color: var(--pbm);
+      line-height: 1.8;
+    }
+    .cite-block strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--pbl);
+      font-weight: bold;
+    }
+    .cite-block a { color: var(--pbm); word-break: break-all; }
+    .tab-panel { padding-top: 2px; }
+
+    /* Blockquotes — used for citation blocks in cite.md */
+    .prose blockquote {
+      background: var(--pc);
+      border-left: 3px solid var(--pgl);
+      border-radius: 0 4px 4px 0;
+      padding: 10px 14px;
+      margin: 8px 0 20px;
+    }
+    .prose blockquote p { font-size: 12px; color: var(--pbm); margin: 0; line-height: 1.8; }
+    /* Style the **APA 7** bold label at the top of each citation blockquote */
+    .prose blockquote p strong:first-child {
+      display: block;
+      font-size: 10px; font-weight: bold; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--pbl); margin-bottom: 4px;
+    }
+    /* Prevent inline <code> styles from bleeding into fenced code blocks */
+    .prose pre code { background: none; border: none; padding: 0; border-radius: 0; font-size: inherit; }
+
+    /* Loading / error states for async content */
+    .content-loading { color: var(--pbl) !important; font-style: italic; }
+    .content-error   { color: #c4603a   !important; }
   </style>
+  <script src="/marked.min.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -481,20 +705,20 @@
           <span style="width:5px;height:18px;"></span>
           <span style="width:5px;height:26px;"></span>
         </div>
-        <div class="wordmark">Vox <em>Humana</em></div>
+        <div class="wordmark" onclick="goBack()" title="Back to form">Vox <em>Humana</em></div>
       </div>
       <div class="tagline">Automated Sociophonetic Analysis · BYU Linguistics</div>
     </div>
     <nav class="nav">
-      <a href="#">About</a>
-      <a href="#">Documentation</a>
-      <a href="#">Cite</a>
-      <a href="#">FAQs</a>
+      <a href="#" onclick="showDocs('about'); return false;">About</a>
+      <a href="#" onclick="showDocs('guide'); return false;">User Guide</a>
+      <a href="#" onclick="showDocs('cite'); return false;">Cite</a>
+      <a href="#" onclick="showDocs('faq'); return false;">FAQs</a>
     </nav>
   </div>
 
   <!-- Pipeline progress track -->
-  <div class="pipeline-track">
+  <div class="pipeline-track" id="pipeline-track">
     <div class="pipeline-step" id="track-1">
       <div class="step-name">Transcribe</div>
       <div class="step-tool">Whisper</div>
@@ -522,6 +746,7 @@
           <div class="step-dot">1</div>
           Audio file
           <div class="section-rule"></div>
+          <button type="button" class="help-btn" onclick="openDrawer('audio')" title="Help">?</button>
         </div>
         <input type="file" id="audio-input" accept=".wav,.mp3,.flac,.m4a,.ogg,.aac">
         <div class="upload-zone" id="drop-zone">
@@ -545,6 +770,7 @@
           <div class="step-dot">2</div>
           Transcription
           <div class="section-rule"></div>
+          <button type="button" class="help-btn" onclick="openDrawer('transcription')" title="Help">?</button>
         </div>
         <div class="grid-2">
           <div class="field">
@@ -578,6 +804,7 @@
           <div class="step-dot">3</div>
           Alignment
           <div class="section-rule"></div>
+          <button type="button" class="help-btn" onclick="openDrawer('alignment')" title="Help">?</button>
         </div>
         <div class="grid-2">
           <div class="field">
@@ -600,29 +827,7 @@
           <div class="step-dot">4</div>
           Formant extraction
           <div class="section-rule"></div>
-        </div>
-        <div class="grid-3">
-          <div class="field">
-            <label>Speaker voice</label>
-            <div class="segmented">
-              <div class="seg-opt"><input type="radio" name="voice_type" id="vt-low"  value="low"  checked><label for="vt-low">Low</label></div>
-              <div class="seg-opt"><input type="radio" name="voice_type" id="vt-high" value="high"         ><label for="vt-high">High</label></div>
-            </div>
-          </div>
-          <div class="field">
-            <label>Stop-words</label>
-            <div class="segmented">
-              <div class="seg-opt"><input type="radio" name="stopwords" id="sw-filter" value="filter" checked><label for="sw-filter">Filter</label></div>
-              <div class="seg-opt"><input type="radio" name="stopwords" id="sw-keep"   value="keep"         ><label for="sw-keep">Keep</label></div>
-            </div>
-          </div>
-          <div class="field">
-            <label>Unstressed vowels</label>
-            <div class="segmented">
-              <div class="seg-opt"><input type="radio" name="unstressed" id="us-filter" value="filter" checked><label for="us-filter">Filter</label></div>
-              <div class="seg-opt"><input type="radio" name="unstressed" id="us-keep"   value="keep"         ><label for="us-keep">Keep</label></div>
-            </div>
-          </div>
+          <button type="button" class="help-btn" onclick="openDrawer('formants')" title="Help">?</button>
         </div>
       </div>
 
@@ -631,14 +836,15 @@
           <span class="chevron">▸</span> Advanced options
         </div>
         <div class="adv-panel" id="adv-panel">
-          <div class="grid-2">
+          <p class="adv-coming-soon">Formant ceiling and number of formants overrides are coming soon.</p>
+          <div class="grid-2" style="opacity:0.4; pointer-events:none">
             <div class="field">
               <label for="formant-ceiling">Formant ceiling (Hz)</label>
-              <input type="text" id="formant-ceiling" name="formant_ceiling" value="5500">
+              <input type="text" id="formant-ceiling" name="formant_ceiling" value="5500" disabled>
             </div>
             <div class="field">
               <label for="num-formants">Number of formants</label>
-              <input type="text" id="num-formants" name="num_formants" value="4">
+              <input type="text" id="num-formants" name="num_formants" value="4" disabled>
             </div>
           </div>
         </div>
@@ -707,6 +913,28 @@
     </div>
   </div>
 
+  <!-- ════════════════════════════════ DOCS STATE ═══════════════════════════════ -->
+  <div id="state-docs" style="display:none">
+
+    <div class="docs-tab-nav">
+      <button class="docs-back-btn" onclick="goBack()">← Back</button>
+      <button id="tabBtn-about" class="docs-tab-btn active" onclick="switchTab('about')">About</button>
+      <button id="tabBtn-guide" class="docs-tab-btn" onclick="switchTab('guide')">User Guide</button>
+      <button id="tabBtn-cite"  class="docs-tab-btn" onclick="switchTab('cite')">Cite</button>
+      <button id="tabBtn-faq"   class="docs-tab-btn" onclick="switchTab('faq')">FAQs</button>
+    </div>
+
+    <div class="body">
+
+      <!-- Tab content is loaded from /content/*.md on first open -->
+      <div id="tab-about" class="tab-panel prose"></div>
+      <div id="tab-guide" class="tab-panel prose" style="display:none"></div>
+      <div id="tab-cite"  class="tab-panel prose" style="display:none"></div>
+      <div id="tab-faq"   class="tab-panel prose" style="display:none"></div>
+
+        </div><!-- /.body -->
+  </div><!-- /#state-docs -->
+
   <div class="footer">
     <div class="footer-left">Brigham Young University · Linguistics · Vox Humana v0.1</div>
     <div class="pipe-row-footer">
@@ -719,17 +947,62 @@
       <span style="width:3px;height:12px;"></span>
     </div>
   </div>
-</div>
+
+  <!-- ─── Slide-in drawer ─────────────────────────────────────────────────── -->
+  <div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+  <div class="drawer" id="drawer">
+    <div class="drawer-header">
+      <div class="drawer-title" id="drawer-title"></div>
+      <button class="drawer-close" onclick="closeDrawer()">✕</button>
+    </div>
+    <div class="drawer-body prose" id="drawer-body"></div>
+  </div>
+
+</div><!-- /.shell -->
 
 <script>
+  // ─── Content paths (edit .md files in web/static/content/) ─────────────────────
+  const DRAWER_META = {
+    audio:         { title: 'Audio file',                    path: '/content/help-audio.md' },
+    transcription: { title: 'Transcription · Whisper',       path: '/content/help-transcription.md' },
+    alignment:     { title: 'Forced alignment · MFA',        path: '/content/help-alignment.md' },
+    formants:      { title: 'Formant extraction · new-fave', path: '/content/help-formants.md' },
+  };
+
+  const TAB_PATHS = {
+    about: '/content/about.md',
+    guide: '/content/guide.md',
+    cite:  '/content/cite.md',
+    faq:   '/content/faq.md',
+  };
+
+  // ─── Markdown loader ──────────────────────────────────────────────────────────
+  const _cache = {};
+
+  async function renderMarkdown(path) {
+    if (_cache[path]) return _cache[path];
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`HTTP ${res.status} loading ${path}`);
+    let html = marked.parse(await res.text());
+    // open external links in a new tab
+    html = html.replace(/<a href="(https?:\/\/[^"]+)"/g,
+                        '<a href="$1" target="_blank" rel="noopener"');
+    _cache[path] = html;
+    return html;
+  }
+
+  // ─── State
+
   // ─── State ────────────────────────────────────────────────────────────────────
-  let selectedFile = null;
-  let currentJobId = null;
-  let pollTimer    = null;
+  let selectedFile  = null;
+  let currentJobId  = null;
+  let pollTimer     = null;
+  let inDocs        = false;
+  let appViewState  = 'form'; // tracks current app state even when viewing docs
 
   // ─── File selection ───────────────────────────────────────────────────────────
-  const dropZone   = document.getElementById('drop-zone');
-  const fileInput  = document.getElementById('audio-input');
+  const dropZone  = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('audio-input');
 
   dropZone.addEventListener('click', () => fileInput.click());
 
@@ -750,14 +1023,14 @@
   function setFile(file) {
     selectedFile = file;
     dropZone.classList.add('has-file');
-    document.getElementById('drop-primary').textContent   = 'File selected';
+    document.getElementById('drop-primary').textContent    = 'File selected';
     document.getElementById('drop-secondary').style.display = 'none';
     const fn = document.getElementById('drop-filename');
-    fn.textContent = file.name;
-    fn.style.display = 'block';
+    fn.textContent    = file.name;
+    fn.style.display  = 'block';
   }
 
-  // ─── Advanced toggle ─────────────────────────────────────────────────────────
+  // ─── Advanced toggle ──────────────────────────────────────────────────────────
   function toggleAdvanced() {
     document.getElementById('adv-toggle').classList.toggle('open');
     document.getElementById('adv-panel').classList.toggle('open');
@@ -774,16 +1047,16 @@
     }
 
     const btn = document.getElementById('submit-btn');
-    btn.disabled = true;
+    btn.disabled    = true;
     btn.textContent = 'Submitting…';
 
     const form = document.getElementById('vxh-form');
     const data = new FormData();
-    data.append('audio',         selectedFile);
-    data.append('whisper_model', form.whisper_model.value);
-    data.append('language',      form.language.value);
+    data.append('audio',          selectedFile);
+    data.append('whisper_model',  form.whisper_model.value);
+    data.append('language',       form.language.value);
     data.append('acoustic_model', form.acoustic_model.value);
-    data.append('dictionary',    form.dictionary.value);
+    data.append('dictionary',     form.dictionary.value);
 
     try {
       const res  = await fetch('/api/jobs', { method: 'POST', body: data });
@@ -794,7 +1067,7 @@
       document.getElementById('progress-filename').textContent = selectedFile.name;
       startPolling();
     } catch (err) {
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = 'Submit';
       showError(err.message);
     }
@@ -803,7 +1076,7 @@
   // ─── Polling ──────────────────────────────────────────────────────────────────
   function startPolling() {
     pollTimer = setInterval(pollJob, 3000);
-    pollJob(); // immediate first poll
+    pollJob();
   }
 
   async function pollJob() {
@@ -827,7 +1100,6 @@
   }
 
   // ─── Pipeline track ───────────────────────────────────────────────────────────
-  // Maps job step (1-5) to the four UI track tabs
   const stepToTrack = { 0: 0, 1: 1, 2: 1, 3: 2, 4: 3, 5: 4 };
 
   function updateTrack(jobStep) {
@@ -835,8 +1107,8 @@
     for (let i = 1; i <= 4; i++) {
       const el = document.getElementById('track-' + i);
       el.classList.remove('active', 'done');
-      if (i === activeTab)      el.classList.add('active');
-      else if (i < activeTab)   el.classList.add('done');
+      if (i === activeTab)    el.classList.add('active');
+      else if (i < activeTab) el.classList.add('done');
     }
   }
 
@@ -846,18 +1118,32 @@
   }
 
   // ─── View switching ───────────────────────────────────────────────────────────
-  function showState(state, message) {
-    document.getElementById('state-form').style.display    = state === 'form'    ? '' : 'none';
-    document.getElementById('state-running').style.display = state === 'running' ? '' : 'none';
-    document.getElementById('state-done').style.display    = state === 'done'    ? '' : 'none';
-    document.getElementById('state-error').style.display   = state === 'error'   ? '' : 'none';
+  function showState(state) {
+    appViewState = state;
+    const d = inDocs;
+    document.getElementById('state-form').style.display    = (!d && state === 'form')    ? '' : 'none';
+    document.getElementById('state-running').style.display = (!d && state === 'running') ? '' : 'none';
+    document.getElementById('state-done').style.display    = (!d && state === 'done')    ? '' : 'none';
+    document.getElementById('state-error').style.display   = (!d && state === 'error')   ? '' : 'none';
+    document.getElementById('state-docs').style.display    = d ? '' : 'none';
+    document.getElementById('pipeline-track').style.display = d ? 'none' : '';
+    if (state === 'done' && !d) updateTrack(5);
+  }
 
-    if (state === 'done') updateTrack(5);
+  function showDocs(tab) {
+    inDocs = true;
+    showState(appViewState);
+    switchTab(tab);
+  }
+
+  function goBack() {
+    inDocs = false;
+    showState(appViewState);
   }
 
   function showError(message, files) {
     document.getElementById('error-message').textContent = message;
-    document.getElementById('error-job-id').textContent = currentJobId || '(unavailable)';
+    document.getElementById('error-job-id').textContent  = currentJobId || '(unavailable)';
     const fileList = document.getElementById('error-uploaded-files');
     fileList.innerHTML = '';
     (files || []).forEach(name => {
@@ -874,21 +1160,65 @@
     currentJobId = null;
     selectedFile = null;
 
-    // Reset file drop zone
     dropZone.classList.remove('has-file');
     document.getElementById('drop-primary').textContent     = 'Drop audio here or click to browse';
     document.getElementById('drop-secondary').style.display = '';
     document.getElementById('drop-filename').style.display  = 'none';
     fileInput.value = '';
 
-    // Reset submit button
     const btn = document.getElementById('submit-btn');
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = 'Submit';
 
     updateTrack(0);
+    inDocs = false;
     showState('form');
   }
+
+  // ─── Docs tabs ────────────────────────────────────────────────────────────────
+  async function switchTab(tab) {
+    ['about', 'guide', 'cite', 'faq'].forEach(t => {
+      document.getElementById('tab-' + t).style.display = t === tab ? '' : 'none';
+      document.getElementById('tabBtn-' + t).classList.toggle('active', t === tab);
+    });
+    const el = document.getElementById('tab-' + tab);
+    if (el.dataset.loaded) return;
+    el.innerHTML = '<p class="content-loading">Loading…</p>';
+    try {
+      el.innerHTML      = await renderMarkdown(TAB_PATHS[tab]);
+      el.dataset.loaded = 'true';
+    } catch (e) {
+      el.innerHTML = '<p class="content-error">Could not load content.</p>';
+    }
+  }
+
+  // ─── Slide-in drawer ──────────────────────────────────────────────────────────
+  async function openDrawer(section) {
+    const meta = DRAWER_META[section];
+    if (!meta) return;
+    document.getElementById('drawer-title').textContent = meta.title;
+    document.getElementById('drawer').classList.add('open');
+    document.getElementById('drawer-overlay').classList.add('open');
+    const body = document.getElementById('drawer-body');
+    if (body.dataset.section === section) return;   // already loaded
+    body.innerHTML = '<p class="content-loading">Loading…</p>';
+    try {
+      body.innerHTML       = await renderMarkdown(meta.path);
+      body.dataset.section = section;
+    } catch (e) {
+      body.innerHTML = '<p class="content-error">Could not load content.</p>';
+    }
+  }
+
+  function closeDrawer() {
+    document.getElementById('drawer').classList.remove('open');
+    document.getElementById('drawer-overlay').classList.remove('open');
+  }
+
+  // Close drawer on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDrawer();
+  });
 </script>
 </body>
 </html>
