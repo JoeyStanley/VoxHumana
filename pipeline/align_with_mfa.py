@@ -46,7 +46,7 @@ def align_with_mfa(audio_path, job_dir, config=None):
     # MFA accepts .TextGrid files in the corpus directory the same way it accepts
     # .lab files, and uses the interval boundaries to align each utterance
     # independently rather than the full recording as one unit.
-    textgrid_src = job_dir / "whisper" / f"{audio_path.stem}.TextGrid"
+    textgrid_src = job_dir / "whisper_output" / f"{audio_path.stem}.TextGrid"
     shutil.copy2(textgrid_src, corpus_dir / textgrid_src.name)
 
     output_dir = job_dir / "mfa_output"
