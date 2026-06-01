@@ -5,7 +5,7 @@ import io
 import re
 import shutil
 import subprocess
-import uuid
+import random
 import zipfile
 import traceback
 from datetime import datetime, timezone
@@ -38,6 +38,30 @@ jobs: dict[str, dict] = {}
 
 # One job at a time — the pipeline is compute-heavy.
 executor = ThreadPoolExecutor(max_workers=1)
+
+
+# Organ stops drawn from the Salt Lake Tabernacle organ — used to generate
+# memorable job IDs in the form YYMMDD_Stop1_Stop2.
+_ORGAN_STOPS = [
+    "Bombarde", "Bourdon", "Celeste", "Clarinet", "Clarion", "CorAnglais",
+    "Cornopean", "Cymbelstern", "Diaphone", "Diapason", "Doppelflote",
+    "Dulciana", "Flugelhorn", "Flute", "FrenchHorn", "Fugara", "Gamba",
+    "Gemshorn", "Harp", "LieblichBourdon", "Mixture", "Nachthorn", "Nazard",
+    "Oboe", "Octave", "Piccolo", "Principal", "Rauschquinte", "Trombone",
+    "Trompette", "Tremulant", "Trumpet", "Tuba", "Tutti", "Viole",
+]
+
+
+def _generate_job_id() -> str:
+    """Return a unique job ID in the form YYMMDD_Stop1_Stop2.
+
+    Draws two distinct organ stops at random. The caller should check for
+    collisions against the jobs dict and retry if needed (extremely rare).
+    """
+    from datetime import date
+    datestamp = date.today().strftime("%y%m%d")
+    stop1, stop2 = random.sample(_ORGAN_STOPS, 2)
+    return f"{datestamp}_{stop1}_{stop2}"
 
 
 def _sanitize_stem(filename: str) -> str:
@@ -385,7 +409,9 @@ async def create_job(
     num_formants: Optional[str] = Form(None),
     include_overlaps: bool = Form(True),
 ):
-    job_id = str(uuid.uuid4())
+    job_id = _generate_job_id()
+    while job_id in jobs:
+        job_id = _generate_job_id()
     job_dir = JOBS_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
