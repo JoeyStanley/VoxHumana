@@ -60,18 +60,38 @@ detection logic before advertising this option to users.
 
 ---
 
+## "Trolley" mode: skip Whisper and go straight to MFA (not yet built)
+
+A future workflow for power users: allow uploading a corrected transcript
+(e.g. a manually edited version of Whisper's output) alongside the audio,
+skipping the Whisper step entirely and feeding the corrected text straight
+into MFA. This is useful when:
+  - Whisper made errors that affected alignment quality (e.g. OOV words,
+    proper nouns, dialect forms)
+  - The user already has a transcript from another source
+  - The user wants to iterate: run the full pipeline once, fix Whisper's
+    output, then rerun from MFA onward without re-transcribing
+
+The OOV words file (oovs_found.txt) is a natural trigger for this workflow —
+if the user sees OOV words they recognize as errors, they can correct the
+transcript and resubmit from MFA without paying the Whisper cost again.
+
+---
+
 ## MFA: OOV words file and custom dictionaries
 
 Two related features worth adding when there is demand:
 
-### OOV words file
-MFA can output a list of out-of-vocabulary (OOV) words — words in the transcript that are
-not in the pronunciation dictionary and received a guessed pronunciation. Surfacing this
-file in the VoxHumana download would help users identify transcription or alignment problems
-early (e.g. a misspelled name that MFA couldn't look up).
+### OOV words file ✓ (implemented — needs real-world testing)
+MFA's OOV words are now extracted from its internal log and written to
+`mfa_output/oovs_found.txt`, included in the download zip when present.
 
-To implement: check MFA's output directory for an OOV file after alignment and include it
-in the results zip if present.
+**Testing note**: This is difficult to test end-to-end until the Trolley feature
+exists. Whisper tends to recognize unfamiliar words as phonetically similar
+dictionary words, so true OOVs rarely make it through to MFA in normal use.
+Once the Trolley feature is built (allowing users to supply a corrected
+transcript directly), test by feeding MFA a transcript that contains a made-up
+or highly unusual word and confirming it appears in `oovs_found.txt`.
 
 ### Custom dictionaries
 Power users (e.g., researchers working with a specific dialect community) may want to

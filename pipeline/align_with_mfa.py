@@ -1,3 +1,4 @@
+import re
 import subprocess
 import shutil
 from pathlib import Path
@@ -127,5 +128,16 @@ def align_with_mfa(audio_path, job_dir, config=None):
             f"STDERR:\n{stderr}"
             f"{mfa_log}"
         )
+
+    # Extract OOV words from MFA's internal log and write a clean summary to
+    # mfa_output/ before the temp directory is deleted during cleanup.
+    # MFA buries this in normalize_oov.log as a Python repr; we pull out the
+    # 'word' values with regex and write one word per line.
+    oov_logs = list(temp_dir.rglob("normalize_oov.log"))
+    if oov_logs:
+        raw = oov_logs[0].read_text(errors="replace")
+        words = sorted(set(re.findall(r"'word':\s*'([^']+)'", raw)))
+        if words:
+            (output_dir / "oovs_found.txt").write_text("\n".join(words) + "\n")
 
     return output_dir
