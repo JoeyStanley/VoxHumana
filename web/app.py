@@ -282,8 +282,13 @@ def _write_processing_log(
         ln("STEP 1 — TRANSCRIPTION: skipped (user-supplied TextGrid)")
         ln(BAR)
         ln("")
-        ln("Whisper transcription was not run for this job. A TextGrid was")
-        ln("uploaded by the user and used as the transcript input to MFA.")
+        if ran_alignment:
+            ln("Whisper transcription was not run. A Praat utterance TextGrid was")
+            ln("uploaded by the user and used as the transcript input to MFA.")
+        else:
+            ln("Whisper transcription was not run. A Praat MFA-format TextGrid")
+            ln("(Word and Phone tiers) was uploaded by the user and used directly")
+            ln("as the input to new-fave formant extraction.")
 
     # ── MFA ──────────────────────────────────────────────────────────────────
     ln("")
@@ -335,7 +340,11 @@ def _write_processing_log(
         ln("STEP 2 — FORCED ALIGNMENT: skipped")
         ln(BAR)
         ln("")
-        ln("MFA alignment was not run for this job.")
+        if ran_formants:
+            ln("MFA alignment was not run. A user-supplied MFA TextGrid was used")
+            ln("directly as the input to new-fave formant extraction.")
+        else:
+            ln("MFA alignment was not run for this job.")
 
     # ── new-fave ──────────────────────────────────────────────────────────────
     ln("")
@@ -623,6 +632,10 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
             _t = datetime.now(timezone.utc)
             extract_with_newfave(str(audio_path), mfa_output_dir, str(job_dir), config.get("newfave"))
             step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
+            # If the user supplied their own MFA TextGrid (Align skipped), remove the
+            # mfa_output/ staging folder — it only contained their uploaded file.
+            if not run_alignment:
+                shutil.rmtree(job_dir / "mfa_output", ignore_errors=True)
 
         _write_processing_log(
             job_dir, job_id, config,
