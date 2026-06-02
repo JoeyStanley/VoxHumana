@@ -949,6 +949,10 @@
         </div>
       </div>
 
+      <div id="step-warning" style="display:none; margin-bottom:16px; padding:10px 14px; background:#fff5f0; border:1px solid #d4856a; border-radius:4px; font-size:12px; color:#7a3a20; line-height:1.5;">
+        <strong>Invalid combination:</strong> Cannot jump straight from Transcribe to Extract.
+      </div>
+
       <div class="section" style="margin-bottom:0">
         <div class="submit-area">
           <button type="submit" class="btn" id="submit-btn">Submit</button>
@@ -1149,6 +1153,15 @@
     fn.style.display = 'block';
   }
 
+  // ─── Step combination validation ─────────────────────────────────────────────
+  function checkStepCombination() {
+    // The only invalid combo: Transcribe on + Align off + Extract on.
+    // (Extract-only with a user-supplied MFA TextGrid is valid.)
+    const invalid = stepActive.transcription && !stepActive.alignment && stepActive.formants;
+    document.getElementById('step-warning').style.display = invalid ? '' : 'none';
+    document.getElementById('submit-btn').disabled = invalid;
+  }
+
   // ─── TextGrid upload hint ─────────────────────────────────────────────────────
   function updateTextGridHint() {
     const el = document.getElementById('textgrid-drop-secondary');
@@ -1173,16 +1186,12 @@
     document.getElementById('toggle-' + id).classList.toggle('checked', nowActive);
     document.getElementById('body-'   + id).classList.toggle('collapsed', !nowActive);
 
-    // Unchecking Align also forces Extract off (can't extract without alignment)
-    if (id === 'alignment' && !nowActive && stepActive.formants) {
-      toggleStep('formants');
-    }
-
     // Unchecking Transcribe shows the TextGrid upload zone; also update hint when Align changes
     if (id === 'transcription') {
       document.getElementById('textgrid-upload-section').style.display = nowActive ? 'none' : '';
     }
     updateTextGridHint();
+    checkStepCombination();
   }
 
   // ─── Submit ───────────────────────────────────────────────────────────────────
