@@ -2,10 +2,11 @@
 
 import importlib.metadata
 import io
+import json
 import re
 import shutil
 import subprocess
-import uuid
+import random
 import zipfile
 import traceback
 from datetime import datetime, timezone
@@ -28,16 +29,43 @@ from pipeline.extract_with_newfave import extract_with_newfave
 app = FastAPI(title="VoxHumana")
 
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
+JOB_RETENTION_HOURS = 72
 
 BASE_DIR = Path(__file__).parent.parent
 JOBS_DIR = BASE_DIR / "data" / "jobs"
 JOBS_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR = BASE_DIR / "data" / "logs"
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # In-memory job store. Fine for a single-server deployment.
 jobs: dict[str, dict] = {}
 
 # One job at a time — the pipeline is compute-heavy.
 executor = ThreadPoolExecutor(max_workers=1)
+
+
+# Organ stops drawn from the Salt Lake Tabernacle organ — used to generate
+# memorable job IDs in the form YYMMDD_Stop1_Stop2.
+_ORGAN_STOPS = [
+    "Bombarde", "Bourdon", "Celeste", "Clarinet", "Clarion", "CorAnglais",
+    "Cornopean", "Cymbelstern", "Diaphone", "Diapason", "Doppelflote",
+    "Dulciana", "Flugelhorn", "Flute", "FrenchHorn", "Fugara", "Gamba",
+    "Gemshorn", "Harp", "LieblichBourdon", "Mixture", "Nachthorn", "Nazard",
+    "Oboe", "Octave", "Piccolo", "Principal", "Rauschquinte", "Trombone",
+    "Trompette", "Tremulant", "Trumpet", "Tuba", "Tutti", "Viole",
+]
+
+
+def _generate_job_id() -> str:
+    """Return a unique job ID in the form YYMMDD_Stop1_Stop2.
+
+    Draws two distinct organ stops at random. The caller should check for
+    collisions against the jobs dict and retry if needed (extremely rare).
+    """
+    from datetime import date
+    datestamp = date.today().strftime("%y%m%d")
+    stop1, stop2 = random.sample(_ORGAN_STOPS, 2)
+    return f"{datestamp}_{stop1}_{stop2}"
 
 
 def _sanitize_stem(filename: str) -> str:
@@ -55,6 +83,54 @@ def _cleanup_intermediates(job_dir: Path, audio_path: Path) -> None:
         d = job_dir / dirname
         if d.exists():
             shutil.rmtree(d)
+
+
+_AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif"}
+
+
+def _expire_old_jobs() -> None:
+    """Delete job result directories older than JOB_RETENTION_HOURS.
+
+    Uses the directory's last-modified time as the clock — this is set when
+    the final output files are written, so it accurately reflects when the
+    job finished. The in-memory jobs dict is also pruned so the server doesn't
+    serve stale status for expired jobs.
+
+    Logs in data/logs/ are stored separately and are never touched here.
+    """
+    import time
+    cutoff = time.time() - JOB_RETENTION_HOURS * 3600
+    for job_dir in JOBS_DIR.iterdir():
+        if not job_dir.is_dir():
+            continue
+        if job_dir.stat().st_mtime < cutoff:
+            shutil.rmtree(job_dir, ignore_errors=True)
+            jobs.pop(job_dir.name, None)
+
+
+def _cleanup_orphaned_audio() -> None:
+    """Delete uploaded audio files left behind by jobs that never completed.
+
+    If the server crashed while a job was running, the audio file may have
+    survived cleanup. We identify orphaned jobs as any job directory that
+    has an audio file at the top level but no newfave_output/ folder.
+
+    Called at the end of every completed job so orphans from a previous crash
+    are caught as soon as the server is back in use.
+
+    NOTE: when Trolley mode is implemented this logic must be revisited —
+    Trolley jobs will legitimately have audio without newfave_output/ at the
+    start of their run. See the Trolley TODO item for details.
+    """
+    for job_dir in JOBS_DIR.iterdir():
+        if not job_dir.is_dir():
+            continue
+        if (job_dir / "newfave_output").exists():
+            continue  # completed normally
+        for f in job_dir.iterdir():
+            if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS:
+                f.unlink(missing_ok=True)
+                break
 
 
 def _get_mfa_version(conda_env: str) -> str:
@@ -78,12 +154,11 @@ def _write_processing_log(
     job_id: str,
     config: dict,
     audio_filename: str,
-    submitted_at: str,
+    submitted_at: datetime,
 ) -> None:
     """Write processing_log.txt documenting every parameter and how to replicate offline."""
     completed_at = datetime.now(timezone.utc)
-    submitted_dt = datetime.fromisoformat(submitted_at)
-    total_s = int((completed_at - submitted_dt).total_seconds())
+    total_s = int((completed_at - submitted_at).total_seconds())
     h, rem = divmod(total_s, 3600)
     m, s = divmod(rem, 60)
     if h:
@@ -141,7 +216,7 @@ def _write_processing_log(
     ln("reproduce or extend the analysis.")
     ln("")
     ln(f"Job ID:    {job_id}")
-    ln(f"Submitted: {submitted_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    ln(f"Submitted: {submitted_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Completed: {completed_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Duration:  {duration_str}")
 
@@ -217,6 +292,13 @@ def _write_processing_log(
     ln("MFA takes the audio and the Whisper/TextGridTools-generated Textgrid and")
     ln("produces another Praat TextGrid with word- and phone-level time-aligned")
     ln("intervals. This TextGrid is the primary input to new-fave in Step 3.")
+    ln("")
+    ln("If any words in the transcript were not found in the pronunciation dictionary,")
+    ln("MFA guessed their pronunciations. Those words are listed in oovs_found.txt")
+    ln("(included in your download if any were found). Poor guesses can degrade")
+    ln("alignment quality around those words. To improve results, paste the OOV words")
+    ln("into the Transcription Hint box and rerun — Whisper will have more context and")
+    ln("is less likely to misspell or misrecognize them.")
     ln("")
     ln("Parameters:")
     ln(f"  - acoustic_model:   {acoustic_model}{dflt(acoustic_model, 'english_us_arpa')}")
@@ -324,44 +406,205 @@ def _write_processing_log(
     (job_dir / "processing_log.txt").write_text("\n".join(out))
 
 
+def _fmt_duration(seconds: float) -> str:
+    """Format a duration in seconds as '42m 17s'."""
+    m, s = divmod(int(seconds), 60)
+    return f"{m}m {s:2d}s"
+
+
+def _write_server_log(
+    job_id: str,
+    audio_filename: str,
+    submitted_at: datetime,
+    completed_at: datetime,
+    step_times: list,
+    failed_step: str | None,
+    error_tb: str | None,
+    config: dict,
+) -> None:
+    """Write a server-side diagnostic log for every job, success or failure.
+
+    Logs are stored in data/logs/YYYY-MM/<job_id>.txt, outside the job directory
+    so they survive the 72-hour result cleanup.
+    """
+    w_cfg  = config.get("whisper", {}) or {}
+    m_cfg  = config.get("mfa",     {}) or {}
+    nf_cfg = config.get("newfave", {}) or {}
+
+    # Version lookups — best effort, don't let failures break logging.
+    try:
+        whisper_ver = importlib.metadata.version("openai-whisper")
+    except Exception:
+        whisper_ver = "unknown"
+    try:
+        newfave_ver = importlib.metadata.version("new-fave")
+    except Exception:
+        newfave_ver = "unknown"
+    mfa_ver = _get_mfa_version(m_cfg.get("conda_env", "aligner"))
+
+    total_seconds = (completed_at - submitted_at).total_seconds()
+    status_line = "SUCCESS" if failed_step is None else f"FAILED at \"{failed_step}\""
+
+    BAR = "=" * 60
+    lines = []
+    ln = lines.append
+
+    ln("VoxHumana Server Log")
+    ln(BAR)
+    ln(f"Job ID:       {job_id}")
+    ln(f"File:         {audio_filename}")
+    ln(f"Submitted:    {submitted_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    ln(f"Completed:    {completed_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    ln(f"Total time:   {_fmt_duration(total_seconds)}")
+    ln(f"Status:       {status_line}")
+    ln("")
+    ln("Step timings:")
+    for name, secs in step_times:
+        ln(f"  {name:<38} {_fmt_duration(secs)}")
+    ln("")
+    ln("Tool versions:")
+    ln(f"  openai-whisper:  {whisper_ver}")
+    ln(f"  MFA:             {mfa_ver}")
+    ln(f"  new-fave:        {newfave_ver}")
+    ln("")
+    ln("Settings:")
+    ln(f"  [Whisper]")
+    ln(f"  model:                    {w_cfg.get('model', 'turbo')}")
+    ln(f"  language:                 {w_cfg.get('language') or '(auto-detect)'}")
+    ln(f"  initial_prompt:           {w_cfg.get('initial_prompt') or '(none)'}")
+    ln(f"  condition_on_prev_text:   {w_cfg.get('condition_on_previous_text', True)}")
+    ln(f"  [MFA]")
+    ln(f"  acoustic_model:           {m_cfg.get('acoustic_model', 'english_us_arpa')}")
+    ln(f"  dictionary:               {m_cfg.get('dictionary', 'english_us_arpa')}")
+    ln(f"  fine_tune:                {m_cfg.get('fine_tune', False)}")
+    ln(f"  num_jobs:                 {m_cfg.get('num_jobs', 1)}")
+    ln(f"  [new-fave]")
+    ln(f"  speakers:                 {nf_cfg.get('speakers', 'all')}")
+    ln(f"  recode_rules:             {nf_cfg.get('recode_rules', 'cmu2labov')}")
+    ln(f"  labelset_parser:          {nf_cfg.get('labelset_parser', 'cmu_parser')}")
+    ln(f"  point_heuristic:          {nf_cfg.get('point_heuristic', 'fave')}")
+    ln(f"  formant_ceiling:          {nf_cfg.get('formant_ceiling') or '(default)'}")
+    ln(f"  num_formants:             {nf_cfg.get('num_formants') or '(default)'}")
+    ln(f"  include_overlaps:         {nf_cfg.get('include_overlaps', True)}")
+
+    if error_tb:
+        ln("")
+        ln("Error:")
+        ln(error_tb)
+
+    log_dir = LOGS_DIR / submitted_at.strftime("%Y-%m")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / f"{job_id}.txt").write_text("\n".join(lines) + "\n")
+
+    # Append a one-line JSON summary to summary.jsonl for analytics.
+    # Filenames are intentionally excluded (may contain speaker names).
+    # initial_prompt is recorded as a boolean only (content may be sensitive).
+    _step_keys = ["whisper", "textgrid", "mfa", "newfave"]
+    step_seconds = {
+        _step_keys[i]: round(secs, 1)
+        for i, (_, secs) in enumerate(step_times)
+        if i < len(_step_keys)
+    }
+    # Extract just the exception class name from the traceback, not the message.
+    error_type = None
+    if error_tb:
+        for line in reversed(error_tb.strip().splitlines()):
+            line = line.strip()
+            if line and not line.startswith(" ") and ":" in line:
+                error_type = line.split(":")[0].strip()
+                break
+
+    summary = {
+        "job_id":                    job_id,
+        "submitted_at":              submitted_at.isoformat(),
+        "completed_at":              completed_at.isoformat(),
+        "total_seconds":             round(total_seconds, 1),
+        "status":                    "success" if failed_step is None else "failed",
+        "failed_step":               failed_step,
+        "error_type":                error_type,
+        "whisper_model":             w_cfg.get("model", "turbo"),
+        "language":                  w_cfg.get("language"),
+        "initial_prompt_used":       bool(w_cfg.get("initial_prompt")),
+        "condition_on_previous_text": w_cfg.get("condition_on_previous_text", True),
+        "mfa_acoustic_model":        m_cfg.get("acoustic_model", "english_us_arpa"),
+        "mfa_dictionary":            m_cfg.get("dictionary", "english_us_arpa"),
+        "mfa_fine_tune":             m_cfg.get("fine_tune", False),
+        "formant_ceiling":           nf_cfg.get("formant_ceiling"),
+        "num_formants":              nf_cfg.get("num_formants"),
+        "include_overlaps":          nf_cfg.get("include_overlaps", True),
+        "step_seconds":              step_seconds,
+        "versions": {
+            "openai-whisper": whisper_ver,
+            "mfa":            mfa_ver,
+            "new-fave":       newfave_ver,
+        },
+    }
+    with open(LOGS_DIR / "summary.jsonl", "a") as f:
+        f.write(json.dumps(summary) + "\n")
+
+
 def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
     """Run all pipeline steps in a background thread, updating job status as we go."""
     job_dir = JOBS_DIR / job_id
+    submitted_at = datetime.fromisoformat(jobs[job_id]["created_at"])
+    step_times: list[tuple[str, float]] = []
+    current_step: str | None = None
+    error_tb: str | None = None
+
     try:
+        current_step = "Step 1 – Transcribing with Whisper"
         jobs[job_id].update(step=1, step_name="Transcribing with Whisper")
-        whisper_result = transcribe(
-            str(audio_path), str(job_dir), config.get("whisper")
-        )
+        _t = datetime.now(timezone.utc)
+        whisper_result = transcribe(str(audio_path), str(job_dir), config.get("whisper"))
+        step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
+        current_step = "Step 2 – Converting transcript to TextGrid"
         jobs[job_id].update(step=2, step_name="Converting transcript to TextGrid")
+        _t = datetime.now(timezone.utc)
         convert_whisper_to_textgrid(whisper_result, str(audio_path), str(job_dir))
+        step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
+        current_step = "Step 3 – Aligning with MFA"
         jobs[job_id].update(step=3, step_name="Aligning with MFA")
-        mfa_output_dir = align_with_mfa(
-            str(audio_path), str(job_dir), config.get("mfa")
-        )
+        _t = datetime.now(timezone.utc)
+        mfa_output_dir = align_with_mfa(str(audio_path), str(job_dir), config.get("mfa"))
+        step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
+        current_step = "Step 4 – Extracting vowel formants with new-fave"
         jobs[job_id].update(step=4, step_name="Extracting vowel formants with new-fave")
-        extract_with_newfave(
-            str(audio_path), mfa_output_dir, str(job_dir), config.get("newfave")
-        )
+        _t = datetime.now(timezone.utc)
+        extract_with_newfave(str(audio_path), mfa_output_dir, str(job_dir), config.get("newfave"))
+        step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
         _write_processing_log(
             job_dir, job_id, config,
             audio_filename=audio_path.name,
-            submitted_at=jobs[job_id]["created_at"],
+            submitted_at=submitted_at,
         )
         jobs[job_id].update(status="done", step=5, step_name="Complete")
+        current_step = None  # marks success
 
     except Exception as exc:
+        error_tb = traceback.format_exc()
         # Write the full traceback to disk for debugging; never send it to the client.
-        (JOBS_DIR / job_id / "error.log").write_text(traceback.format_exc())
-        jobs[job_id].update(
-            status="error",
-            error=str(exc),
-        )
+        (JOBS_DIR / job_id / "error.log").write_text(error_tb)
+        jobs[job_id].update(status="error", error=str(exc))
+
     finally:
+        completed_at = datetime.now(timezone.utc)
+        _write_server_log(
+            job_id=job_id,
+            audio_filename=audio_path.name,
+            submitted_at=submitted_at,
+            completed_at=completed_at,
+            step_times=step_times,
+            failed_step=current_step,
+            error_tb=error_tb,
+            config=config,
+        )
         _cleanup_intermediates(job_dir, audio_path)
+        _cleanup_orphaned_audio()
+        _expire_old_jobs()
 
 
 @app.post("/api/jobs")
@@ -378,7 +621,9 @@ async def create_job(
     num_formants: Optional[str] = Form(None),
     include_overlaps: bool = Form(True),
 ):
-    job_id = str(uuid.uuid4())
+    job_id = _generate_job_id()
+    while job_id in jobs:
+        job_id = _generate_job_id()
     job_dir = JOBS_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 

@@ -60,18 +60,45 @@ detection logic before advertising this option to users.
 
 ---
 
+## "Trolley" mode: skip Whisper and go straight to MFA (not yet built)
+
+A future workflow for power users: allow uploading a corrected transcript
+(e.g. a manually edited version of Whisper's output) alongside the audio,
+skipping the Whisper step entirely and feeding the corrected text straight
+into MFA. This is useful when:
+  - Whisper made errors that affected alignment quality (e.g. OOV words,
+    proper nouns, dialect forms)
+  - The user already has a transcript from another source
+  - The user wants to iterate: run the full pipeline once, fix Whisper's
+    output, then rerun from MFA onward without re-transcribing
+
+The OOV words file (oovs_found.txt) is a natural trigger for this workflow —
+if the user sees OOV words they recognize as errors, they can correct the
+transcript and resubmit from MFA without paying the Whisper cost again.
+
+**Note for implementation**: the orphaned audio cleanup logic (which deletes audio
+files from jobs that have no newfave_output/) will need to be updated when Trolley
+mode is built. A Trolley job legitimately has audio but no newfave_output at the
+start of the run — so the cleanup must be aware of job status (e.g. check the
+in-memory jobs dict, or a status file on disk) rather than just looking at
+which output folders exist.
+
+---
+
 ## MFA: OOV words file and custom dictionaries
 
 Two related features worth adding when there is demand:
 
-### OOV words file
-MFA can output a list of out-of-vocabulary (OOV) words — words in the transcript that are
-not in the pronunciation dictionary and received a guessed pronunciation. Surfacing this
-file in the VoxHumana download would help users identify transcription or alignment problems
-early (e.g. a misspelled name that MFA couldn't look up).
+### OOV words file ✓ (implemented — needs real-world testing)
+MFA's OOV words are now extracted from its internal log and written to
+`mfa_output/oovs_found.txt`, included in the download zip when present.
 
-To implement: check MFA's output directory for an OOV file after alignment and include it
-in the results zip if present.
+**Testing note**: This is difficult to test end-to-end until the Trolley feature
+exists. Whisper tends to recognize unfamiliar words as phonetically similar
+dictionary words, so true OOVs rarely make it through to MFA in normal use.
+Once the Trolley feature is built (allowing users to supply a corrected
+transcript directly), test by feeding MFA a transcript that contains a made-up
+or highly unusual word and confirming it appears in `oovs_found.txt`.
 
 ### Custom dictionaries
 Power users (e.g., researchers working with a specific dialect community) may want to
@@ -121,22 +148,10 @@ The `initial_prompt` field is wired up and working. Possible future enhancements
 
 ---
 
-## Formant ceiling and number-of-formants overrides (not yet wired up)
+## Formant ceiling and number-of-formants overrides ✓ (already implemented)
 
-The Advanced options panel in the UI shows these controls with a "coming soon" note and the
-inputs disabled. The backend work needed before enabling them:
-
-- **new-fave side**: confirm that `fave_audio_textgrid()` exposes formant ceiling and number
-  of formants via its `ft_config` parameter (check new-fave docs / source). If so, build a
-  small config dict to pass those values through.
-- **API side** (`web/app.py`): accept `formant_ceiling` and `num_formants` as `Form(...)` fields
-  in `create_job()`, validate them (integers/floats in sane ranges), and populate
-  `config["newfave"]` rather than leaving it `{}`.
-- **JS side** (`web/static/index.html`): re-enable the inputs (remove `disabled` and
-  `pointer-events:none`), and append the values to `FormData` alongside the other fields.
-- Once wired up, remove the `.adv-coming-soon` note and update `help-formants.md` to describe
-  the settings properly (typical values: 4500–5000 Hz men, 5000–5500 Hz women; 4 formants
-  standard, 5 useful for high-pitched voices).
+Inputs are enabled in the UI, wired through the API, passed to new-fave via
+`ft_config.yml`, and documented in `help-formants.md`. No further work needed.
 
 ---
 
@@ -232,6 +247,14 @@ Make sure they're all there, that they are organized by job (Whisper, MFA, new-f
 ## User Guide tab (does not exist yet — needs to be built)
 Add a "User Guide" tab to the UI (alongside the main upload form). Content to include:
 
+### Privacy notice
+Make clear that VoxHumana respects the sensitivity of sociolinguistic recordings:
+  - All processing happens entirely on BYU's server — your audio is never sent to
+    OpenAI or any other external service. Whisper, MFA, and new-fave all run locally.
+  - Uploaded audio is deleted from the server as soon as processing finishes.
+  - Result files are available for download for 72 hours, then deleted.
+  - No audio or transcripts are retained, shared, or used for any other purpose.
+
 ### If your file is over 1 GB
 Preferred: split the recording into segments.
   - Recommended tool: Audacity (free) — File > Export > Export Multiple, split by time
@@ -256,72 +279,84 @@ Options:
     and lets you run on your own hardware with a GPU.
   - Contact the lab for access to a GPU-equipped server if you have many recordings.
 
-## File management and security (partially done — needs completion)
+## Security audit (not yet done)
 
-### What's already cleaned up
-After every job (success or failure), the pipeline now deletes the large intermediates
-that are no longer needed: the uploaded audio file, `mfa_corpus/` (copy of audio),
-and `mfa_temp/` (MFA working data). This recovers 1–3 GB per job immediately.
+VoxHumana handles sensitive sociolinguistic data — identifiable voices and personal
+conversations from research participants. A dedicated security review should be done
+before the tool is opened to broad public use. Key areas to audit:
 
-### What still needs to be done
-- **Result files expire**: job result directories (`data/jobs/<uuid>/`) currently
-  accumulate forever. Once a user has downloaded their results (or after a set
-  retention window, e.g. 24–48 hours), the entire job directory should be deleted.
-  Coordinate with the logging system below — logs must be written to `data/logs/`
-  *before* the job directory is removed, so the record survives cleanup.
-
-- **Logs live separately**: job logs (`data/logs/`) must never be deleted as part
-  of job directory cleanup. They are the audit trail. Keep them indefinitely (or
-  archive to cold storage after a year).
-
-- **Uploaded audio is sensitive**: sociolinguistic recordings contain identifiable
-  voices and personal conversations. The audio file is already deleted as soon as
-  the pipeline finishes, which is correct. Verify this holds even if the server
-  crashes mid-job (on restart, scan for job dirs that have an audio file but no
-  `error.log` and no results — these are orphaned and should be cleaned up).
-
-- **No world-readable job directories**: confirm that `data/jobs/` is not served
-  as a static directory. Currently it is not (only `web/static/` is mounted), but
-  double-check this after any nginx or static-file config changes.
+- **Data in transit**: confirm all traffic runs over HTTPS (no HTTP fallback). Audio
+  uploads and result downloads should never travel unencrypted.
+- **Job directory access**: verify that `data/jobs/` cannot be accessed directly via
+  URL — only through the API endpoints. Check this holds after any nginx/proxy config
+  changes. (Currently confirmed safe — only `web/static/` is mounted as static.)
+- **Audio deletion**: confirm the audio file is always deleted after processing,
+  including on pipeline failure. Orphan cleanup (end-of-job sweep) is now implemented
+  but should be verified under crash conditions.
+- **On-server processing**: all three tools (Whisper, MFA, new-fave) run entirely
+  locally — audio never leaves the server. This should be stated explicitly in the
+  User Guide and privacy notice.
+- **Job ID guessability**: job IDs are now YYMMDD_Stop1_Stop2 (~1,190 combinations
+  per day). A determined person could enumerate today's IDs. Consider whether result
+  downloads need any additional authentication (e.g. a one-time token) if the tool
+  is used for sensitive studies.
+- **Upload validation**: confirm that only audio files can be uploaded (check MIME
+  type and extension), and that the 1 GB size limit is enforced server-side.
 
 ---
 
-## Job logging system (does not exist yet — ask Claude before building)
-Currently, errors are written to `data/jobs/<job_id>/error.log` and the job ID is
-shown to the user on the error screen. That's a stopgap. The full system should:
+## File management and security (partially done — needs completion)
 
-### Log structure
-Every job (success or failure) should produce a log file, not just errors.
-Organize logs outside the job directories so they persist even after job cleanup:
+### What's already done
+- Large intermediates deleted after every job: uploaded audio, `mfa_corpus/`,
+  `mfa_temp/`. This recovers 1–3 GB per job immediately.
+- Orphaned audio cleanup: at the end of each completed job, a sweep deletes audio
+  files from any job directory that has no results (i.e. jobs that were running when
+  the server last crashed). See Trolley mode caveat in that TODO item.
+- No world-readable job directories: confirmed — only `web/static/` is served
+  statically; `data/jobs/` is API-only.
 
-  data/logs/
-    2026-05/
-      2026-05-26/
-        20260526_143022_REED-VIPER-FORMANT.txt
-        20260526_151847_FLUTE-NASAL-CRANE.txt
+### What still needs to be done
+- **Logs live separately**: job logs (`data/logs/`) must never be deleted as part
+  of job directory cleanup. They are the audit trail. ✓ Already the case —
+  logs are written to `data/logs/` and `_expire_old_jobs()` only touches `data/jobs/`.
 
-Each .txt file should contain: datetime, job ID, original filename, config used,
-step-by-step timestamps, final status, and full traceback on error.
+### What's now done
+- **Result files expire** ✓: job directories are deleted after 72 hours by
+  `_expire_old_jobs()`, called at the end of every job. Retention window is
+  controlled by the `JOB_RETENTION_HOURS` constant in `web/app.py`.
 
-### Human-readable job codes
-Replace raw UUID job IDs (shown to users) with memorable three-word codes, e.g.
-BOURDON-NASAL-CRANE. Draw from:
-  - Organ stops: Bourdon, Diapason, Flute, Oboe, Trumpet, Gedackt, Quintadena,
-    Tierce, Larigot, Mixture, Cornet, Gamba, Celeste, Principal, Krummhorn,
-    Dulcian, Zimbel, Nazard, Sesquialtera, Vox Humana
-  - Linguistics terms: Nasal, Fricative, Vowel, Formant, Coda, Onset, Nucleus,
-    Mora, Rhotic, Lateral, Velar, Alveolar, Bilabial, Glottal, Affricate,
-    Tonal, Aspiration, Schwa, Diphthong, Allophone
-  - Animals: Crane, Heron, Finch, Falcon, Tern, Wren, Swift, Egret, Ibis,
-    Kite, Lark, Mink, Newt, Orca, Puffin, Rail, Stoat, Teal, Vole, Yak
+---
 
-20 × 20 × 20 = 8,000 unique codes. The code lives in the log filename AND is
-shown to the user on both the error screen and the success/download screen so
-they can always reference it when contacting the lab.
+## Job logging system ✓ (implemented)
+Every job (success or failure) now writes a server-side log to:
 
-### Before building, ask Claude about:
-  - Whether to keep UUIDs internally and only surface codes to users, or replace
-    UUIDs entirely (UUIDs are safer for file paths; codes are better for humans)
+  data/logs/YYYY-MM/<job_id>.txt
+
+Each file contains: job ID, filename, submitted/completed timestamps, total
+duration, per-step timings, all settings used, tool versions, final status,
+and full error traceback on failure. Logs are stored outside job directories
+and are never deleted by the result cleanup sweep.
+
+### Human-readable job codes ✓ (implemented)
+Job IDs are now in the format YYMMDD_Stop1_Stop2, e.g. 260601_Bourdon_Flute.
+Two distinct organ stops are drawn at random; a collision check retries if the
+same pair was already used today (extremely rare at expected job volumes).
+
+Organ stops pool (35), drawn from the Salt Lake Tabernacle organ:
+  Bombarde, Bourdon, Celeste, Clarinet, Clarion, CorAnglais, Cornopean,
+  Cymbelstern, Diaphone, Diapason, Doppelflote, Dulciana, Flugelhorn, Flute,
+  FrenchHorn, Fugara, Gamba, Gemshorn, Harp, LieblichBourdon, Mixture,
+  Nachthorn, Nazard, Oboe, Octave, Piccolo, Principal, Rauschquinte, Trombone,
+  Trompette, Tremulant, Trumpet, Tuba, Tutti, Viole
+
+35 × 34 = 1,190 combinations per day — sufficient for expected usage.
+
+The job ID is used as the job directory name and shown to the user on both the
+error screen and the success/download screen so they can reference it when
+contacting the lab.
+
+### Before building the full logging system, consider:
   - Whether logs should be plain .txt or structured (JSON, CSV) for easier parsing
-  - When and how to clean up job directories (uploaded audio + intermediates) after
-    a job completes — how long to keep results available for download?
+  - When and how to clean up job directories after a job completes — how long
+    to keep results available for download?
