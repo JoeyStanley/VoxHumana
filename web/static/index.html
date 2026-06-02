@@ -1376,6 +1376,16 @@
     document.getElementById('textgrid-drop-filename').style.display  = 'none';
     tgFileInput.value = '';
 
+    // Reset all step toggles to their defaults (all on)
+    ['transcription', 'alignment', 'formants'].forEach(id => {
+      stepActive[id] = true;
+      document.getElementById('toggle-' + id).classList.add('checked');
+      document.getElementById('body-'   + id).classList.remove('collapsed');
+    });
+    document.getElementById('textgrid-upload-section').style.display = 'none';
+    document.getElementById('step-warning').style.display = 'none';
+    updateTextGridHint();
+
     const btn = document.getElementById('submit-btn');
     btn.disabled    = false;
     btn.textContent = 'Submit';
