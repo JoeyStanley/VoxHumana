@@ -144,7 +144,7 @@
 
     .section { margin-bottom: 22px; }
     .section-head {
-      font-size: 11px;
+      font-size: 13px;
       font-weight: bold;
       color: var(--pb);
       letter-spacing: 0.12em;
@@ -165,6 +165,69 @@
       font-weight: bold;
     }
     .section-rule { flex: 1; height: 1px; background: var(--pcb); }
+
+    /* Step toggle checkbox + two-line label */
+    .step-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .step-head > input[type="checkbox"] { display: none; }
+    .step-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .step-toggle .cb-box {
+      width: 20px; height: 20px;
+      border-radius: 4px;
+      border: 1.5px solid var(--pbl);
+      background: white;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .step-toggle .cb-box::after {
+      content: '';
+      display: block;
+      width: 5px; height: 9px;
+      border-right: 2px solid white;
+      border-bottom: 2px solid white;
+      transform: rotate(45deg) translate(-1px, -1px);
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+    .step-toggle.checked .cb-box { background: var(--pb); border-color: var(--pb); }
+    .step-toggle.checked .cb-box::after { opacity: 1; }
+    .step-label-group { display: flex; flex-direction: column; gap: 2px; }
+    .step-label-name {
+      font-size: 13px;
+      font-weight: bold;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--pb);
+      line-height: 1;
+    }
+    .step-label-tool {
+      font-size: 10px;
+      color: var(--pbl);
+      letter-spacing: 0.04em;
+      font-style: italic;
+      line-height: 1;
+    }
+    .step-toggle:not(.checked) .step-label-name,
+    .step-toggle:not(.checked) .step-label-tool { opacity: 0.35; }
+    .step-body {
+      overflow: hidden;
+      max-height: 700px;
+      transition: max-height 0.3s ease, opacity 0.25s ease;
+      opacity: 1;
+    }
+    .step-body.collapsed { max-height: 0; opacity: 0; }
 
     /* Help button */
     .help-btn {
@@ -201,6 +264,21 @@
       background: #fdf9f2;
     }
     .upload-zone.has-file { border-color: var(--pbl); background: #fdf9f2; }
+    .upload-zone.flash-error {
+      border-color: #d4856a;
+      border-style: solid;
+      background: #fff5f0;
+      transition: border-color 0s, background 0s;
+      animation: shake 0.4s ease;
+    }
+    @keyframes shake {
+      0%        { transform: translateX(0); }
+      20%       { transform: translateX(-8px); }
+      40%       { transform: translateX(7px); }
+      60%       { transform: translateX(-5px); }
+      80%       { transform: translateX(4px); }
+      100%      { transform: translateX(0); }
+    }
     .upload-icon-row {
       display: flex;
       justify-content: center;
@@ -489,8 +567,8 @@
       display: block;
     }
 
-    /* Hidden file input */
-    #audio-input { display: none; }
+    /* Hidden file inputs */
+    #audio-input, #textgrid-input { display: none; }
 
     /* ─── Slide-in drawer ───────────────────────────────────────────── */
     .drawer-overlay {
@@ -722,34 +800,17 @@
     </nav>
   </div>
 
-  <!-- Pipeline progress track -->
-  <div class="pipeline-track" id="pipeline-track">
-    <div class="pipeline-step" id="track-1">
-      <div class="step-name">Transcribe</div>
-      <div class="step-tool">Whisper</div>
-    </div>
-    <div class="pipeline-step" id="track-2">
-      <div class="step-name">Align</div>
-      <div class="step-tool">MFA</div>
-    </div>
-    <div class="pipeline-step" id="track-3">
-      <div class="step-name">Extract</div>
-      <div class="step-tool">new-fave</div>
-    </div>
-    <div class="pipeline-step" id="track-4">
-      <div class="step-name">Results</div>
-      <div class="step-tool">Download</div>
-    </div>
-  </div>
+  <!-- Pipeline progress track — rebuilt dynamically when processing starts -->
+  <div class="pipeline-track" id="pipeline-track" style="display:none"></div>
 
   <!-- ═══════════════════════════════ FORM STATE ═══════════════════════════════ -->
   <div id="state-form" class="body">
     <form id="vxh-form" onsubmit="handleSubmit(event)">
 
+      <!-- ── Upload ─────────────────────────────────────────────────────── -->
       <div class="section">
         <div class="section-head">
-          <div class="step-dot">1</div>
-          Audio file
+          Upload
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('audio')" title="Help">?</button>
         </div>
@@ -768,105 +829,143 @@
           <div class="upload-secondary" id="drop-secondary">WAV · MP3 · FLAC · M4A &nbsp;·&nbsp; Max 1 GB</div>
           <div class="upload-filename" id="drop-filename" style="display:none"></div>
         </div>
+
+        <!-- TextGrid upload — shown when Transcribe is unchecked -->
+        <div id="textgrid-upload-section" style="display:none; margin-top:14px">
+          <input type="file" id="textgrid-input" accept=".TextGrid">
+          <div class="upload-zone" id="textgrid-drop-zone" style="padding:20px">
+            <div class="upload-primary" id="textgrid-drop-primary" style="font-size:12px">Drop TextGrid here or click to browse</div>
+            <div class="upload-secondary" id="textgrid-drop-secondary">.TextGrid (Praat format, utterance tier)</div>
+            <div class="upload-filename" id="textgrid-drop-filename" style="display:none"></div>
+          </div>
+        </div>
       </div>
 
+      <!-- ── Transcribe ──────────────────────────────────────────────────── -->
       <div class="section">
-        <div class="section-head">
-          <div class="step-dot">2</div>
-          Transcription
+        <div class="step-head">
+          <label class="step-toggle checked" id="toggle-transcription" onclick="toggleStep('transcription')">
+            <span class="cb-box"></span>
+            <span class="step-label-group">
+              <span class="step-label-name">Transcribe</span>
+              <span class="step-label-tool">Whisper</span>
+            </span>
+          </label>
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('transcription')" title="Help">?</button>
         </div>
-        <p class="adv-coming-soon">Multi-language support is coming soon. Currently English only.</p>
-        <div class="grid-2">
-          <div class="field" style="opacity:0.4; pointer-events:none">
-            <label for="language">Language</label>
-            <select id="language" name="language" disabled>
-              <option value="en">English</option>
-            </select>
+        <div class="step-body" id="body-transcription">
+          <p class="adv-coming-soon">Multi-language support is coming soon. Currently English only.</p>
+          <div class="grid-2">
+            <div class="field" style="opacity:0.4; pointer-events:none">
+              <label for="language">Language</label>
+              <select id="language" name="language" disabled>
+                <option value="en">English</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="whisper-model">Whisper model</label>
+              <select id="whisper-model" name="whisper_model">
+                <option value="turbo">Turbo (recommended)</option>
+                <option value="large">Large (most accurate)</option>
+                <option value="medium">Medium</option>
+                <option value="small">Small (fastest)</option>
+              </select>
+            </div>
           </div>
-          <div class="field">
-            <label for="whisper-model">Whisper model</label>
-            <select id="whisper-model" name="whisper_model">
-              <option value="turbo">Turbo (recommended)</option>
-              <option value="large">Large (most accurate)</option>
-              <option value="medium">Medium</option>
-              <option value="small">Small (fastest)</option>
-            </select>
+          <div class="field" style="margin-top:14px">
+            <label for="initial-prompt">Transcription hint <span style="font-weight:normal">(optional)</span></label>
+            <input type="text" id="initial-prompt" name="initial_prompt" placeholder="Put names, locations, topic keywords, or unusual vocabulary here to help guide the transcription.">
           </div>
-        </div>
-        <div class="field" style="margin-top:14px">
-          <label for="initial-prompt">Transcription hint <span style="font-weight:normal">(optional)</span></label>
-          <input type="text" id="initial-prompt" name="initial_prompt" placeholder="Put names, locations, topic keywords, or unusual vocabulary here to help guide the transcription.">
-        </div>
-        <div class="adv-toggle" id="adv-toggle-transcription" onclick="toggleAdvanced('transcription')" style="margin-top:12px">
-          <span class="chevron">▸</span> Advanced Whisper options
-        </div>
-        <div class="adv-panel" id="adv-panel-transcription">
-          <div class="field-check">
-            <input type="checkbox" id="condition-on-prev" name="condition_on_previous_text" checked>
-            <label for="condition-on-prev">Carry context across 30-second chunks</label>
+          <div class="adv-toggle" id="adv-toggle-transcription" onclick="toggleAdvanced('transcription')" style="margin-top:12px">
+            <span class="chevron">▸</span> Advanced Whisper options
           </div>
-          <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When checked, each chunk is aware of what came before — good for interviews. Uncheck for wordlists or short files, or if the transcript contains repeating loops.</p>
+          <div class="adv-panel" id="adv-panel-transcription">
+            <div class="field-check">
+              <input type="checkbox" id="condition-on-prev" name="condition_on_previous_text" checked>
+              <label for="condition-on-prev">Carry context across 30-second chunks</label>
+            </div>
+            <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When checked, each chunk is aware of what came before — good for interviews. Uncheck for wordlists or short files, or if the transcript contains repeating loops.</p>
+          </div>
         </div>
       </div>
 
+      <!-- ── Align ───────────────────────────────────────────────────────── -->
       <div class="section">
-        <div class="section-head">
-          <div class="step-dot">3</div>
-          Alignment
+        <div class="step-head">
+          <label class="step-toggle checked" id="toggle-alignment" onclick="toggleStep('alignment')">
+            <span class="cb-box"></span>
+            <span class="step-label-group">
+              <span class="step-label-name">Align</span>
+              <span class="step-label-tool">MFA</span>
+            </span>
+          </label>
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('alignment')" title="Help">?</button>
         </div>
-        <p class="adv-coming-soon">Additional acoustic models and dictionaries are coming soon. Currently English only.</p>
-        <div class="grid-2" style="opacity:0.4; pointer-events:none">
-          <div class="field">
-            <label for="acoustic-model">Acoustic model</label>
-            <select id="acoustic-model" name="acoustic_model" disabled>
-              <option value="english_us_arpa">English US — arpa</option>
-            </select>
+        <div class="step-body" id="body-alignment">
+          <p class="adv-coming-soon">Additional acoustic models and dictionaries are coming soon. Currently English only.</p>
+          <div class="grid-2" style="opacity:0.4; pointer-events:none">
+            <div class="field">
+              <label for="acoustic-model">Acoustic model</label>
+              <select id="acoustic-model" name="acoustic_model" disabled>
+                <option value="english_us_arpa">English US — arpa</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="dictionary">Dictionary</label>
+              <select id="dictionary" name="dictionary" disabled>
+                <option value="english_us_arpa">English US — arpa</option>
+              </select>
+            </div>
           </div>
-          <div class="field">
-            <label for="dictionary">Dictionary</label>
-            <select id="dictionary" name="dictionary" disabled>
-              <option value="english_us_arpa">English US — arpa</option>
-            </select>
+          <div class="field-check" style="margin-top:14px">
+            <input type="checkbox" id="fine-tune" name="fine_tune">
+            <label for="fine-tune">Fine tune</label>
           </div>
+          <p class="adv-coming-soon" style="margin: 2px 0 0 22px">Runs an extra MFA refinement pass after the initial alignment. This improves accuracy, but is slower.</p>
         </div>
-        <div class="field-check" style="margin-top:14px">
-          <input type="checkbox" id="fine-tune" name="fine_tune">
-          <label for="fine-tune">Fine tune</label>
-        </div>
-        <p class="adv-coming-soon" style="margin: 2px 0 0 22px">Runs an extra MFA refinement pass after the initial alignment. This improves accuracy, but is slower.</p>
       </div>
 
+      <!-- ── Extract ─────────────────────────────────────────────────────── -->
       <div class="section">
-        <div class="section-head">
-          <div class="step-dot">4</div>
-          Formant extraction
+        <div class="step-head">
+          <label class="step-toggle checked" id="toggle-formants" onclick="toggleStep('formants')">
+            <span class="cb-box"></span>
+            <span class="step-label-group">
+              <span class="step-label-name">Extract</span>
+              <span class="step-label-tool">new-fave</span>
+            </span>
+          </label>
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('formants')" title="Help">?</button>
         </div>
-        <div class="grid-2">
-          <div class="field">
-            <label for="formant-ceiling">Formant ceiling (Hz) <span style="font-weight:normal">(optional)</span></label>
-            <input type="text" id="formant-ceiling" name="formant_ceiling" placeholder="Default: 10000">
+        <div class="step-body" id="body-formants">
+          <div class="grid-2">
+            <div class="field">
+              <label for="formant-ceiling">Formant ceiling (Hz) <span style="font-weight:normal">(optional)</span></label>
+              <input type="text" id="formant-ceiling" name="formant_ceiling" placeholder="Default: 10000">
+            </div>
+            <div class="field">
+              <label for="num-formants">Number of formants <span style="font-weight:normal">(optional)</span></label>
+              <input type="text" id="num-formants" name="num_formants" placeholder="Default: 3">
+            </div>
           </div>
-          <div class="field">
-            <label for="num-formants">Number of formants <span style="font-weight:normal">(optional)</span></label>
-            <input type="text" id="num-formants" name="num_formants" placeholder="Default: 3">
+          <div class="adv-toggle" id="adv-toggle-formants" onclick="toggleAdvanced('formants')" style="margin-top:12px">
+            <span class="chevron">▸</span> Advanced options
+          </div>
+          <div class="adv-panel" id="adv-panel-formants">
+            <div class="field-check">
+              <input type="checkbox" id="include-overlaps" name="include_overlaps" checked>
+              <label for="include-overlaps">Include vowels during overlapping speech</label>
+            </div>
+            <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When unchecked, vowels that occur while another speaker is talking are excluded from measurement.</p>
           </div>
         </div>
-        <div class="adv-toggle" id="adv-toggle-formants" onclick="toggleAdvanced('formants')" style="margin-top:12px">
-          <span class="chevron">▸</span> Advanced options
-        </div>
-        <div class="adv-panel" id="adv-panel-formants">
-          <div class="field-check">
-            <input type="checkbox" id="include-overlaps" name="include_overlaps" checked>
-            <label for="include-overlaps">Include vowels during overlapping speech</label>
-          </div>
-          <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When unchecked, vowels that occur while another speaker is talking are excluded from measurement.</p>
-        </div>
+      </div>
+
+      <div id="step-warning" style="display:none; margin-bottom:16px; padding:10px 14px; background:#fff5f0; border:1px solid #d4856a; border-radius:4px; font-size:12px; color:#7a3a20; line-height:1.5;">
+        <strong>Invalid combination:</strong> Cannot jump straight from Transcribe to Extract.
       </div>
 
       <div class="section" style="margin-bottom:0">
@@ -902,9 +1001,8 @@
     <div class="results-view">
       <div class="success-mark">✓</div>
       <div class="results-title">Processing complete</div>
-      <div class="results-note">
-        Your results are ready. The download includes the Whisper transcript, MFA-aligned TextGrid,
-        and new-fave formant measurements.
+      <div class="results-note" id="results-note">
+        Your results are ready.
       </div>
       <div class="results-actions">
         <button class="btn" id="download-btn" onclick="downloadResults()">Download results</button>
@@ -1010,49 +1108,105 @@
     return html;
   }
 
-  // ─── State
-
   // ─── State ────────────────────────────────────────────────────────────────────
-  let selectedFile  = null;
-  let currentJobId  = null;
-  let pollTimer     = null;
-  let inDocs        = false;
-  let appViewState  = 'form'; // tracks current app state even when viewing docs
+  let selectedFile     = null;
+  let selectedTextGrid = null;
+  let currentJobId     = null;
+  let pollTimer        = null;
+  let inDocs           = false;
+  let appViewState     = 'form';
+
+  // Which steps are active (all on by default)
+  const stepActive = { transcription: true, alignment: true, formants: true };
+
+  // Mapping from backend step number → track position (rebuilt on submit)
+  let trackStepMap = {};
 
   // ─── File selection ───────────────────────────────────────────────────────────
   const dropZone  = document.getElementById('drop-zone');
   const fileInput = document.getElementById('audio-input');
 
   dropZone.addEventListener('click', () => fileInput.click());
-
-  dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.classList.add('drag-over');
-  });
+  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
   dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
+    e.preventDefault(); dropZone.classList.remove('drag-over');
     if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
   });
-  fileInput.addEventListener('change', () => {
-    if (fileInput.files[0]) setFile(fileInput.files[0]);
-  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
 
   function setFile(file) {
     selectedFile = file;
     dropZone.classList.add('has-file');
-    document.getElementById('drop-primary').textContent    = 'File selected';
+    document.getElementById('drop-primary').textContent     = 'File selected';
     document.getElementById('drop-secondary').style.display = 'none';
     const fn = document.getElementById('drop-filename');
-    fn.textContent    = file.name;
-    fn.style.display  = 'block';
+    fn.textContent   = file.name;
+    fn.style.display = 'block';
+  }
+
+  // TextGrid upload
+  const tgDropZone  = document.getElementById('textgrid-drop-zone');
+  const tgFileInput = document.getElementById('textgrid-input');
+
+  tgDropZone.addEventListener('click', () => tgFileInput.click());
+  tgDropZone.addEventListener('dragover', (e) => { e.preventDefault(); tgDropZone.classList.add('drag-over'); });
+  tgDropZone.addEventListener('dragleave', () => tgDropZone.classList.remove('drag-over'));
+  tgDropZone.addEventListener('drop', (e) => {
+    e.preventDefault(); tgDropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) setTextGrid(e.dataTransfer.files[0]);
+  });
+  tgFileInput.addEventListener('change', () => { if (tgFileInput.files[0]) setTextGrid(tgFileInput.files[0]); });
+
+  function setTextGrid(file) {
+    selectedTextGrid = file;
+    tgDropZone.classList.add('has-file');
+    document.getElementById('textgrid-drop-primary').textContent     = 'File selected';
+    document.getElementById('textgrid-drop-secondary').style.display = 'none';
+    const fn = document.getElementById('textgrid-drop-filename');
+    fn.textContent   = file.name;
+    fn.style.display = 'block';
+  }
+
+  // ─── Step combination validation ─────────────────────────────────────────────
+  function checkStepCombination() {
+    // The only invalid combo: Transcribe on + Align off + Extract on.
+    // (Extract-only with a user-supplied MFA TextGrid is valid.)
+    const invalid = stepActive.transcription && !stepActive.alignment && stepActive.formants;
+    document.getElementById('step-warning').style.display = invalid ? '' : 'none';
+    document.getElementById('submit-btn').disabled = invalid;
+  }
+
+  // ─── TextGrid upload hint ─────────────────────────────────────────────────────
+  function updateTextGridHint() {
+    const el = document.getElementById('textgrid-drop-secondary');
+    if (!el) return;
+    if (stepActive.alignment) {
+      el.textContent = '.TextGrid — one interval per utterance';
+    } else {
+      el.textContent = '.TextGrid — word and phone tiers';
+    }
   }
 
   // ─── Advanced toggle ──────────────────────────────────────────────────────────
   function toggleAdvanced(id) {
     document.getElementById('adv-toggle-' + id).classList.toggle('open');
-    document.getElementById('adv-panel-' + id).classList.toggle('open');
+    document.getElementById('adv-panel-'  + id).classList.toggle('open');
+  }
+
+  // ─── Step toggle ──────────────────────────────────────────────────────────────
+  function toggleStep(id) {
+    const nowActive = !stepActive[id];
+    stepActive[id] = nowActive;
+    document.getElementById('toggle-' + id).classList.toggle('checked', nowActive);
+    document.getElementById('body-'   + id).classList.toggle('collapsed', !nowActive);
+
+    // Unchecking Transcribe shows the TextGrid upload zone; also update hint when Align changes
+    if (id === 'transcription') {
+      document.getElementById('textgrid-upload-section').style.display = nowActive ? 'none' : '';
+    }
+    updateTextGridHint();
+    checkStepCombination();
   }
 
   // ─── Submit ───────────────────────────────────────────────────────────────────
@@ -1060,8 +1214,15 @@
     event.preventDefault();
 
     if (!selectedFile) {
-      dropZone.classList.add('drag-over');
-      setTimeout(() => dropZone.classList.remove('drag-over'), 600);
+      dropZone.classList.add('flash-error');
+      setTimeout(() => dropZone.classList.remove('flash-error'), 800);
+      return;
+    }
+
+    const textGridRequired = !stepActive.transcription && (stepActive.alignment || stepActive.formants);
+    if (textGridRequired && !selectedTextGrid) {
+      tgDropZone.classList.add('flash-error');
+      setTimeout(() => tgDropZone.classList.remove('flash-error'), 800);
       return;
     }
 
@@ -1071,23 +1232,28 @@
 
     const form = document.getElementById('vxh-form');
     const data = new FormData();
-    data.append('audio',          selectedFile);
+    data.append('audio',                     selectedFile);
+    if (selectedTextGrid) data.append('textgrid', selectedTextGrid);
     data.append('whisper_model',             form.whisper_model.value);
     data.append('language',                  form.language.value);
     data.append('initial_prompt',            form.initial_prompt.value);
     data.append('condition_on_previous_text', form.condition_on_previous_text.checked);
     data.append('acoustic_model',            form.acoustic_model.value);
     data.append('fine_tune',                 form.fine_tune.checked);
-    data.append('dictionary',               form.dictionary.value);
+    data.append('dictionary',                form.dictionary.value);
     data.append('formant_ceiling',           form.formant_ceiling.value);
     data.append('num_formants',              form.num_formants.value);
     data.append('include_overlaps',          form.include_overlaps.checked);
+    data.append('run_transcription',         stepActive.transcription);
+    data.append('run_alignment',             stepActive.alignment);
+    data.append('run_formants',              stepActive.formants);
 
     try {
       const res  = await fetch('/api/jobs', { method: 'POST', body: data });
       const body = await res.json();
       if (!res.ok) throw new Error(body.detail || 'Submission failed');
       currentJobId = body.job_id;
+      buildPipelineTrack();
       showState('running');
       document.getElementById('progress-filename').textContent = selectedFile.name;
       startPolling();
@@ -1125,16 +1291,37 @@
   }
 
   // ─── Pipeline track ───────────────────────────────────────────────────────────
-  const stepToTrack = { 0: 0, 1: 1, 2: 1, 3: 2, 4: 3, 5: 4 };
+  function buildPipelineTrack() {
+    const track = document.getElementById('pipeline-track');
+    track.innerHTML = '';
+    trackStepMap = { 0: 0 };
+
+    // Each entry: display label, tool name, backend step numbers that map to it
+    const defs = [];
+    if (stepActive.transcription) defs.push({ name: 'Transcribe', tool: 'Whisper',   steps: [1, 2] });
+    if (stepActive.alignment)     defs.push({ name: 'Align',      tool: 'MFA',       steps: [3]    });
+    if (stepActive.formants)      defs.push({ name: 'Extract',    tool: 'new-fave',  steps: [4]    });
+    defs.push(                               { name: 'Results',   tool: 'Download',  steps: [5]    });
+
+    defs.forEach((def, i) => {
+      const pos = i + 1;
+      def.steps.forEach(s => { trackStepMap[s] = pos; });
+      const div = document.createElement('div');
+      div.className = 'pipeline-step';
+      div.id = 'track-' + pos;
+      div.innerHTML = `<div class="step-name">${def.name}</div><div class="step-tool">${def.tool}</div>`;
+      track.appendChild(div);
+    });
+  }
 
   function updateTrack(jobStep) {
-    const activeTab = stepToTrack[jobStep] || 0;
-    for (let i = 1; i <= 4; i++) {
-      const el = document.getElementById('track-' + i);
+    const activePos = trackStepMap[jobStep] || 0;
+    document.querySelectorAll('.pipeline-step').forEach((el, i) => {
+      const pos = i + 1;
       el.classList.remove('active', 'done');
-      if (i === activeTab)    el.classList.add('active');
-      else if (i < activeTab) el.classList.add('done');
-    }
+      if (pos === activePos)    el.classList.add('active');
+      else if (pos < activePos) el.classList.add('done');
+    });
   }
 
   // ─── Download ─────────────────────────────────────────────────────────────────
@@ -1151,8 +1338,21 @@
     document.getElementById('state-done').style.display    = (!d && state === 'done')    ? '' : 'none';
     document.getElementById('state-error').style.display   = (!d && state === 'error')   ? '' : 'none';
     document.getElementById('state-docs').style.display    = d ? '' : 'none';
-    document.getElementById('pipeline-track').style.display = d ? 'none' : '';
-    if (state === 'done' && !d) updateTrack(5);
+    // Show track only during processing/results, never on the form or docs
+    const showTrack = !d && state !== 'form';
+    document.getElementById('pipeline-track').style.display = showTrack ? '' : 'none';
+    if (state === 'done' && !d) {
+      updateTrack(5);
+      const parts = [];
+      if (stepActive.transcription) parts.push('the Whisper transcript');
+      if (stepActive.alignment)     parts.push('the MFA-aligned TextGrid');
+      if (stepActive.formants)      parts.push('new-fave formant measurements');
+      const list = parts.length === 1 ? parts[0]
+                 : parts.length === 2 ? parts[0] + ' and ' + parts[1]
+                 : parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1];
+      document.getElementById('results-note').textContent =
+        'Your results are ready. The download includes ' + list + '.';
+    }
   }
 
   function showDocs(tab) {
@@ -1182,8 +1382,9 @@
 
   function resetForm() {
     clearInterval(pollTimer);
-    currentJobId = null;
-    selectedFile = null;
+    currentJobId     = null;
+    selectedFile     = null;
+    selectedTextGrid = null;
 
     dropZone.classList.remove('has-file');
     document.getElementById('drop-primary').textContent     = 'Drop audio here or click to browse';
@@ -1191,11 +1392,26 @@
     document.getElementById('drop-filename').style.display  = 'none';
     fileInput.value = '';
 
+    tgDropZone.classList.remove('has-file');
+    document.getElementById('textgrid-drop-primary').textContent     = 'Drop TextGrid here or click to browse';
+    document.getElementById('textgrid-drop-secondary').style.display = '';
+    document.getElementById('textgrid-drop-filename').style.display  = 'none';
+    tgFileInput.value = '';
+
+    // Reset all step toggles to their defaults (all on)
+    ['transcription', 'alignment', 'formants'].forEach(id => {
+      stepActive[id] = true;
+      document.getElementById('toggle-' + id).classList.add('checked');
+      document.getElementById('body-'   + id).classList.remove('collapsed');
+    });
+    document.getElementById('textgrid-upload-section').style.display = 'none';
+    document.getElementById('step-warning').style.display = 'none';
+    updateTextGridHint();
+
     const btn = document.getElementById('submit-btn');
     btn.disabled    = false;
     btn.textContent = 'Submit';
 
-    updateTrack(0);
     inDocs = false;
     showState('form');
   }
