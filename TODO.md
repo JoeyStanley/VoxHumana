@@ -76,6 +76,13 @@ The OOV words file (oovs_found.txt) is a natural trigger for this workflow —
 if the user sees OOV words they recognize as errors, they can correct the
 transcript and resubmit from MFA without paying the Whisper cost again.
 
+**Note for implementation**: the orphaned audio cleanup logic (which deletes audio
+files from jobs that have no newfave_output/) will need to be updated when Trolley
+mode is built. A Trolley job legitimately has audio but no newfave_output at the
+start of the run — so the cleanup must be aware of job status (e.g. check the
+in-memory jobs dict, or a status file on disk) rather than just looking at
+which output folders exist.
+
 ---
 
 ## MFA: OOV words file and custom dictionaries
@@ -141,22 +148,10 @@ The `initial_prompt` field is wired up and working. Possible future enhancements
 
 ---
 
-## Formant ceiling and number-of-formants overrides (not yet wired up)
+## Formant ceiling and number-of-formants overrides ✓ (already implemented)
 
-The Advanced options panel in the UI shows these controls with a "coming soon" note and the
-inputs disabled. The backend work needed before enabling them:
-
-- **new-fave side**: confirm that `fave_audio_textgrid()` exposes formant ceiling and number
-  of formants via its `ft_config` parameter (check new-fave docs / source). If so, build a
-  small config dict to pass those values through.
-- **API side** (`web/app.py`): accept `formant_ceiling` and `num_formants` as `Form(...)` fields
-  in `create_job()`, validate them (integers/floats in sane ranges), and populate
-  `config["newfave"]` rather than leaving it `{}`.
-- **JS side** (`web/static/index.html`): re-enable the inputs (remove `disabled` and
-  `pointer-events:none`), and append the values to `FormData` alongside the other fields.
-- Once wired up, remove the `.adv-coming-soon` note and update `help-formants.md` to describe
-  the settings properly (typical values: 4500–5000 Hz men, 5000–5500 Hz women; 4 formants
-  standard, 5 useful for high-pitched voices).
+Inputs are enabled in the UI, wired through the API, passed to new-fave via
+`ft_config.yml`, and documented in `help-formants.md`. No further work needed.
 
 ---
 
@@ -252,6 +247,14 @@ Make sure they're all there, that they are organized by job (Whisper, MFA, new-f
 ## User Guide tab (does not exist yet — needs to be built)
 Add a "User Guide" tab to the UI (alongside the main upload form). Content to include:
 
+### Privacy notice
+Make clear that VoxHumana respects the sensitivity of sociolinguistic recordings:
+  - All processing happens entirely on BYU's server — your audio is never sent to
+    OpenAI or any other external service. Whisper, MFA, and new-fave all run locally.
+  - Uploaded audio is deleted from the server as soon as processing finishes.
+  - Result files are available for download for 72 hours, then deleted.
+  - No audio or transcripts are retained, shared, or used for any other purpose.
+
 ### If your file is over 1 GB
 Preferred: split the recording into segments.
   - Recommended tool: Audacity (free) — File > Export > Export Multiple, split by time
@@ -276,33 +279,51 @@ Options:
     and lets you run on your own hardware with a GPU.
   - Contact the lab for access to a GPU-equipped server if you have many recordings.
 
+## Security audit (not yet done)
+
+VoxHumana handles sensitive sociolinguistic data — identifiable voices and personal
+conversations from research participants. A dedicated security review should be done
+before the tool is opened to broad public use. Key areas to audit:
+
+- **Data in transit**: confirm all traffic runs over HTTPS (no HTTP fallback). Audio
+  uploads and result downloads should never travel unencrypted.
+- **Job directory access**: verify that `data/jobs/` cannot be accessed directly via
+  URL — only through the API endpoints. Check this holds after any nginx/proxy config
+  changes. (Currently confirmed safe — only `web/static/` is mounted as static.)
+- **Audio deletion**: confirm the audio file is always deleted after processing,
+  including on pipeline failure. Orphan cleanup (end-of-job sweep) is now implemented
+  but should be verified under crash conditions.
+- **On-server processing**: all three tools (Whisper, MFA, new-fave) run entirely
+  locally — audio never leaves the server. This should be stated explicitly in the
+  User Guide and privacy notice.
+- **Job ID guessability**: job IDs are now YYMMDD_Stop1_Stop2 (~1,190 combinations
+  per day). A determined person could enumerate today's IDs. Consider whether result
+  downloads need any additional authentication (e.g. a one-time token) if the tool
+  is used for sensitive studies.
+- **Upload validation**: confirm that only audio files can be uploaded (check MIME
+  type and extension), and that the 1 GB size limit is enforced server-side.
+
+---
+
 ## File management and security (partially done — needs completion)
 
-### What's already cleaned up
-After every job (success or failure), the pipeline now deletes the large intermediates
-that are no longer needed: the uploaded audio file, `mfa_corpus/` (copy of audio),
-and `mfa_temp/` (MFA working data). This recovers 1–3 GB per job immediately.
+### What's already done
+- Large intermediates deleted after every job: uploaded audio, `mfa_corpus/`,
+  `mfa_temp/`. This recovers 1–3 GB per job immediately.
+- Orphaned audio cleanup: at the end of each completed job, a sweep deletes audio
+  files from any job directory that has no results (i.e. jobs that were running when
+  the server last crashed). See Trolley mode caveat in that TODO item.
+- No world-readable job directories: confirmed — only `web/static/` is served
+  statically; `data/jobs/` is API-only.
 
 ### What still needs to be done
-- **Result files expire**: job result directories (`data/jobs/<uuid>/`) currently
-  accumulate forever. Once a user has downloaded their results (or after a set
-  retention window, e.g. 24–48 hours), the entire job directory should be deleted.
-  Coordinate with the logging system below — logs must be written to `data/logs/`
-  *before* the job directory is removed, so the record survives cleanup.
+- **Result files expire**: job result directories accumulate forever. Once a user
+  has downloaded their results (or after 72 hours), the entire job directory should
+  be deleted. Coordinate with the logging system — logs must be written to
+  `data/logs/` *before* the job directory is removed.
 
 - **Logs live separately**: job logs (`data/logs/`) must never be deleted as part
-  of job directory cleanup. They are the audit trail. Keep them indefinitely (or
-  archive to cold storage after a year).
-
-- **Uploaded audio is sensitive**: sociolinguistic recordings contain identifiable
-  voices and personal conversations. The audio file is already deleted as soon as
-  the pipeline finishes, which is correct. Verify this holds even if the server
-  crashes mid-job (on restart, scan for job dirs that have an audio file but no
-  `error.log` and no results — these are orphaned and should be cleaned up).
-
-- **No world-readable job directories**: confirm that `data/jobs/` is not served
-  as a static directory. Currently it is not (only `web/static/` is mounted), but
-  double-check this after any nginx or static-file config changes.
+  of job directory cleanup. They are the audit trail.
 
 ---
 

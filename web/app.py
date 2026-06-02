@@ -81,6 +81,33 @@ def _cleanup_intermediates(job_dir: Path, audio_path: Path) -> None:
             shutil.rmtree(d)
 
 
+_AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif"}
+
+def _cleanup_orphaned_audio() -> None:
+    """Delete uploaded audio files left behind by jobs that never completed.
+
+    If the server crashed while a job was running, the audio file may have
+    survived cleanup. We identify orphaned jobs as any job directory that
+    has an audio file at the top level but no newfave_output/ folder.
+
+    Called at the end of every completed job so orphans from a previous crash
+    are caught as soon as the server is back in use.
+
+    NOTE: when Trolley mode is implemented this logic must be revisited —
+    Trolley jobs will legitimately have audio without newfave_output/ at the
+    start of their run. See the Trolley TODO item for details.
+    """
+    for job_dir in JOBS_DIR.iterdir():
+        if not job_dir.is_dir():
+            continue
+        if (job_dir / "newfave_output").exists():
+            continue  # completed normally
+        for f in job_dir.iterdir():
+            if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS:
+                f.unlink(missing_ok=True)
+                break
+
+
 def _get_mfa_version(conda_env: str) -> str:
     """Return the MFA version string from the conda env, or 'unknown'."""
     try:
@@ -393,6 +420,7 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         )
     finally:
         _cleanup_intermediates(job_dir, audio_path)
+        _cleanup_orphaned_audio()
 
 
 @app.post("/api/jobs")
