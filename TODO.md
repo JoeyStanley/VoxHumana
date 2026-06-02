@@ -327,22 +327,15 @@ before the tool is opened to broad public use. Key areas to audit:
 
 ---
 
-## Job logging system (does not exist yet — ask Claude before building)
-Currently, errors are written to `data/jobs/<job_id>/error.log` and the job ID is
-shown to the user on the error screen. That's a stopgap. The full system should:
+## Job logging system ✓ (implemented)
+Every job (success or failure) now writes a server-side log to:
 
-### Log structure
-Every job (success or failure) should produce a log file, not just errors.
-Organize logs outside the job directories so they persist even after job cleanup:
+  data/logs/YYYY-MM/<job_id>.txt
 
-  data/logs/
-    2026-05/
-      2026-05-26/
-        260526_Bourdon_Flute.txt
-        260526_Krummhorn_Celeste.txt
-
-Each .txt file should contain: datetime, job ID, original filename, config used,
-step-by-step timestamps, final status, and full traceback on error.
+Each file contains: job ID, filename, submitted/completed timestamps, total
+duration, per-step timings, all settings used, tool versions, final status,
+and full error traceback on failure. Logs are stored outside job directories
+and are never deleted by the result cleanup sweep.
 
 ### Human-readable job codes ✓ (implemented)
 Job IDs are now in the format YYMMDD_Stop1_Stop2, e.g. 260601_Bourdon_Flute.
