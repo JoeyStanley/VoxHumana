@@ -982,9 +982,8 @@
     <div class="results-view">
       <div class="success-mark">✓</div>
       <div class="results-title">Processing complete</div>
-      <div class="results-note">
-        Your results are ready. The download includes the Whisper transcript, MFA-aligned TextGrid,
-        and new-fave formant measurements.
+      <div class="results-note" id="results-note">
+        Your results are ready.
       </div>
       <div class="results-actions">
         <button class="btn" id="download-btn" onclick="downloadResults()">Download results</button>
@@ -1150,6 +1149,17 @@
     fn.style.display = 'block';
   }
 
+  // ─── TextGrid upload hint ─────────────────────────────────────────────────────
+  function updateTextGridHint() {
+    const el = document.getElementById('textgrid-drop-secondary');
+    if (!el) return;
+    if (stepActive.alignment) {
+      el.textContent = '.TextGrid — one interval per utterance';
+    } else {
+      el.textContent = '.TextGrid — word and phone tiers';
+    }
+  }
+
   // ─── Advanced toggle ──────────────────────────────────────────────────────────
   function toggleAdvanced(id) {
     document.getElementById('adv-toggle-' + id).classList.toggle('open');
@@ -1168,10 +1178,11 @@
       toggleStep('formants');
     }
 
-    // Unchecking Transcribe shows the TextGrid upload zone
+    // Unchecking Transcribe shows the TextGrid upload zone; also update hint when Align changes
     if (id === 'transcription') {
       document.getElementById('textgrid-upload-section').style.display = nowActive ? 'none' : '';
     }
+    updateTextGridHint();
   }
 
   // ─── Submit ───────────────────────────────────────────────────────────────────
@@ -1190,17 +1201,21 @@
 
     const form = document.getElementById('vxh-form');
     const data = new FormData();
-    data.append('audio',          selectedFile);
+    data.append('audio',                     selectedFile);
+    if (selectedTextGrid) data.append('textgrid', selectedTextGrid);
     data.append('whisper_model',             form.whisper_model.value);
     data.append('language',                  form.language.value);
     data.append('initial_prompt',            form.initial_prompt.value);
     data.append('condition_on_previous_text', form.condition_on_previous_text.checked);
     data.append('acoustic_model',            form.acoustic_model.value);
     data.append('fine_tune',                 form.fine_tune.checked);
-    data.append('dictionary',               form.dictionary.value);
+    data.append('dictionary',                form.dictionary.value);
     data.append('formant_ceiling',           form.formant_ceiling.value);
     data.append('num_formants',              form.num_formants.value);
     data.append('include_overlaps',          form.include_overlaps.checked);
+    data.append('run_transcription',         stepActive.transcription);
+    data.append('run_alignment',             stepActive.alignment);
+    data.append('run_formants',              stepActive.formants);
 
     try {
       const res  = await fetch('/api/jobs', { method: 'POST', body: data });
@@ -1295,7 +1310,18 @@
     // Show track only during processing/results, never on the form or docs
     const showTrack = !d && state !== 'form';
     document.getElementById('pipeline-track').style.display = showTrack ? '' : 'none';
-    if (state === 'done' && !d) updateTrack(5);
+    if (state === 'done' && !d) {
+      updateTrack(5);
+      const parts = [];
+      if (stepActive.transcription) parts.push('the Whisper transcript');
+      if (stepActive.alignment)     parts.push('the MFA-aligned TextGrid');
+      if (stepActive.formants)      parts.push('new-fave formant measurements');
+      const list = parts.length === 1 ? parts[0]
+                 : parts.length === 2 ? parts[0] + ' and ' + parts[1]
+                 : parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1];
+      document.getElementById('results-note').textContent =
+        'Your results are ready. The download includes ' + list + '.';
+    }
   }
 
   function showDocs(tab) {
