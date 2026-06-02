@@ -317,13 +317,14 @@ before the tool is opened to broad public use. Key areas to audit:
   statically; `data/jobs/` is API-only.
 
 ### What still needs to be done
-- **Result files expire**: job result directories accumulate forever. Once a user
-  has downloaded their results (or after 72 hours), the entire job directory should
-  be deleted. Coordinate with the logging system — logs must be written to
-  `data/logs/` *before* the job directory is removed.
-
 - **Logs live separately**: job logs (`data/logs/`) must never be deleted as part
-  of job directory cleanup. They are the audit trail.
+  of job directory cleanup. They are the audit trail. ✓ Already the case —
+  logs are written to `data/logs/` and `_expire_old_jobs()` only touches `data/jobs/`.
+
+### What's now done
+- **Result files expire** ✓: job directories are deleted after 72 hours by
+  `_expire_old_jobs()`, called at the end of every job. Retention window is
+  controlled by the `JOB_RETENTION_HOURS` constant in `web/app.py`.
 
 ---
 

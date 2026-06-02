@@ -29,6 +29,7 @@ from pipeline.extract_with_newfave import extract_with_newfave
 app = FastAPI(title="VoxHumana")
 
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
+JOB_RETENTION_HOURS = 72
 
 BASE_DIR = Path(__file__).parent.parent
 JOBS_DIR = BASE_DIR / "data" / "jobs"
@@ -85,6 +86,27 @@ def _cleanup_intermediates(job_dir: Path, audio_path: Path) -> None:
 
 
 _AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif"}
+
+
+def _expire_old_jobs() -> None:
+    """Delete job result directories older than JOB_RETENTION_HOURS.
+
+    Uses the directory's last-modified time as the clock — this is set when
+    the final output files are written, so it accurately reflects when the
+    job finished. The in-memory jobs dict is also pruned so the server doesn't
+    serve stale status for expired jobs.
+
+    Logs in data/logs/ are stored separately and are never touched here.
+    """
+    import time
+    cutoff = time.time() - JOB_RETENTION_HOURS * 3600
+    for job_dir in JOBS_DIR.iterdir():
+        if not job_dir.is_dir():
+            continue
+        if job_dir.stat().st_mtime < cutoff:
+            shutil.rmtree(job_dir, ignore_errors=True)
+            jobs.pop(job_dir.name, None)
+
 
 def _cleanup_orphaned_audio() -> None:
     """Delete uploaded audio files left behind by jobs that never completed.
@@ -582,6 +604,7 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         )
         _cleanup_intermediates(job_dir, audio_path)
         _cleanup_orphaned_audio()
+        _expire_old_jobs()
 
 
 @app.post("/api/jobs")
