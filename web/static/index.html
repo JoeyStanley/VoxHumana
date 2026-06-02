@@ -264,6 +264,21 @@
       background: #fdf9f2;
     }
     .upload-zone.has-file { border-color: var(--pbl); background: #fdf9f2; }
+    .upload-zone.flash-error {
+      border-color: #d4856a;
+      border-style: solid;
+      background: #fff5f0;
+      transition: border-color 0s, background 0s;
+      animation: shake 0.4s ease;
+    }
+    @keyframes shake {
+      0%        { transform: translateX(0); }
+      20%       { transform: translateX(-8px); }
+      40%       { transform: translateX(7px); }
+      60%       { transform: translateX(-5px); }
+      80%       { transform: translateX(4px); }
+      100%      { transform: translateX(0); }
+    }
     .upload-icon-row {
       display: flex;
       justify-content: center;
@@ -1199,8 +1214,15 @@
     event.preventDefault();
 
     if (!selectedFile) {
-      dropZone.classList.add('drag-over');
-      setTimeout(() => dropZone.classList.remove('drag-over'), 600);
+      dropZone.classList.add('flash-error');
+      setTimeout(() => dropZone.classList.remove('flash-error'), 800);
+      return;
+    }
+
+    const textGridRequired = !stepActive.transcription && (stepActive.alignment || stepActive.formants);
+    if (textGridRequired && !selectedTextGrid) {
+      tgDropZone.classList.add('flash-error');
+      setTimeout(() => tgDropZone.classList.remove('flash-error'), 800);
       return;
     }
 
