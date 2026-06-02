@@ -1,11 +1,4 @@
 
-## Add a license (MIT is probably fine)
-
-- Add a `LICENSE` file to the repo root (MIT license, copyright Joey Stanley)
-- Add a one-liner to `README.md` at the bottom: `## License` + "MIT — see [LICENSE](LICENSE)"
-
----
-
 ## User Guide: single-speaker recordings
 
 Add a note to the User Guide explaining that VoxHumana is designed for single-speaker
@@ -111,6 +104,27 @@ Consider whether to allow this alongside or instead of the built-in dictionaries
 
 ---
 
+## TextGrid upload: requirements and documentation (needed for Trolley mode)
+
+When Transcribe is unchecked, VoxHumana shows a TextGrid upload zone so the user can supply
+their own transcript for MFA. Before wiring this to the backend, carefully establish and document
+what that TextGrid must look like:
+
+- What tier name does MFA expect? (Currently `convert_whisper_to_textgrid` creates an `utterances` tier.)
+- Does MFA require non-empty intervals only, or does it handle empty/silence intervals?
+- What happens if the TextGrid duration doesn't match the audio duration?
+- Should the UI validate the uploaded file beyond checking the `.TextGrid` extension?
+- Write a clear help drawer entry (help-audio.md or a new help-textgrid.md) that explains:
+  - The expected format (Praat long TextGrid, one utterance tier)
+  - How to export from Praat
+  - Common mistakes (wrong tier name, mismatched duration, overlapping intervals)
+
+Also update the backend: the `/api/jobs` endpoint currently expects audio only. When a TextGrid
+is uploaded, it should be placed in `whisper_output/{stem}.TextGrid` so that `align_with_mfa`
+finds it in the expected location without any further changes to that module.
+
+---
+
 ## Multi-language support (coming soon — blocked on MFA)
 
 The Whisper transcription step already supports any language via the `language` parameter,
@@ -148,13 +162,6 @@ The `initial_prompt` field is wired up and working. Possible future enhancements
 
 ---
 
-## Formant ceiling and number-of-formants overrides ✓ (already implemented)
-
-Inputs are enabled in the UI, wired through the API, passed to new-fave via
-`ft_config.yml`, and documented in `help-formants.md`. No further work needed.
-
----
-
 ## Email notification + close-tab workflow (not yet built)
 
 The email field and notification section have been removed from the UI for now.
@@ -187,6 +194,10 @@ The full intended workflow, when built:
 ### Privacy wording (for the UI)
 "Your email is used to deliver your results and is recorded in our job log alongside
 your Job ID. It is not shared or used for any other purpose."
+
+### Shut down when tab closes
+Currently, the processing continues after closing the tab. If the email thing doesn't
+happen soon, I should fix that so that canceled jobs don't clog the queue.
 
 ---
 
@@ -360,3 +371,9 @@ contacting the lab.
   - Whether logs should be plain .txt or structured (JSON, CSV) for easier parsing
   - When and how to clean up job directories after a job completes — how long
     to keep results available for download?
+
+## Alpha/Beta testing
+
+* Valerie Freeman
+* Peggy Renwick
+* Dan Villarreal
