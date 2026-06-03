@@ -993,6 +993,7 @@
         Processing time scales with recording length — a 1-hour interview may take up to an hour.
         Keep this tab open; the page will update automatically when results are ready.
       </div>
+      <div class="progress-note" style="margin-top:6px">Job ID: <code id="running-job-id"></code></div>
     </div>
   </div>
 
@@ -1004,6 +1005,7 @@
       <div class="results-note" id="results-note">
         Your results are ready.
       </div>
+      <div class="results-note" style="margin-top:4px">Job ID: <code id="done-job-id"></code></div>
       <div class="results-actions">
         <button class="btn" id="download-btn" onclick="downloadResults()">Download results</button>
         <button class="btn-outline" onclick="resetForm()">Submit another file</button>
@@ -1256,6 +1258,7 @@
       buildPipelineTrack();
       showState('running');
       document.getElementById('progress-filename').textContent = selectedFile.name;
+      document.getElementById('running-job-id').textContent = currentJobId;
       startPolling();
     } catch (err) {
       btn.disabled    = false;
@@ -1280,6 +1283,7 @@
 
       if (job.status === 'done') {
         clearInterval(pollTimer);
+        document.getElementById('done-job-id').textContent = currentJobId || '(unavailable)';
         showState('done');
       } else if (job.status === 'error') {
         clearInterval(pollTimer);

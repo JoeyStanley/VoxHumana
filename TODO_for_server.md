@@ -361,6 +361,3 @@ Or read a log in-place over SSH without copying it:
 ```bash
 ssh vxhuser@your-server "cat /path/to/VoxHumana/data/logs/2026-06/260601_Bourdon_Flute.txt"
 ```
-
-The job ID is shown to users on the error screen and the download screen, so
-when someone emails with a problem, ask them for their job ID first.
