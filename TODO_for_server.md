@@ -101,12 +101,12 @@ uv run python -c "import whisper; [whisper.load_model(m) for m in ['small','medi
 
 ## 5. Directory setup
 
-The `data/jobs/` directory is created automatically by the app on startup, but
-verify the server user has write permissions:
+`data/jobs/` and `data/logs/` are both created automatically by the app on
+startup, but verify the server user has write permissions:
 
 ```bash
-mkdir -p data/jobs
-chmod 755 data/jobs
+mkdir -p data/jobs data/logs
+chmod 755 data/jobs data/logs
 ```
 
 If running as a dedicated service user (recommended), ensure that user owns the
@@ -229,23 +229,36 @@ Let's Encrypt. Check with BYU IT before proceeding.
 
 ## 10. Disk space management
 
-Each completed job leaves behind:
-- `mfa_corpus/`  — copy of the uploaded audio (~same size as upload)
+Cleanup runs automatically — no manual intervention needed under normal operation.
+
+**Immediately after every job completes** (success or failure), the app deletes:
+- The uploaded audio file
+- `mfa_corpus/`  — copy of the audio used as MFA input (~same size as upload)
 - `mfa_temp/`    — MFA working files (can be large; ~2–5× audio size)
-- `mfa_output/`  — aligned TextGrid (small)
-- `newfave_output/` — formant data (small)
-- `transcript.json`, `transcript.TextGrid` (small)
-- `error.log` (if job failed)
 
-A 500 MB audio upload can produce 2–3 GB of job data. With no cleanup, disk fills
-quickly under real use.
+This recovers 1–3 GB per job right away.
 
-TODO: Job cleanup is not yet implemented. See TODO.md for the planned logging and
-cleanup system. Until it is built, manually prune old jobs:
-```bash
-# Delete job directories older than 7 days
-find data/jobs/ -maxdepth 1 -mindepth 1 -type d -mtime +7 -exec rm -rf {} +
-```
+**What remains in the job directory after cleanup:**
+- `whisper_output/`  — Whisper JSON, plain-text transcript, utterance TextGrid (small)
+- `mfa_output/`      — word/phone-aligned TextGrid, `oovs_found.txt` if any (small)
+- `newfave_output/`  — formant CSVs (small)
+- `processing_log.txt` — per-job log included in the user's download zip (small)
+- `error.log`        — full traceback, only present if the job failed (small)
+
+**Job directories expire automatically** after 72 hours. At the end of every job,
+`_expire_old_jobs()` sweeps `data/jobs/` and deletes any directory whose
+last-modified time is older than the `JOB_RETENTION_HOURS` constant (currently 72).
+
+**Server logs are permanent.** Every job writes two logs to `data/logs/`, which is
+outside `data/jobs/` and is never touched by the cleanup sweep:
+- `data/logs/YYYY-MM/<job_id>.txt` — full diagnostic log (settings, timings, errors)
+- `data/logs/summary.jsonl`        — one JSON line per job for analytics
+
+Monitor `data/logs/` growth over time. At ~1 KB per job, it takes many thousands
+of jobs to become significant, but it is never auto-deleted.
+
+If the server crashes mid-job, orphaned audio files (uploaded audio with no
+completed output) are detected and deleted the next time any job finishes.
 
 ---
 
@@ -256,11 +269,17 @@ Run a test job end-to-end using the CLI (no web server needed):
 uv run python main.py data/test1/UT007-Aiden.wav data/test_deploy_check
 ```
 
-Expected output:
-- `data/test_deploy_check/transcript.json` — Whisper transcript
-- `data/test_deploy_check/transcript.TextGrid` — utterance boundaries
-- `data/test_deploy_check/mfa_output/audio.TextGrid` — word/phone alignment
+Expected output (the CLI does not clean up intermediates, so all folders will be present):
+- `data/test_deploy_check/whisper_output/UT007-Aiden.json` — Whisper transcript
+- `data/test_deploy_check/whisper_output/UT007-Aiden.txt` — plain-text transcript
+- `data/test_deploy_check/whisper_output/UT007-Aiden.TextGrid` — utterance boundaries
+- `data/test_deploy_check/mfa_corpus/` — MFA input copy (large; safe to delete after testing)
+- `data/test_deploy_check/mfa_temp/` — MFA working files (large; safe to delete after testing)
+- `data/test_deploy_check/mfa_output/UT007-Aiden.TextGrid` — word/phone alignment
+- `data/test_deploy_check/mfa_output/oovs_found.txt` — OOV words (if any)
 - `data/test_deploy_check/newfave_output/` — formant CSV files
+
+Note: `processing_log.txt` and server logs are only written by the web app, not the CLI.
 
 Then verify the web server is reachable and can accept a job via the browser.
 
@@ -268,14 +287,80 @@ Then verify the web server is reachable and can accept a job via the browser.
 
 ## 12. Updating VoxHumana
 
+After every update, the minimum steps are:
+
 ```bash
 git pull origin main
-uv sync          # picks up any new dependencies
+uv sync                          # installs any new Python dependencies
 sudo systemctl restart voxhumana
 ```
 
-If MFA models are updated (new version of english_us_arpa, etc.):
+`uv sync` reads the committed `uv.lock` file and brings the environment into
+exact agreement with it — new packages are installed, removed packages are
+uninstalled. No manual pip commands needed.
+
+**Check the CHANGELOG before restarting.** Some updates require extra steps
+beyond `uv sync`. After each pull, skim `CHANGELOG.md` for notes flagged as
+requiring manual action. Common cases:
+
+- **New MFA acoustic model or dictionary** (e.g., adding a new language):
+  ```bash
+  conda run -n aligner mfa model download acoustic <model_name>
+  conda run -n aligner mfa model download dictionary <model_name>
+  ```
+
+- **New Whisper model size added as a user option**: pre-download it so the
+  first user doesn't wait:
+  ```bash
+  uv run python -c "import whisper; whisper.load_model('<model_name>')"
+  ```
+
+- **New system package required**: check the CHANGELOG note and install via
+  `apt` before restarting.
+
+If the CHANGELOG doesn't flag anything extra, `git pull && uv sync && restart`
+is all that's needed.
+
+---
+
+## 13. Accessing log files
+
+Every job writes a diagnostic log to `data/logs/` on the server. When users
+report problems, you'll need these to diagnose what went wrong.
+
+**Log locations on the server:**
+- `data/logs/YYYY-MM/<job_id>.txt` — full log for one job (settings, step
+  timings, tool versions, full error traceback if it failed)
+- `data/logs/summary.jsonl`        — one JSON line per job, all-time
+
+**Granting Joey SSH access [ONE-TIME]:**
+
+Add Joey's public key to the server user's authorized keys:
 ```bash
-conda run -n aligner mfa model download acoustic english_us_arpa
-conda run -n aligner mfa model download dictionary english_us_arpa
+# On the server, as the vxhuser (or ask IT to do this):
+mkdir -p ~/.ssh
+echo "<joey's public key>" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
 ```
+
+Joey's public key is at `~/.ssh/id_ed25519.pub` (or `id_rsa.pub`) on his
+machine. Run `cat ~/.ssh/id_ed25519.pub` locally to get it.
+
+**Reading logs remotely:**
+
+Once SSH access is set up, Joey can pull logs to his local machine with:
+```bash
+# Pull all logs for a given month
+scp -r vxhuser@your-server:/path/to/VoxHumana/data/logs/2026-06 ~/vxh_logs/
+
+# Or pull a single job's log by job ID
+scp vxhuser@your-server:/path/to/VoxHumana/data/logs/2026-06/260601_Bourdon_Flute.txt .
+```
+
+Or read a log in-place over SSH without copying it:
+```bash
+ssh vxhuser@your-server "cat /path/to/VoxHumana/data/logs/2026-06/260601_Bourdon_Flute.txt"
+```
+
+The job ID is shown to users on the error screen and the download screen, so
+when someone emails with a problem, ask them for their job ID first.
