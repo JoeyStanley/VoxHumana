@@ -18,6 +18,8 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+import uuid
+
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -752,6 +754,8 @@ async def create_job(
         },
     }
 
+    download_token = uuid.uuid4().hex
+
     jobs[job_id] = {
         "status": "running",
         "step": 0,
@@ -760,11 +764,12 @@ async def create_job(
         "uploaded_files": uploaded_files,
         "audio_filename": audio_path.name,
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "download_token": download_token,
     }
 
     executor.submit(_run_pipeline, job_id, audio_path, config)
 
-    return JSONResponse({"job_id": job_id})
+    return JSONResponse({"job_id": job_id, "download_token": download_token})
 
 
 @app.get("/api/jobs/{job_id}")
@@ -775,9 +780,11 @@ async def get_job(job_id: str):
 
 
 @app.get("/api/jobs/{job_id}/download")
-async def download_results(job_id: str):
+async def download_results(job_id: str, token: str = ""):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
+    if token != jobs[job_id].get("download_token", ""):
+        raise HTTPException(status_code=403, detail="Invalid download token")
     if jobs[job_id]["status"] != "done":
         raise HTTPException(status_code=400, detail="Job not complete")
 

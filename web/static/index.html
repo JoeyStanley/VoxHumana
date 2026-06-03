@@ -1113,7 +1113,8 @@
   // ─── State ────────────────────────────────────────────────────────────────────
   let selectedFile     = null;
   let selectedTextGrid = null;
-  let currentJobId     = null;
+  let currentJobId        = null;
+  let currentDownloadToken = null;
   let pollTimer        = null;
   let inDocs           = false;
   let appViewState     = 'form';
@@ -1254,7 +1255,8 @@
       const res  = await fetch('/api/jobs', { method: 'POST', body: data });
       const body = await res.json();
       if (!res.ok) throw new Error(body.detail || 'Submission failed');
-      currentJobId = body.job_id;
+      currentJobId         = body.job_id;
+      currentDownloadToken = body.download_token;
       buildPipelineTrack();
       showState('running');
       document.getElementById('progress-filename').textContent = selectedFile.name;
@@ -1330,7 +1332,7 @@
 
   // ─── Download ─────────────────────────────────────────────────────────────────
   function downloadResults() {
-    window.location.href = `/api/jobs/${currentJobId}/download`;
+    window.location.href = `/api/jobs/${currentJobId}/download?token=${currentDownloadToken}`;
   }
 
   // ─── View switching ───────────────────────────────────────────────────────────
@@ -1386,7 +1388,8 @@
 
   function resetForm() {
     clearInterval(pollTimer);
-    currentJobId     = null;
+    currentJobId         = null;
+    currentDownloadToken = null;
     selectedFile     = null;
     selectedTextGrid = null;
 
