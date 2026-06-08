@@ -9,11 +9,29 @@ of formant measurements without having to download software or code anything you
 
 Every recording submitted to VxH goes through three steps:
 
-1. **Transcription** — [Whisper](https://openai.com/index/whisper/) converts your audio to text with word-level timestamps.
+1. **Transcription** — [Whisper](https://openai.com/index/whisper/) converts your audio to text with utterance-level timestamps.
 2. **Forced alignment** — [Montreal Forced Aligner (MFA)](https://montreal-forced-aligner.readthedocs.io) gets the precise start and end time of every word and phone.
 3. **Formant extraction** — [new-fave](https://forced-alignment-and-vowel-extraction.github.io/new-fave/) measures F1, F2, F3, and F4 for every vowel token.
 
-The result is a CSV of vowel measurements ready for analysis in R, Python, or other statistical software.
+## Output
+
+Results are delivered as a zip file containing:
+
+| File | Contents |
+|------|----------|
+| `*_points.csv` | One row per vowel token — the main file for most analyses |
+| `*_tracks.csv` | Formant trajectories across each vowel (multiple time points per token) |
+| `*_param.csv` | DCT coefficients of the formant tracks (Hz scale) |
+| `*_logparam.csv` | DCT coefficients of the formant tracks (log Hz scale) |
+| `*_recoded.TextGrid` | Praat TextGrid with vowels relabeled in Labov vowel-class notation |
+| `processing_log.txt` | Full record of every parameter used and how to replicate the run offline |
+| `oovs_found.txt` | Words not found in MFA's dictionary (included only if any were found) |
+
+Output files are organized into subdirectories by pipeline step (`whisper_output/`, `mfa_output/`, `newfave_output/`).
+
+## Privacy
+
+All processing happens entirely on BYU's server — your audio is never sent to OpenAI or any other external service. Whisper, MFA, and new-fave all run locally. Uploaded audio is deleted from the server as soon as processing finishes. Result files are available for download for 72 hours, then deleted automatically. No audio or transcripts are retained, shared, or used for any other purpose.
 
 ## Comparison to DARLA
 
@@ -32,6 +50,8 @@ VoxHumana runs as a local web server. You will need:
 - Python 3.13+
 - [ffmpeg](https://ffmpeg.org) (`brew install ffmpeg` on Mac, `apt install ffmpeg` on Linux)
 - [Montreal Forced Aligner](https://montreal-forced-aligner.readthedocs.io) (installed separately via conda — see MFA docs)
+
+Accepted audio formats: `.wav`, `.mp3`, `.flac`, `.ogg`, `.m4a`, `.aiff`. Maximum file size: 1 GB.
 
 ```bash
 git clone https://github.com/JoeyStanley/VoxHumana.git
