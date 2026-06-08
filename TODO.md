@@ -53,28 +53,42 @@ detection logic before advertising this option to users.
 
 ---
 
-## "Trolley" mode: skip Whisper and go straight to MFA (not yet built)
+## "Trolley" mode: skip pipeline steps and supply your own files ✓ (implemented)
 
-A future workflow for power users: allow uploading a corrected transcript
-(e.g. a manually edited version of Whisper's output) alongside the audio,
-skipping the Whisper step entirely and feeding the corrected text straight
-into MFA. This is useful when:
-  - Whisper made errors that affected alignment quality (e.g. OOV words,
-    proper nouns, dialect forms)
-  - The user already has a transcript from another source
-  - The user wants to iterate: run the full pipeline once, fix Whisper's
-    output, then rerun from MFA onward without re-transcribing
+Power users can now skip any combination of pipeline steps and supply their own
+intermediate files instead of paying for the earlier steps to run again:
+  - **Skip Transcription**: upload a corrected/manual transcript as a TextGrid;
+    VxH routes it to `whisper_output/` so MFA can pick it up from there.
+  - **Skip Alignment**: upload an MFA-format TextGrid directly; VxH routes it to
+    `mfa_output/` so new-fave can use it without running MFA at all.
+  - **Skip Formant extraction**: stop after alignment if you only need the TextGrid.
 
-The OOV words file (oovs_found.txt) is a natural trigger for this workflow —
-if the user sees OOV words they recognize as errors, they can correct the
-transcript and resubmit from MFA without paying the Whisper cost again.
+This covers the original motivating use case — a user runs the full pipeline once,
+notices Whisper made errors (e.g. OOV words, proper nouns, dialect forms) via the
+OOV words file or by inspecting the TextGrid, corrects the transcript, and resubmits
+from MFA onward without re-transcribing.
 
-**Note for implementation**: the orphaned audio cleanup logic (which deletes audio
-files from jobs that have no newfave_output/) will need to be updated when Trolley
-mode is built. A Trolley job legitimately has audio but no newfave_output at the
-start of the run — so the cleanup must be aware of job status (e.g. check the
-in-memory jobs dict, or a status file on disk) rather than just looking at
-which output folders exist.
+It's implemented end-to-end:
+  - The UI shows step toggles (Transcribe / Align / Extract formants) and a TextGrid
+    upload zone that appears when Transcribe is unchecked.
+  - The backend (`_run_pipeline` in `web/app.py`) reads `config["steps"]` and runs
+    only the requested steps, routes the uploaded TextGrid to the correct staging
+    folder depending on which steps are skipped, and cleans up the now-unused
+    staging folders afterward (e.g. removing `whisper_output/` if the user supplied
+    an MFA-ready TextGrid directly).
+  - The processing log documents exactly which steps ran, which were skipped, and
+    where the TextGrid came from (Whisper-generated vs. user-supplied).
+  - Orphaned-audio cleanup is Trolley-aware: it checks the in-memory `jobs` dict
+    rather than looking for specific output folders, so a Trolley job that
+    legitimately has no `whisper_output/` or `newfave_output/` isn't mistaken for
+    an orphaned/crashed job.
+
+### What's left
+- User-facing help documentation explaining what the uploaded TextGrid must look
+  like (tier names, format, common mistakes) — see the TextGrid upload help item
+  below; this is the main remaining gap.
+- Real-world testing with an actual corrected transcript containing a deliberate
+  OOV word — see the OOV words file testing note below; this is now possible.
 
 ---
 
@@ -86,12 +100,12 @@ Two related features worth adding when there is demand:
 MFA's OOV words are now extracted from its internal log and written to
 `mfa_output/oovs_found.txt`, included in the download zip when present.
 
-**Testing note**: This is difficult to test end-to-end until the Trolley feature
-exists. Whisper tends to recognize unfamiliar words as phonetically similar
-dictionary words, so true OOVs rarely make it through to MFA in normal use.
-Once the Trolley feature is built (allowing users to supply a corrected
-transcript directly), test by feeding MFA a transcript that contains a made-up
-or highly unusual word and confirming it appears in `oovs_found.txt`.
+**Testing note**: Now that Trolley mode exists (see above), this can finally be
+tested end-to-end: use the "skip Transcription" option to feed MFA a transcript
+that contains a made-up or highly unusual word, and confirm it appears in
+`oovs_found.txt`. Previously this was hard to test because Whisper tends to
+recognize unfamiliar words as phonetically similar dictionary words, so true
+OOVs rarely made it through to MFA in normal use.
 
 ### Custom dictionaries
 Power users (e.g., researchers working with a specific dialect community) may want to
@@ -104,24 +118,32 @@ Consider whether to allow this alongside or instead of the built-in dictionaries
 
 ---
 
-## TextGrid upload: requirements and documentation (needed for Trolley mode)
+## TextGrid upload: help documentation (needed for Trolley mode)
 
-When Transcribe is unchecked, VoxHumana shows a TextGrid upload zone so the user can supply
-their own transcript for MFA. Before wiring this to the backend, carefully establish and document
-what that TextGrid must look like:
+The upload zone, file-type filtering, and backend routing are all implemented (see
+"Trolley" mode above — uploaded TextGrids are routed to `whisper_output/` or
+`mfa_output/` depending on which steps are being skipped). What's still missing is
+user-facing documentation explaining what the uploaded TextGrid must actually look
+like. Before writing it, nail down the details:
 
-- What tier name does MFA expect? (Currently `convert_whisper_to_textgrid` creates an `utterances` tier.)
-- Does MFA require non-empty intervals only, or does it handle empty/silence intervals?
+- What tier name does MFA expect for an utterance-level TextGrid? (Currently
+  `convert_whisper_to_textgrid` creates an `utterances` tier — does MFA require
+  that exact name, or does it accept any single-tier TextGrid?)
+- For the "skip Alignment" path, what tier structure does new-fave expect from a
+  user-supplied MFA-format TextGrid (Word tier, Phone tier, naming conventions)?
+- Does MFA/new-fave require non-empty intervals only, or do they handle
+  empty/silence intervals gracefully?
 - What happens if the TextGrid duration doesn't match the audio duration?
-- Should the UI validate the uploaded file beyond checking the `.TextGrid` extension?
-- Write a clear help drawer entry (help-audio.md or a new help-textgrid.md) that explains:
-  - The expected format (Praat long TextGrid, one utterance tier)
-  - How to export from Praat
-  - Common mistakes (wrong tier name, mismatched duration, overlapping intervals)
+- Should the UI validate the uploaded file's internal structure beyond checking
+  the `.TextGrid` extension (e.g. parse it and check tier names before submitting)?
 
-Also update the backend: the `/api/jobs` endpoint currently expects audio only. When a TextGrid
-is uploaded, it should be placed in `whisper_output/{stem}.TextGrid` so that `align_with_mfa`
-finds it in the expected location without any further changes to that module.
+Then write a clear help drawer entry (a new help-textgrid.md, linked from the
+upload zone) that explains:
+  - The expected format for each scenario (Praat long TextGrid; a single utterance
+    tier when skipping Transcription only, full Word/Phone tiers when also/instead
+    skipping Alignment)
+  - How to prepare/export one from Praat
+  - Common mistakes (wrong tier name, mismatched duration, overlapping intervals)
 
 ---
 
@@ -251,10 +273,6 @@ so that processing is completely replicable.
 
 ---
 
-## Output files
-
-Make sure they're all there, that they are organized by job (Whisper, MFA, new-fave), and that they have the original filename in them. 
-
 ## User Guide tab (does not exist yet — needs to be built)
 Add a "User Guide" tab to the UI (alongside the main upload form). Content to include:
 
@@ -316,25 +334,23 @@ before the tool is opened to broad public use. Key areas to audit:
 
 ---
 
-## File management and security (partially done — needs completion)
+## File management and security ✓ (implemented)
 
-### What's already done
-- Large intermediates deleted after every job: uploaded audio, `mfa_corpus/`,
+- **Large intermediates deleted after every job**: uploaded audio, `mfa_corpus/`,
   `mfa_temp/`. This recovers 1–3 GB per job immediately.
-- Orphaned audio cleanup: at the end of each completed job, a sweep deletes audio
-  files from any job directory that has no results (i.e. jobs that were running when
-  the server last crashed). See Trolley mode caveat in that TODO item.
-- No world-readable job directories: confirmed — only `web/static/` is served
-  statically; `data/jobs/` is API-only.
-
-### What still needs to be done
-- **Logs live separately**: job logs (`data/logs/`) must never be deleted as part
-  of job directory cleanup. They are the audit trail. ✓ Already the case —
-  logs are written to `data/logs/` and `_expire_old_jobs()` only touches `data/jobs/`.
-
-### What's now done
-- **Result files expire** ✓: job directories are deleted after 72 hours by
-  `_expire_old_jobs()`, called at the end of every job. Retention window is
+- **Orphaned audio cleanup**: at the end of each completed job, a sweep deletes
+  audio files left behind by jobs the running server doesn't know about (e.g. ones
+  that were mid-run when the server last crashed/restarted). The check is based on
+  in-memory job-dict membership rather than which output folders exist, so it
+  correctly leaves Trolley jobs alone (a Trolley job can legitimately lack
+  `whisper_output/` or `newfave_output/` and still be a normal, healthy job).
+- **No world-readable job directories**: confirmed — only `web/static/` is served
+  statically; `data/jobs/` is reachable only through the API endpoints.
+- **Logs live separately**: job logs (`data/logs/`) are written outside
+  `data/jobs/` and are never touched by the result-cleanup sweep — they remain
+  the permanent audit trail even after a job's files have expired.
+- **Result files expire**: job directories are deleted 72 hours after completion
+  by `_expire_old_jobs()`, called at the end of every job. The retention window is
   controlled by the `JOB_RETENTION_HOURS` constant in `web/app.py`.
 
 ---
@@ -367,10 +383,14 @@ The job ID is used as the job directory name and shown to the user on both the
 error screen and the success/download screen so they can reference it when
 contacting the lab.
 
-### Before building the full logging system, consider:
-  - Whether logs should be plain .txt or structured (JSON, CSV) for easier parsing
-  - When and how to clean up job directories after a job completes — how long
-    to keep results available for download?
+### Analytics summary log ✓ (implemented)
+Alongside the human-readable per-job logs, every job also appends a structured
+JSON record to `data/logs/summary.jsonl` — one line per job — covering things
+like Whisper model/language used, step durations, audio duration, final status,
+and error type on failure. This is meant to make it possible, after a few months
+of real usage, to answer questions like which features people actually use, how
+long jobs typically take, and where crashes tend to occur — without having to
+parse the prose logs by hand.
 
 ## Alpha/Beta testing
 
