@@ -41,8 +41,20 @@ FORMANT_SUPPORTED_LANGUAGES = {"en"}
 # Allowlists for MFA model/dictionary names — these values are passed
 # directly to the MFA CLI, so we validate them server-side to prevent
 # unexpected inputs. Expand as new language models are added.
-SUPPORTED_MFA_ACOUSTIC_MODELS = {"english_us_arpa", "spanish_mfa"}
-SUPPORTED_MFA_DICTIONARIES    = {"english_us_arpa", "spanish_mfa"}
+SUPPORTED_MFA_ACOUSTIC_MODELS = {
+    "english_us_arpa",
+    "french_mfa",
+    "german_mfa",
+    "portuguese_mfa",
+    "spanish_mfa",
+}
+SUPPORTED_MFA_DICTIONARIES = {
+    "english_us_arpa",
+    "french_mfa",
+    "german_mfa",
+    "portuguese_mfa",
+    "spanish_mfa",
+}
 
 BASE_DIR = Path(__file__).parent.parent
 JOBS_DIR = BASE_DIR / "data" / "jobs"
