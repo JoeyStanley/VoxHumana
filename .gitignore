@@ -5,6 +5,7 @@ reference/
 *.wav
 *.TextGrid
 *.json
+Github cheatsheet.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
