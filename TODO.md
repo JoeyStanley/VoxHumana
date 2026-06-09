@@ -147,27 +147,73 @@ upload zone) that explains:
 
 ---
 
-## Multi-language support (coming soon — blocked on MFA)
+## Multi-language support ✓ (Spanish implemented — more languages planned)
 
-The Whisper transcription step already supports any language via the `language` parameter,
-and the UI language field is wired up end-to-end. However, the forced alignment step (MFA)
-currently only has English acoustic models and dictionaries configured, so the full pipeline
-only works for English recordings. The language selector is disabled in the UI with a
-"coming soon" note until this is resolved.
+Whisper, MFA, and the UI language selector are all now wired up for multiple languages.
+Spanish (`spanish_mfa`) is the first non-English language supported: Transcription + Alignment
+work end-to-end; Formant extraction is disabled for non-English for now (see below).
 
-### What's needed to enable a new language
-1. Install the MFA acoustic model and dictionary for the target language
-   (e.g. `mfa model download acoustic spanish_mfa`, `mfa model download dictionary spanish_mfa`).
-2. Add the language option to the Alignment section dropdowns in the UI.
-3. Re-enable the Language dropdown in the Transcription section and wire language →
-   acoustic model selection (either automatically or via user choice).
+### Adding a new language (checklist)
+1. Download MFA models on the server:
+   `mfa model download acoustic <name>` and `mfa model download dictionary <name>`.
+2. Add to the two allowlists in `web/app.py`: `SUPPORTED_MFA_ACOUSTIC_MODELS` and
+   `SUPPORTED_MFA_DICTIONARIES`.
+3. Add one `<option>` to each of the three dropdowns in `web/static/index.html`
+   (Language, Acoustic model, Dictionary) and one entry to the `LANG_TO_MFA` JS map.
 4. Test end-to-end on a real recording in that language.
+
+### Planned next languages (after Spanish)
+French, Portuguese, German — to be added in a batch once each is tested individually.
+Longer-term: Italian, Dutch, Mandarin, Japanese, Korean, and others where both Whisper
+and MFA have solid models. See the language/MFA overlap table in session notes.
 
 ### Also consider
 - The `task` parameter in Whisper: setting `task="translate"` outputs an English transcript
   even for non-English audio. This could be a useful intermediate mode (transcribe → English
   → MFA with English models) before full multi-language MFA support is ready.
-- Documenting which languages MFA supports out of the box.
+
+---
+
+## Formant extraction for non-English languages (not yet implemented)
+
+new-fave is NOT purely English-only — the underlying FastTrack analysis is language-independent.
+The shipped `fasttrack_config.yml` already includes the full IPA vowel inventory in
+`target_labels`, so it would detect and measure Spanish vowels (a, e, i, o, u) correctly.
+
+### What needs to change to enable it
+
+The three parameters VxH passes to `fave_audio_textgrid` are English-specific:
+
+| Parameter | Current value | Fix for non-English |
+|---|---|---|
+| `recode_rules` | `"cmu2labov"` | `"norecode"` — identity pass-through; IPA labels preserved as-is |
+| `labelset_parser` | `"cmu_parser"` | `None` — skip CMU stress-digit parsing |
+| `point_heuristic` | `"fave"` | leave as `"fave"` — unknown labels fall back to `1/3` point, which is fine |
+
+new-fave ships a built-in `norecode` scheme specifically for this purpose.
+
+### What the output would look like
+- Vowel labels in the CSV would be IPA symbols (e.g. `a`, `e`, `i`, `o`, `u` for Spanish)
+  rather than Labov notation (`ae`, `iy`, etc.)
+- F1–F4 measurements would be acoustically valid
+- The FAVE measurement-point heuristic defaults to `1/3` through the vowel for any
+  unrecognized label — reasonable but not language-tuned
+
+### Open question: optimizer behavior
+The `vowel_place.yml` patterns drive the front/back optimization step. Some Spanish vowels
+happen to match (`e` → front, `i` → front, `o` → back) but `a` and `u` don't match
+anything. Whether this degrades the optimizer meaningfully needs a real-data test before
+shipping.
+
+### Implementation plan
+1. In `pipeline/extract_with_newfave.py` (or the config layer), branch on the MFA model
+   name: if non-English, pass `recode_rules="norecode"` and `labelset_parser=None`.
+2. Remove the formant lock-out from the UI (`syncLanguage()` in `index.html`) and the
+   backend safety net (`FORMANT_SUPPORTED_LANGUAGES` in `app.py`).
+3. Test on a real Spanish recording; check that the CSV is populated and formant values
+   are plausible.
+4. Decide whether to expose the `recode_rules` choice to power users (probably not needed
+   for most researchers).
 
 ---
 
