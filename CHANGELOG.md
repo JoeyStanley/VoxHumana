@@ -5,6 +5,8 @@ All notable changes to VoxHumana will be documented here.
 ## [Unreleased]
 
 ## [0.8.0] - 2026-06-09
+### Added 
+- Support for Spanish, French, German, and Portuguese for the Whisper and MFA steps
 
 ## [0.7.0] - 2026-06-02
 ### Added
