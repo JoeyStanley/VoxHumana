@@ -33,6 +33,17 @@ app = FastAPI(title="VoxHumana")
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 JOB_RETENTION_HOURS = 72
 
+# Languages for which new-fave formant extraction is supported.
+# new-fave requires CMU/ARPABET phonemes produced by English MFA models,
+# so formant extraction is skipped automatically for any other language.
+FORMANT_SUPPORTED_LANGUAGES = {"en"}
+
+# Allowlists for MFA model/dictionary names — these values are passed
+# directly to the MFA CLI, so we validate them server-side to prevent
+# unexpected inputs. Expand as new language models are added.
+SUPPORTED_MFA_ACOUSTIC_MODELS = {"english_us_arpa", "spanish_mfa"}
+SUPPORTED_MFA_DICTIONARIES    = {"english_us_arpa", "spanish_mfa"}
+
 BASE_DIR = Path(__file__).parent.parent
 JOBS_DIR = BASE_DIR / "data" / "jobs"
 JOBS_DIR.mkdir(parents=True, exist_ok=True)
@@ -688,6 +699,29 @@ async def create_job(
     run_alignment: bool = Form(True),
     run_formants: bool = Form(True),
 ):
+    # Validate MFA model/dictionary names against the server-side allowlist.
+    # These values go straight into the MFA CLI command, so we reject unknowns
+    # rather than pass arbitrary strings through.
+    if acoustic_model not in SUPPORTED_MFA_ACOUSTIC_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported acoustic model '{acoustic_model}'. "
+                   f"Supported: {sorted(SUPPORTED_MFA_ACOUSTIC_MODELS)}",
+        )
+    if dictionary not in SUPPORTED_MFA_DICTIONARIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported dictionary '{dictionary}'. "
+                   f"Supported: {sorted(SUPPORTED_MFA_DICTIONARIES)}",
+        )
+
+    # Safety net: new-fave formant extraction requires English MFA output
+    # (CMU/ARPABET phonemes). If a non-English language arrives with formants
+    # enabled — e.g. from a direct API call bypassing the UI guard — quietly
+    # disable the formant step rather than letting the pipeline fail mid-run.
+    if language and language not in FORMANT_SUPPORTED_LANGUAGES and run_formants:
+        run_formants = False
+
     job_id = _generate_job_id()
     while job_id in jobs:
         job_id = _generate_job_id()
