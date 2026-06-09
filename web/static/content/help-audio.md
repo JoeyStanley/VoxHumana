@@ -1,25 +1,27 @@
 ### Accepted formats
 
-WAV, MP3, FLAC, M4A, OGG, and AAC. WAV is preferred — it is uncompressed and avoids any
-quality loss from transcoding.
+WAV, MP3, FLAC, M4A, OGG, and AAC. WAV is best because it is uncompressed and usually returns 
+the best results. 
 
 ### File size
 
-Maximum upload is 1 GB. A 60-minute WAV at 44.1 kHz stereo is about 600 MB — well within
-the limit for most interviews.
+Maximum upload is 1 GB. A 60-minute WAV at 44.1 kHz stereo is about 600 MB. If you have
+a larger file, you'll need to manually split the recording into segments, run each 
+one separately, and then combine the output CSVs. Here are some instructions on how to 
+do the splitting.
 
-### Files larger than 1 GB
+Using Audacity: 
 
-Split the recording into segments and run each one separately, then combine the output CSVs.
+1. Zoom in to where you want the split to happen and click on a period of silence.
+1. Click Edit → Audio Clips → Split
+1. Highlight the first half, save it, and run it through VoxHumana.
+1. Repeat for the second half.   
 
-Using Audacity: File → Export → Export Multiple, split by time interval.
+Using Praat: [TODO]
 
-Using ffmpeg (30-minute chunks):
-
-```
-ffmpeg -i interview.wav -f segment \
-  -segment_time 1800 -c copy part%03d.wav
-```
+It is recommended that you do these splits manually, rather than programatically (i.e.
+using a script to cut the file in half) so that you can ensure a split doesn't happen in 
+the middle of a word.
 
 ### Audio quality tips
 
