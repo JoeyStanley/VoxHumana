@@ -860,6 +860,9 @@
               <label for="language">Language</label>
               <select id="language" name="language" onchange="syncLanguage()">
                 <option value="en">English — english_us_arpa</option>
+                <option value="fr">French — french_mfa</option>
+                <option value="de">German — german_mfa</option>
+                <option value="pt">Portuguese — portuguese_mfa</option>
                 <option value="es">Spanish — spanish_mfa</option>
               </select>
             </div>
@@ -909,6 +912,9 @@
               <label for="acoustic-model">Acoustic model</label>
               <select id="acoustic-model" name="acoustic_model">
                 <option value="english_us_arpa">english_us_arpa</option>
+                <option value="french_mfa">french_mfa</option>
+                <option value="german_mfa">german_mfa</option>
+                <option value="portuguese_mfa">portuguese_mfa</option>
                 <option value="spanish_mfa">spanish_mfa</option>
               </select>
             </div>
@@ -916,6 +922,9 @@
               <label for="dictionary">Dictionary</label>
               <select id="dictionary" name="dictionary">
                 <option value="english_us_arpa">english_us_arpa</option>
+                <option value="french_mfa">french_mfa</option>
+                <option value="german_mfa">german_mfa</option>
+                <option value="portuguese_mfa">portuguese_mfa</option>
                 <option value="spanish_mfa">spanish_mfa</option>
               </select>
             </div>
@@ -1208,6 +1217,9 @@
   // Maps Whisper language codes to their paired MFA acoustic model + dictionary.
   const LANG_TO_MFA = {
     en: 'english_us_arpa',
+    fr: 'french_mfa',
+    de: 'german_mfa',
+    pt: 'portuguese_mfa',
     es: 'spanish_mfa',
   };
 
