@@ -1462,15 +1462,14 @@
     document.getElementById('textgrid-drop-filename').style.display  = 'none';
     tgFileInput.value = '';
 
-    // Reset all step toggles to their defaults (all on)
-    ['transcription', 'alignment', 'formants'].forEach(id => {
-      stepActive[id] = true;
-      document.getElementById('toggle-' + id).classList.add('checked');
-      document.getElementById('body-'   + id).classList.remove('collapsed');
-    });
-    document.getElementById('textgrid-upload-section').style.display = 'none';
+    // Step toggles are intentionally preserved across jobs — if the user ran
+    // Spanish last time, the same steps (and language warning) carry forward.
+    // Just re-sync the TextGrid upload zone and warning to the current state.
+    document.getElementById('textgrid-upload-section').style.display =
+      stepActive.transcription ? 'none' : '';
     document.getElementById('step-warning').style.display = 'none';
     updateTextGridHint();
+    syncLanguage();
 
     const btn = document.getElementById('submit-btn');
     btn.disabled    = false;
