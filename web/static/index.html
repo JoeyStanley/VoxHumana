@@ -855,12 +855,12 @@
           <button type="button" class="help-btn" onclick="openDrawer('transcription')" title="Help">?</button>
         </div>
         <div class="step-body" id="body-transcription">
-          <p class="adv-coming-soon">Multi-language support is coming soon. Currently English only.</p>
           <div class="grid-2">
-            <div class="field" style="opacity:0.4; pointer-events:none">
+            <div class="field">
               <label for="language">Language</label>
-              <select id="language" name="language" disabled>
-                <option value="en">English</option>
+              <select id="language" name="language" onchange="syncLanguage()">
+                <option value="en">English — english_us_arpa</option>
+                <option value="es">Spanish — spanish_mfa</option>
               </select>
             </div>
             <div class="field">
@@ -904,18 +904,19 @@
           <button type="button" class="help-btn" onclick="openDrawer('alignment')" title="Help">?</button>
         </div>
         <div class="step-body" id="body-alignment">
-          <p class="adv-coming-soon">Additional acoustic models and dictionaries are coming soon. Currently English only.</p>
-          <div class="grid-2" style="opacity:0.4; pointer-events:none">
+          <div class="grid-2">
             <div class="field">
               <label for="acoustic-model">Acoustic model</label>
-              <select id="acoustic-model" name="acoustic_model" disabled>
-                <option value="english_us_arpa">English US — arpa</option>
+              <select id="acoustic-model" name="acoustic_model">
+                <option value="english_us_arpa">english_us_arpa</option>
+                <option value="spanish_mfa">spanish_mfa</option>
               </select>
             </div>
             <div class="field">
               <label for="dictionary">Dictionary</label>
-              <select id="dictionary" name="dictionary" disabled>
-                <option value="english_us_arpa">English US — arpa</option>
+              <select id="dictionary" name="dictionary">
+                <option value="english_us_arpa">english_us_arpa</option>
+                <option value="spanish_mfa">spanish_mfa</option>
               </select>
             </div>
           </div>
@@ -940,6 +941,7 @@
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('formants')" title="Help">?</button>
         </div>
+        <p id="formants-lang-note" style="display:none; margin:4px 0 0; padding:8px 12px; background:#fff5f0; border:1px solid #d4856a; border-radius:4px; font-size:12px; color:#7a3a20; line-height:1.5;">Formant extraction (new-fave) works with English only. Switch the language back to English to re-enable this step.</p>
         <div class="step-body" id="body-formants">
           <div class="grid-2">
             <div class="field">
@@ -1122,6 +1124,11 @@
   // Which steps are active (all on by default)
   const stepActive = { transcription: true, alignment: true, formants: true };
 
+  // True when formants was auto-disabled due to a non-English language selection,
+  // so we know to re-enable it if the user switches back to English (but not if
+  // they manually unchecked it themselves).
+  let formantsLockedByLanguage = false;
+
   // Mapping from backend step number → track position (rebuilt on submit)
   let trackStepMap = {};
 
@@ -1197,8 +1204,58 @@
     document.getElementById('adv-panel-'  + id).classList.toggle('open');
   }
 
+  // ─── Language ↔ MFA model sync ───────────────────────────────────────────────
+  // Maps Whisper language codes to their paired MFA acoustic model + dictionary.
+  const LANG_TO_MFA = {
+    en: 'english_us_arpa',
+    es: 'spanish_mfa',
+  };
+
+  function syncLanguage() {
+    const lang    = document.getElementById('language').value;
+    const mfaName = LANG_TO_MFA[lang] || null;
+
+    // Auto-pair MFA dropdowns if we have a known model for this language.
+    if (mfaName) {
+      document.getElementById('acoustic-model').value = mfaName;
+      document.getElementById('dictionary').value     = mfaName;
+    }
+
+    // Formant extraction is English-only (new-fave requires CMU/ARPABET phonemes).
+    const isEnglish = (lang === 'en');
+    const note      = document.getElementById('formants-lang-note');
+
+    if (!isEnglish && stepActive.formants) {
+      // Auto-disable formants and remember we did so.
+      formantsLockedByLanguage = true;
+      setStep('formants', false);
+    } else if (isEnglish && formantsLockedByLanguage) {
+      // Restore formants only if we were the ones who turned it off.
+      formantsLockedByLanguage = false;
+      setStep('formants', true);
+    }
+
+    note.style.display = isEnglish ? 'none' : '';
+  }
+
   // ─── Step toggle ──────────────────────────────────────────────────────────────
+  // Explicitly set a step's active state (without toggling).
+  function setStep(id, active) {
+    if (stepActive[id] === active) return;
+    stepActive[id] = active;
+    document.getElementById('toggle-' + id).classList.toggle('checked', active);
+    document.getElementById('body-'   + id).classList.toggle('collapsed', !active);
+    if (id === 'transcription') {
+      document.getElementById('textgrid-upload-section').style.display = active ? 'none' : '';
+    }
+    updateTextGridHint();
+    checkStepCombination();
+  }
+
   function toggleStep(id) {
+    // If formants was locked by language, a manual click clears the lock
+    // (the user is explicitly overriding, e.g. to re-enable after fixing the language).
+    if (id === 'formants') formantsLockedByLanguage = false;
     const nowActive = !stepActive[id];
     stepActive[id] = nowActive;
     document.getElementById('toggle-' + id).classList.toggle('checked', nowActive);
@@ -1405,15 +1462,14 @@
     document.getElementById('textgrid-drop-filename').style.display  = 'none';
     tgFileInput.value = '';
 
-    // Reset all step toggles to their defaults (all on)
-    ['transcription', 'alignment', 'formants'].forEach(id => {
-      stepActive[id] = true;
-      document.getElementById('toggle-' + id).classList.add('checked');
-      document.getElementById('body-'   + id).classList.remove('collapsed');
-    });
-    document.getElementById('textgrid-upload-section').style.display = 'none';
+    // Step toggles are intentionally preserved across jobs — if the user ran
+    // Spanish last time, the same steps (and language warning) carry forward.
+    // Just re-sync the TextGrid upload zone and warning to the current state.
+    document.getElementById('textgrid-upload-section').style.display =
+      stepActive.transcription ? 'none' : '';
     document.getElementById('step-warning').style.display = 'none';
     updateTextGridHint();
+    syncLanguage();
 
     const btn = document.getElementById('submit-btn');
     btn.disabled    = false;
