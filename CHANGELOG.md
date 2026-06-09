@@ -4,6 +4,8 @@ All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-09
+
 ## [0.7.0] - 2026-06-02
 ### Added
 - Trolley feature: users can now enter or exit the pipeline at any stage (e.g., start from an existing TextGrid, or stop after transcription)
