@@ -2,29 +2,29 @@
 
 Whisper is OpenAI's automatic speech recognition system, trained on 680,000 hours of
 multilingual audio. It is state-of-the-art for general transcription, particularly on
-accented and dialectal speech.
+nonstandard speech.
 
 ### Language
 
-Multi-language support is coming soon. VoxHumana currently processes English recordings only,
-as the forced alignment step (MFA) requires a language-matched acoustic model and dictionary.
+VoxHumana can transcribe and force-align recordings in English, French, German, Portuguse, and Spanish, 
+with more languages coming soon. For now, formant extraction is only supported for English.
 
 ### Transcription hint
 
-An optional free-text field that primes Whisper before transcription begins. Use it to
+This is an optional textbox that primes Whisper before transcription begins. Use it to
 improve accuracy on names, places, or unusual vocabulary that Whisper might otherwise mishear:
 
 - Speaker or interviewer names (e.g. *"Interviewer: Sarah. Participant: MecKenzie."*)
 - Location or community (e.g. *"Heber, Utah; Buena Vista, Virginia"*)
 - Topic keywords or unusual words (e.g. *"oystering, longshoreman, pyroclastic"*)
-- Dialect-specific spellings you want Whisper to prefer
+- Variety-specific spellings you want Whisper to prefer
 
 ### Model size
 
-- **Turbo** (recommended) — Fast and nearly as accurate as Large. The best default for fieldwork recordings.
-- **Large** — Most accurate, but significantly slower (~1× real-time without a GPU). Worth trying if Turbo produces problematic transcripts.
+- **Turbo** (recommended) — Fast and nearly as accurate as Large. This is the best default for fieldwork recordings.
+- **Large** — Most accurate, but significantly slower (~1× real-time). This is worth trying if Turbo produces problematic transcripts.
 - **Medium** — A useful middle ground when Turbo misses content and Large is too slow.
-- **Small** — Fastest option. Accuracy degrades noticeably on dialectal and accented speech; use only when speed is critical.
+- **Small** — Fastest option. Accuracy degrades noticeably on nonstandard speech; use only when speed is critical.
 
 All models run on CPU by default. GPU access makes Whisper 5–10× faster.
 

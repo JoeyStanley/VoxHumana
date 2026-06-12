@@ -19,9 +19,7 @@ allows FastTrack to search broadly and select whatever ceiling fits the data bes
 lower this if you want to constrain the search. For example, you can lower it to 5500 Hz for a 
 corpus of lower-pitched voices where high ceilings produce spurious formants.
 
-Note: this is not a fixed ceiling the way classic FAVE's formant ceiling works. It is the
-*maximum* ceiling FastTrack will try. Lowering it narrows the search range; it does not
-force a specific ceiling.
+Note: this is the *maximum* ceiling FastTrack will try. Lowering it narrows the search range.
 
 ### Number of formants
 
@@ -32,7 +30,6 @@ window. Decreasing below 3 is probably not useful.
 ### Include vowels during overlapping speech (Advanced)
 
 When unchecked, vowels that occur while another speaker is talking are excluded from
-measurement. Overlapping speech can produce formant interference — the second speaker's
-resonances contaminate the measurement of the first. For a typical fieldwork interview with
-frequent back-channeling from the interviewer, unchecking this may improve data quality.
-Leave it checked if the recording is a monologue or if you want maximum token count.
+measurement. Overlapping speech can produce unreliable results. For a typical fieldwork 
+interview with frequent backchanneling from the interviewer, unchecking this may improve 
+data quality. Leave it checked if the recording is a monologue or if you want the most data.
