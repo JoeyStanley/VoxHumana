@@ -26,17 +26,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipeline.transcribe_with_whisper import transcribe
 from pipeline.convert_whisper_to_textgrid import convert_whisper_to_textgrid
 from pipeline.align_with_mfa import align_with_mfa
-from pipeline.extract_with_newfave import extract_with_newfave
+from pipeline.extract_with_newfave import extract_with_newfave, LANGUAGE_DEFAULTS
 
 app = FastAPI(title="VoxHumana")
 
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 JOB_RETENTION_HOURS = 72
 
-# Languages for which new-fave formant extraction is supported.
-# new-fave requires CMU/ARPABET phonemes produced by English MFA models,
-# so formant extraction is skipped automatically for any other language.
-FORMANT_SUPPORTED_LANGUAGES = {"en"}
+# MFA acoustic models for which new-fave formant extraction is supported,
+# mapped to the new-fave "language" preset (see
+# pipeline.extract_with_newfave.LANGUAGE_DEFAULTS) used to pick the
+# matching vowel-identification regex and recoding rules. Formant
+# extraction is skipped automatically for any other acoustic model.
+NEWFAVE_LANGUAGE_PRESETS = {
+    "english_us_arpa": "en",
+    "spanish_mfa": "es",
+}
 
 # Allowlists for MFA model/dictionary names — these values are passed
 # directly to the MFA CLI, so we validate them server-side to prevent
@@ -376,10 +381,13 @@ def _write_processing_log(
     ln("")
     ln(BAR)
     if ran_formants:
+        nf_language = nf_cfg.get("language", "en")
+        lang_defaults = LANGUAGE_DEFAULTS.get(nf_language, LANGUAGE_DEFAULTS["en"])
+
         speakers = nf_cfg.get("speakers", "all")
-        recode_rules = nf_cfg.get("recode_rules", "cmu2labov")
-        labelset_parser = nf_cfg.get("labelset_parser", "cmu_parser")
-        point_heuristic = nf_cfg.get("point_heuristic", "fave")
+        recode_rules = nf_cfg.get("recode_rules", lang_defaults["recode_rules"])
+        labelset_parser = nf_cfg.get("labelset_parser", lang_defaults["labelset_parser"])
+        point_heuristic = nf_cfg.get("point_heuristic", lang_defaults["point_heuristic"])
         formant_ceiling = nf_cfg.get("formant_ceiling")
         num_formants = nf_cfg.get("num_formants")
         include_overlaps = nf_cfg.get("include_overlaps", True)
@@ -388,30 +396,36 @@ def _write_processing_log(
         ft_display = "custom YAML (see formant_ceiling / num_formants below)" if has_ft_override else "default"
         fc_str = str(formant_ceiling) if formant_ceiling is not None else "(not set — new-fave default applies)"
         nf_str = str(num_formants) if num_formants is not None else "(not set — new-fave default applies)"
+        ph_display = point_heuristic if point_heuristic is not None else "default (1/3 point)"
 
         ln(f"STEP 3 — VOWEL FORMANT EXTRACTION: new-fave  v{newfave_ver}")
         ln(BAR)
         ln("")
         ln("new-fave locates vowel tokens in the MFA-aligned TextGrid, estimates")
-        ln("formant trajectories across each vowel using FastTrack, and applies the")
-        ln("FAVE point-measurement heuristic to pick a single representative F1/F2")
-        ln("value per token. Phonetic labels are recoded from CMU ARPABET to Labov")
-        ln("vowel-class notation. Five output files are written:")
+        ln("formant trajectories across each vowel using FastTrack, and applies a")
+        ln("point-measurement heuristic to pick a single representative F1/F2")
+        if nf_language == "en":
+            ln("value per token. Phonetic labels are recoded from CMU ARPABET to Labov")
+            ln("vowel-class notation. Five output files are written:")
+        else:
+            ln("value per token. Vowels are identified with a labelset parser matching")
+            ln(f"the '{nf_language}' phone set. Five output files are written:")
         ln("")
         ln("  *_points.csv       — one row per vowel token (single-point measurement)")
         ln("  *_tracks.csv       — formant trajectories (multiple time points per token)")
         ln("  *_param.csv        — DCT coefficients of the formant tracks (Hz scale)")
         ln("  *_logparam.csv     — DCT coefficients of the formant tracks (log Hz scale)")
-        ln("  *_recoded.TextGrid — Praat TextGrid with Labov vowel-class labels applied")
+        ln("  *_recoded.TextGrid — Praat TextGrid with recoded labels applied (see recode_rules)")
         if has_ft_override:
             ln("  ft_config.yml      — FastTrack parameter overrides used for this run;")
             ln("                       only needed if you want to rerun the extraction offline")
         ln("")
         ln("Parameters:")
+        ln(f"  - language:           {nf_language}{dflt(nf_language, 'en')}")
         ln(f"  - speakers:           {speakers}{dflt(speakers, 'all')}")
-        ln(f"  - recode_rules:       {recode_rules}{dflt(recode_rules, 'cmu2labov')}")
-        ln(f"  - labelset_parser:    {labelset_parser}{dflt(labelset_parser, 'cmu_parser')}")
-        ln(f"  - point_heuristic:    {point_heuristic}{dflt(point_heuristic, 'fave')}")
+        ln(f"  - recode_rules:       {recode_rules}{dflt(recode_rules, lang_defaults['recode_rules'])}")
+        ln(f"  - labelset_parser:    {labelset_parser}{dflt(labelset_parser, lang_defaults['labelset_parser'])}")
+        ln(f"  - point_heuristic:    {ph_display}{dflt(point_heuristic, lang_defaults['point_heuristic'])}")
         ln(f"  - ft_config:          {ft_display}{dflt(ft_display, 'default')}")
         ln(f"  - formant_ceiling:    {fc_str}")
         ln(f"  - num_formants:       {nf_str}")
@@ -540,11 +554,15 @@ def _write_server_log(
     ln(f"  dictionary:               {m_cfg.get('dictionary', 'english_us_arpa')}")
     ln(f"  fine_tune:                {m_cfg.get('fine_tune', False)}")
     ln(f"  num_jobs:                 {m_cfg.get('num_jobs', 1)}")
+    nf_language = nf_cfg.get("language", "en")
+    nf_lang_defaults = LANGUAGE_DEFAULTS.get(nf_language, LANGUAGE_DEFAULTS["en"])
+    nf_point_heuristic = nf_cfg.get("point_heuristic", nf_lang_defaults["point_heuristic"])
     ln(f"  [new-fave]")
+    ln(f"  language:                 {nf_language}")
     ln(f"  speakers:                 {nf_cfg.get('speakers', 'all')}")
-    ln(f"  recode_rules:             {nf_cfg.get('recode_rules', 'cmu2labov')}")
-    ln(f"  labelset_parser:          {nf_cfg.get('labelset_parser', 'cmu_parser')}")
-    ln(f"  point_heuristic:          {nf_cfg.get('point_heuristic', 'fave')}")
+    ln(f"  recode_rules:             {nf_cfg.get('recode_rules', nf_lang_defaults['recode_rules'])}")
+    ln(f"  labelset_parser:          {nf_cfg.get('labelset_parser', nf_lang_defaults['labelset_parser'])}")
+    ln(f"  point_heuristic:          {nf_point_heuristic if nf_point_heuristic is not None else 'default (1/3 point)'}")
     ln(f"  formant_ceiling:          {nf_cfg.get('formant_ceiling') or '(default)'}")
     ln(f"  num_formants:             {nf_cfg.get('num_formants') or '(default)'}")
     ln(f"  include_overlaps:         {nf_cfg.get('include_overlaps', True)}")
@@ -727,11 +745,13 @@ async def create_job(
                    f"Supported: {sorted(SUPPORTED_MFA_DICTIONARIES)}",
         )
 
-    # Safety net: new-fave formant extraction requires English MFA output
-    # (CMU/ARPABET phonemes). If a non-English language arrives with formants
-    # enabled — e.g. from a direct API call bypassing the UI guard — quietly
-    # disable the formant step rather than letting the pipeline fail mid-run.
-    if language and language not in FORMANT_SUPPORTED_LANGUAGES and run_formants:
+    # Safety net: new-fave formant extraction needs a labelset parser and
+    # recode scheme matching the MFA acoustic model's phone set. If an
+    # unsupported acoustic model arrives with formants enabled — e.g. from a
+    # direct API call bypassing the UI guard — quietly disable the formant
+    # step rather than letting the pipeline fail mid-run.
+    newfave_language = NEWFAVE_LANGUAGE_PRESETS.get(acoustic_model)
+    if newfave_language is None and run_formants:
         run_formants = False
 
     job_id = _generate_job_id()
@@ -789,6 +809,7 @@ async def create_job(
             "fine_tune": fine_tune,
         },
         "newfave": {
+            "language": newfave_language or "en",
             "formant_ceiling": int(formant_ceiling) if formant_ceiling else None,
             "num_formants": int(num_formants) if num_formants else None,
             "include_overlaps": include_overlaps,

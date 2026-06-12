@@ -1,0 +1,23 @@
+# Labelset parser for the MFA "spanish_mfa" acoustic model / dictionary.
+#
+# spanish_mfa uses IPA-ish phone labels: the oral vowels a, e, i, o, u;
+# their nasalized counterparts, written as a vowel plus a combining tilde
+# (U+0303), e.g. "ã"; the glides j/w; and a consonant inventory that
+# never contains a/e/i/o/u. The "sil" and "spn" (silence / unintelligible
+# speech) labels are explicitly excluded so "sil" isn't mistaken for a
+# vowel just because it contains the letter "i".
+parser: "Spanish MFA"
+
+properties:
+
+  - name: "class"
+    updates: "VC"
+    default: "consonant"
+    rules:
+
+      - rule: "vowel"
+        conditions:
+          - attribute: label
+            relation: "rematches"
+            set: "^[aeiou]̃?$"
+        return: "vowel"
