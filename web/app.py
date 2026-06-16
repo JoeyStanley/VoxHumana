@@ -852,7 +852,7 @@ async def download_results(job_id: str, token: str = ""):
         raise HTTPException(status_code=404, detail="Job not found")
     if token != jobs[job_id].get("download_token", ""):
         raise HTTPException(status_code=403, detail="Invalid download token")
-    if jobs[job_id]["status"] != "done":
+    if jobs[job_id]["status"] not in ("done", "error"):
         raise HTTPException(status_code=400, detail="Job not complete")
 
     job_dir = JOBS_DIR / job_id

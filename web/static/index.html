@@ -1005,6 +1005,10 @@
         Keep this tab open; the page will update automatically when results are ready.
       </div>
       <div class="progress-note" style="margin-top:6px">Job ID: <code id="running-job-id"></code></div>
+      <div class="field-check" style="margin-top:4px">
+        <input type="checkbox" id="sound-notify" onchange="onSoundNotifyChange(this)">
+        <label for="sound-notify" style="font-size:11px; color:var(--pbl)">Play a sound when processing is complete</label>
+      </div>
     </div>
   </div>
 
@@ -1013,6 +1017,7 @@
     <div class="results-view">
       <div class="success-mark">✓</div>
       <div class="results-title">Processing complete</div>
+      <div class="progress-filename" id="done-filename"></div>
       <div class="results-note" id="results-note">
         Your results are ready.
       </div>
@@ -1039,7 +1044,10 @@
           </li>
         </ul>
       </div>
-      <button class="btn" onclick="resetForm()">Try again</button>
+      <div style="display:flex; gap:12px;">
+        <button class="btn-outline" onclick="downloadResults()">Download partial results</button>
+        <button class="btn" onclick="resetForm()">Try again</button>
+      </div>
     </div>
   </div>
 
@@ -1129,6 +1137,7 @@
   let pollTimer        = null;
   let inDocs           = false;
   let appViewState     = 'form';
+  let completionSoundEnabled = false;
 
   // Which steps are active (all on by default)
   const stepActive = { transcription: true, alignment: true, formants: true };
@@ -1356,6 +1365,7 @@
 
       if (job.status === 'done') {
         clearInterval(pollTimer);
+        if (completionSoundEnabled) playCompletionSound();
         document.getElementById('done-job-id').textContent = currentJobId || '(unavailable)';
         showState('done');
       } else if (job.status === 'error') {
@@ -1401,6 +1411,64 @@
     });
   }
 
+  // ─── Completion sound ─────────────────────────────────────────────────────────
+  let _soundCtx = null;
+
+  function onSoundNotifyChange(checkbox) {
+    completionSoundEnabled = checkbox.checked;
+    if (checkbox.checked) {
+      try {
+        if (!_soundCtx) {
+          _soundCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } else if (_soundCtx.state === 'suspended') {
+          _soundCtx.resume();
+        }
+      } catch (e) {}
+    }
+  }
+
+  function _organPipe(ctx, freq, gain, startTime, duration, release) {
+    const master = ctx.createGain();
+    master.connect(ctx.destination);
+    const attack = 0.07;
+    master.gain.setValueAtTime(0, startTime);
+    master.gain.linearRampToValueAtTime(gain, startTime + attack);
+    master.gain.setValueAtTime(gain, startTime + duration - release);
+    master.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+    [[1,1],[2,0.5],[3,0.22],[4,0.12],[5,0.06]].forEach(([n, hg]) => {
+      const osc = ctx.createOscillator();
+      const g   = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq * n;
+      g.gain.value = hg;
+      osc.connect(g);
+      g.connect(master);
+      osc.start(startTime);
+      osc.stop(startTime + duration + 0.05);
+    });
+  }
+
+  function playCompletionSound() {
+    try {
+      if (!_soundCtx) return;
+      const ctx = _soundCtx;
+      const now = ctx.currentTime;
+      const c1dur = 0.40, c1rel = 0.16;
+      const c2dur = 0.80, c2rel = 0.38;
+      const c2start = now + c1dur - c1rel - 0.08;
+      // G7: G3, B3, F4, B4
+      _organPipe(ctx, 196.00, 0.24, now,     c1dur, c1rel);
+      _organPipe(ctx, 246.94, 0.22, now,     c1dur, c1rel);
+      _organPipe(ctx, 349.23, 0.20, now,     c1dur, c1rel);
+      _organPipe(ctx, 493.88, 0.18, now,     c1dur, c1rel);
+      // C major: C4, E4, G4, C5
+      _organPipe(ctx, 261.63, 0.24, c2start, c2dur, c2rel);
+      _organPipe(ctx, 329.63, 0.22, c2start, c2dur, c2rel);
+      _organPipe(ctx, 392.00, 0.20, c2start, c2dur, c2rel);
+      _organPipe(ctx, 523.25, 0.18, c2start, c2dur, c2rel);
+    } catch (e) { /* AudioContext not available — silently skip */ }
+  }
+
   // ─── Download ─────────────────────────────────────────────────────────────────
   function downloadResults() {
     window.location.href = `/api/jobs/${currentJobId}/download?token=${currentDownloadToken}`;
@@ -1420,6 +1488,7 @@
     document.getElementById('pipeline-track').style.display = showTrack ? '' : 'none';
     if (state === 'done' && !d) {
       updateTrack(5);
+      document.getElementById('done-filename').textContent = selectedFile ? selectedFile.name : '';
       const parts = [];
       if (stepActive.transcription) parts.push('the Whisper transcript');
       if (stepActive.alignment)     parts.push('the MFA-aligned TextGrid');
