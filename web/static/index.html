@@ -1017,6 +1017,7 @@
     <div class="results-view">
       <div class="success-mark">✓</div>
       <div class="results-title">Processing complete</div>
+      <div class="progress-filename" id="done-filename"></div>
       <div class="results-note" id="results-note">
         Your results are ready.
       </div>
@@ -1484,6 +1485,7 @@
     document.getElementById('pipeline-track').style.display = showTrack ? '' : 'none';
     if (state === 'done' && !d) {
       updateTrack(5);
+      document.getElementById('done-filename').textContent = selectedFile ? selectedFile.name : '';
       const parts = [];
       if (stepActive.transcription) parts.push('the Whisper transcript');
       if (stepActive.alignment)     parts.push('the MFA-aligned TextGrid');
