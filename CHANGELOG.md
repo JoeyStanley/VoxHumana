@@ -5,12 +5,10 @@ All notable changes to VoxHumana will be documented here.
 ## [Unreleased]
 
 ## [0.10.0] - 2026-06-16
-
-## [0.9.1] - 2026-26-16
 ### Added
 - If the job crashes, you can still download whatever files were produced.
 - Show name of the file on the download screen. (Useful if you've got multiple going.)
-- Play a sound when the job finishes. 
+- Play a sound when the job finishes.
 
 ## [0.9.0] - 2026-06-12
 ### Added 
