@@ -3,6 +3,7 @@
 import importlib.metadata
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -15,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import uuid
@@ -27,6 +28,13 @@ from pipeline.transcribe_with_whisper import transcribe
 from pipeline.convert_whisper_to_textgrid import convert_whisper_to_textgrid
 from pipeline.align_with_mfa import align_with_mfa
 from pipeline.extract_with_newfave import extract_with_newfave, LANGUAGE_DEFAULTS
+
+# Strip any trailing slash so ROOT_PATH + "/api/..." is always well-formed.
+# Set VXH_ROOT_PATH="" (or omit it) for a root-path deployment.
+# Set VXH_ROOT_PATH="/VoxHumana" when deployed under a sub-path.
+ROOT_PATH = os.environ.get("VXH_ROOT_PATH", "").rstrip("/")
+
+_INDEX_HTML = Path(__file__).parent / "static" / "index.html"
 
 app = FastAPI(title="VoxHumana")
 
@@ -878,6 +886,13 @@ async def download_results(job_id: str, token: str = ""):
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{stem}_vxh_results.zip"'},
     )
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def serve_index():
+    html = _INDEX_HTML.read_text()
+    html = html.replace("__ROOT_PATH__", ROOT_PATH)
+    return HTMLResponse(html)
 
 
 # Serve static files last so API routes take priority

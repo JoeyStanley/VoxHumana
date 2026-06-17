@@ -773,7 +773,8 @@
     .content-loading { color: var(--pbl) !important; font-style: italic; }
     .content-error   { color: #c4603a   !important; }
   </style>
-  <script src="/marked.min.js"></script>
+  <script>const ROOT_PATH = "__ROOT_PATH__";</script>
+  <script src="marked.min.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -1108,10 +1109,10 @@
   };
 
   const TAB_PATHS = {
-    about: '/content/about.md',
-    guide: '/content/guide.md',
-    cite:  '/content/cite.md',
-    faq:   '/content/faq.md',
+    about: `${ROOT_PATH}/content/about.md`,
+    guide: `${ROOT_PATH}/content/guide.md`,
+    cite:  `${ROOT_PATH}/content/cite.md`,
+    faq:   `${ROOT_PATH}/content/faq.md`,
   };
 
   // ─── Markdown loader ──────────────────────────────────────────────────────────
@@ -1332,7 +1333,7 @@
     data.append('run_formants',              stepActive.formants);
 
     try {
-      const res  = await fetch('/api/jobs', { method: 'POST', body: data });
+      const res  = await fetch(`${ROOT_PATH}/api/jobs`, { method: 'POST', body: data });
       const body = await res.json();
       if (!res.ok) throw new Error(body.detail || 'Submission failed');
       currentJobId         = body.job_id;
@@ -1357,7 +1358,7 @@
 
   async function pollJob() {
     try {
-      const res = await fetch(`/api/jobs/${currentJobId}`);
+      const res = await fetch(`${ROOT_PATH}/api/jobs/${currentJobId}`);
       const job = await res.json();
 
       updateTrack(job.step);
@@ -1471,7 +1472,7 @@
 
   // ─── Download ─────────────────────────────────────────────────────────────────
   function downloadResults() {
-    window.location.href = `/api/jobs/${currentJobId}/download?token=${currentDownloadToken}`;
+    window.location.href = `${ROOT_PATH}/api/jobs/${currentJobId}/download?token=${currentDownloadToken}`;
   }
 
   // ─── View switching ───────────────────────────────────────────────────────────
