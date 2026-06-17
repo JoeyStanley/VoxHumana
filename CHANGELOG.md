@@ -4,6 +4,8 @@ All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-06-17
+
 ## [0.10.0] - 2026-06-16
 ### Added
 - If the job crashes, you can still download whatever files were produced.
