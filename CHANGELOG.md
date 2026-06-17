@@ -5,6 +5,8 @@ All notable changes to VoxHumana will be documented here.
 ## [Unreleased]
 
 ## [0.10.1] - 2026-06-17
+### Fixed
+- Removed hard-coded paths to make it run on the server. 
 
 ## [0.10.0] - 2026-06-16
 ### Added
