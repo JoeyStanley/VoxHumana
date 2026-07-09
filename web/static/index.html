@@ -1450,24 +1450,26 @@
   }
 
   function playCompletionSound() {
-    try {
-      if (!_soundCtx) return;
-      const ctx = _soundCtx;
-      const now = ctx.currentTime;
-      const c1dur = 0.40, c1rel = 0.16;
-      const c2dur = 0.80, c2rel = 0.38;
-      const c2start = now + c1dur - c1rel - 0.08;
-      // G7: G3, B3, F4, B4
-      _organPipe(ctx, 196.00, 0.24, now,     c1dur, c1rel);
-      _organPipe(ctx, 246.94, 0.22, now,     c1dur, c1rel);
-      _organPipe(ctx, 349.23, 0.20, now,     c1dur, c1rel);
-      _organPipe(ctx, 493.88, 0.18, now,     c1dur, c1rel);
-      // C major: C4, E4, G4, C5
-      _organPipe(ctx, 261.63, 0.24, c2start, c2dur, c2rel);
-      _organPipe(ctx, 329.63, 0.22, c2start, c2dur, c2rel);
-      _organPipe(ctx, 392.00, 0.20, c2start, c2dur, c2rel);
-      _organPipe(ctx, 523.25, 0.18, c2start, c2dur, c2rel);
-    } catch (e) { /* AudioContext not available — silently skip */ }
+    if (!_soundCtx) return;
+    const ctx = _soundCtx;
+    ctx.resume().then(() => {
+      try {
+        const now = ctx.currentTime;
+        const c1dur = 0.40, c1rel = 0.16;
+        const c2dur = 0.80, c2rel = 0.38;
+        const c2start = now + c1dur - c1rel - 0.08;
+        // G7: G3, B3, F4, B4
+        _organPipe(ctx, 196.00, 0.24, now,     c1dur, c1rel);
+        _organPipe(ctx, 246.94, 0.22, now,     c1dur, c1rel);
+        _organPipe(ctx, 349.23, 0.20, now,     c1dur, c1rel);
+        _organPipe(ctx, 493.88, 0.18, now,     c1dur, c1rel);
+        // C major: C4, E4, G4, C5
+        _organPipe(ctx, 261.63, 0.24, c2start, c2dur, c2rel);
+        _organPipe(ctx, 329.63, 0.22, c2start, c2dur, c2rel);
+        _organPipe(ctx, 392.00, 0.20, c2start, c2dur, c2rel);
+        _organPipe(ctx, 523.25, 0.18, c2start, c2dur, c2rel);
+      } catch (e) {}
+    });
   }
 
   // ─── Download ─────────────────────────────────────────────────────────────────
