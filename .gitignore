@@ -6,6 +6,9 @@ reference/
 *.TextGrid
 *.json
 Github cheatsheet.yaml
+# Research files
+_LSA2026
+_manuscripts
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
