@@ -12,7 +12,7 @@ publication details may change.
 
 OpenAI's automatic speech recognition model, used for transcription.
 
-> Radford, Alec, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, & Ilya Sutskever (2023). Robust speech recognition via large-scale weak supervision. *Proceedings of the 40th International Conference on Machine Learning (ICML).* <https://arxiv.org/abs/2212.04356>
+> Radford, Alec, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, & Ilya Sutskever (2022). Robust speech recognition via large-scale weak supervision. *Proceedings of the 40th International Conference on Machine Learning (ICML).* <https://arxiv.org/abs/2212.04356>
 
 The output of Whisper is converted into a Praat TextGrid using the [TextGridTools](https://textgridtools.readthedocs.io/en/stable/index.html) package in Python.
 
