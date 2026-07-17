@@ -1,4 +1,5 @@
 from pathlib import Path
+import warnings
 import yaml
 from new_fave import fave_audio_textgrid, write_data
 
@@ -19,6 +20,21 @@ LANGUAGE_DEFAULTS = {
     "es": {
         "recode_rules": "norecode",
         "labelset_parser": str(RESOURCES_DIR / "spanish_mfa_parser.yml"),
+        "point_heuristic": None,
+    },
+    "fr": {
+        "recode_rules": "norecode",
+        "labelset_parser": str(RESOURCES_DIR / "french_mfa_parser.yml"),
+        "point_heuristic": None,
+    },
+    "de": {
+        "recode_rules": "norecode",
+        "labelset_parser": str(RESOURCES_DIR / "german_mfa_parser.yml"),
+        "point_heuristic": None,
+    },
+    "pt": {
+        "recode_rules": "norecode",
+        "labelset_parser": str(RESOURCES_DIR / "portuguese_mfa_parser.yml"),
         "point_heuristic": None,
     },
 }
@@ -92,16 +108,26 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
         ft_config_path.write_text(yaml.dump(override))
         ft_config = str(ft_config_path)
 
-    speakers = fave_audio_textgrid(
-        audio_path,
-        textgrid_path,
-        speakers=config.get("speakers", "all"),
-        recode_rules=config.get("recode_rules", lang_defaults["recode_rules"]),
-        labelset_parser=config.get("labelset_parser", lang_defaults["labelset_parser"]),
-        point_heuristic=config.get("point_heuristic", lang_defaults["point_heuristic"]),
-        ft_config=ft_config,
-        include_overlaps=include_overlaps,
-    )
+    # fave_audio_textgrid() catches its own exceptions and returns None on
+    # failure (e.g. a corrupt or mislabeled audio file), warning instead of
+    # raising. Capture that warning so a None result produces a clear error
+    # here instead of a confusing AttributeError inside write_data().
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        speakers = fave_audio_textgrid(
+            audio_path,
+            textgrid_path,
+            speakers=config.get("speakers", "all"),
+            recode_rules=config.get("recode_rules", lang_defaults["recode_rules"]),
+            labelset_parser=config.get("labelset_parser", lang_defaults["labelset_parser"]),
+            point_heuristic=config.get("point_heuristic", lang_defaults["point_heuristic"]),
+            ft_config=ft_config,
+            include_overlaps=include_overlaps,
+        )
+
+    if speakers is None:
+        detail = "; ".join(str(w.message) for w in caught) or "no further detail was reported by new-fave"
+        raise RuntimeError(f"new-fave failed to process {audio_path.name}: {detail}")
 
     write_data(speakers, destination=str(output_dir))
 

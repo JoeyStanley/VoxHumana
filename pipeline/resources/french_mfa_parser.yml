@@ -1,0 +1,24 @@
+# Labelset parser for the MFA "french_mfa" acoustic model / dictionary.
+#
+# french_mfa uses IPA phone labels: the oral vowels a, e, i, o, u, y,
+# oe-ligature symbols (ø, œ) and open-mid/back vowels (ɑ, ɔ, ə,
+# ɛ); their nasalized counterparts, written as a vowel plus a combining
+# tilde (U+0303), e.g. "ɑ̃"; the glides j, w, ɥ; and a consonant
+# inventory that never overlaps with the vowel set above. "sil" and "spn"
+# (silence / unintelligible speech) are excluded, and glides are treated as
+# consonants rather than vowels, matching the spanish_mfa parser's convention.
+parser: "French MFA"
+
+properties:
+
+  - name: "class"
+    updates: "VC"
+    default: "consonant"
+    rules:
+
+      - rule: "vowel"
+        conditions:
+          - attribute: label
+            relation: "rematches"
+            set: "^(a|e|i|o|u|y|ø|œ|ɑ|ɑ̃|ɔ|ɔ̃|ə|ɛ|ɛ̃)$"
+        return: "vowel"

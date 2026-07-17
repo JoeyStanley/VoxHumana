@@ -1,0 +1,23 @@
+# Labelset parser for the MFA "german_mfa" acoustic model / dictionary.
+#
+# german_mfa uses IPA phone labels. Long monophthongs are written with a
+# length mark (U+02D0, e.g. "eː"), and diphthongs are single multi-character
+# tokens ("aj", "aw", "ɔʏ") rather than vowel+glide sequences. Syllabic
+# consonants (l̩, m̩, n̩, written with a combining vertical line below,
+# U+0329) are excluded — they pattern as consonants, not vowels. "sil" and
+# "spn" (silence / unintelligible speech) are also excluded.
+parser: "German MFA"
+
+properties:
+
+  - name: "class"
+    updates: "VC"
+    default: "consonant"
+    rules:
+
+      - rule: "vowel"
+        conditions:
+          - attribute: label
+            relation: "rematches"
+            set: "^(a|aj|aw|aː|eː|iː|oː|uː|yː|øː|œ|ɐ|ɔ|ɔʏ|ə|ɛ|ɪ|ʊ|ʏ)$"
+        return: "vowel"

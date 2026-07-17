@@ -49,6 +49,9 @@ JOB_RETENTION_HOURS = 72
 NEWFAVE_LANGUAGE_PRESETS = {
     "english_us_arpa": "en",
     "spanish_mfa": "es",
+    "french_mfa": "fr",
+    "german_mfa": "de",
+    "portuguese_mfa": "pt",
 }
 
 # Allowlists for MFA model/dictionary names — these values are passed

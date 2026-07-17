@@ -951,7 +951,7 @@
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('formants')" title="Help">?</button>
         </div>
-        <p id="formants-lang-note" style="display:none; margin:4px 0 0; padding:8px 12px; background:#fff5f0; border:1px solid #d4856a; border-radius:4px; font-size:12px; color:#7a3a20; line-height:1.5;">Formant extraction (new-fave) currently works with English and Spanish only. Switch the language back to English or Spanish to re-enable this step.</p>
+        <p id="formants-lang-note" style="display:none; margin:4px 0 0; padding:8px 12px; background:#fff5f0; border:1px solid #d4856a; border-radius:4px; font-size:12px; color:#7a3a20; line-height:1.5;">Formant extraction (new-fave) currently works with English, Spanish, French, German, and Portuguese only. Switch to one of these languages to re-enable this step.</p>
         <div class="step-body" id="body-formants">
           <div class="grid-2">
             <div class="field">
@@ -1245,8 +1245,8 @@
 
     // Formant extraction (new-fave) needs a labelset parser and recode
     // scheme matching the MFA acoustic model's phone set. Currently
-    // supported: English (english_us_arpa) and Spanish (spanish_mfa).
-    const formantsSupported = (lang === 'en' || lang === 'es');
+    // supported: English, Spanish, French, German, and Portuguese.
+    const formantsSupported = (lang === 'en' || lang === 'es' || lang === 'fr' || lang === 'de' || lang === 'pt');
     const note      = document.getElementById('formants-lang-note');
 
     if (!formantsSupported && stepActive.formants) {

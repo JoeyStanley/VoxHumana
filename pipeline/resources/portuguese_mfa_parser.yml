@@ -1,0 +1,30 @@
+# Labelset parser for the MFA "portuguese_mfa" acoustic model / dictionary.
+#
+# portuguese_mfa uses IPA phone labels: the oral vowels a, e, i, o, u, plus
+# ɐ (near-open central) and ɨ (close central); their nasalized counterparts,
+# written as a vowel plus a combining tilde (U+0303), e.g. "ɐ̃". MFA's own
+# TextGrids always use this decomposed form, but a user-supplied TextGrid
+# (e.g. hand-typed or copy-pasted in Praat, via Trolley mode) might use the
+# precomposed single-codepoint form instead (e.g. "õ" U+00F5 vs. "o"+U+0303).
+# Both forms are listed below for e/i/o/u, which have Unicode precomposed
+# equivalents; ɐ̃ has no precomposed form, so only the decomposed form is listed.
+# The glides j, w (and their nasalized forms j̃, w̃) and a consonant inventory
+# that never overlaps with the vowel set above round out the phone set.
+# "sil" and "spn" (silence / unintelligible speech) are excluded, and glides
+# are treated as consonants rather than vowels, matching the spanish_mfa
+# parser's convention.
+parser: "Portuguese MFA"
+
+properties:
+
+  - name: "class"
+    updates: "VC"
+    default: "consonant"
+    rules:
+
+      - rule: "vowel"
+        conditions:
+          - attribute: label
+            relation: "rematches"
+            set: "^(a|e|i|o|u|ɐ|ɔ|ɛ|ɨ|ẽ|ẽ|ĩ|ĩ|õ|õ|ũ|ũ|ɐ̃)$"
+        return: "vowel"
