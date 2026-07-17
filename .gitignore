@@ -12,6 +12,9 @@ _manuscripts
 # R files (for analyzing output)
 .Rproj.user
 .positai
+check_output.Rmd
+VoxHumana.Rproj
+.Rhistory
 
 
 # Byte-compiled / optimized / DLL files
