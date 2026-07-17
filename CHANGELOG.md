@@ -19,6 +19,7 @@ All notable changes to VoxHumana will be documented here.
 ## [0.9.0] - 2026-06-12
 ### Added 
 - new-fave in Spanish
+- information about position in line when multiple jobs are in the queue
 
 ## [0.8.0] - 2026-06-09
 ### Added 
