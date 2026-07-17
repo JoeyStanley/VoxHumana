@@ -5,6 +5,9 @@ All notable changes to VoxHumana will be documented here.
 ## [Unreleased]
 ### Added
 - new-fave formant extraction for French, German, and Portuguese (previously English and Spanish only)
+- Add queue information to the UI and logs
+- Add version of the Whisper output that has time stamps and line breaks
+- Add Whisper utterance tier to MFA's TextGrid, yielding a three-tier TextGrid with phonemes, words, utterances. 
 
 ## [0.10.1] - 2026-06-17
 ### Fixed
