@@ -84,6 +84,12 @@ jobs: dict[str, dict] = {}
 # One job at a time — the pipeline is compute-heavy.
 executor = ThreadPoolExecutor(max_workers=1)
 
+# Ordered list of job IDs that are queued or currently running (FIFO — the
+# executor has exactly one worker thread, so execution order always matches
+# this list's order). active_jobs[0] is always the job currently being
+# processed. Used to report queue position to waiting jobs.
+active_jobs: list[str] = []
+
 
 # Organ stops drawn from the Salt Lake Tabernacle organ — used to generate
 # memorable job IDs in the form YYMMDD_Stop1_Stop2.
@@ -262,6 +268,13 @@ def _write_processing_log(
     ln(f"Submitted: {submitted_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Completed: {completed_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Duration:  {duration_str}")
+    queue_position = jobs.get(job_id, {}).get("queue_position_at_submission", 1)
+    wait_seconds = jobs.get(job_id, {}).get("wait_seconds", 0.0)
+    if queue_position > 1:
+        ln(f"Queue:     started at position {queue_position} in line — waited "
+           f"{_fmt_duration(wait_seconds)} for earlier jobs before processing began")
+    else:
+        ln("Queue:     no wait — processing began immediately")
 
     # Input / output
     ln("")
@@ -525,6 +538,8 @@ def _write_server_log(
 
     total_seconds = (completed_at - submitted_at).total_seconds()
     status_line = "SUCCESS" if failed_step is None else f"FAILED at \"{failed_step}\""
+    queue_position = jobs.get(job_id, {}).get("queue_position_at_submission", 1)
+    wait_seconds = jobs.get(job_id, {}).get("wait_seconds", 0.0)
 
     BAR = "=" * 60
     lines = []
@@ -537,6 +552,7 @@ def _write_server_log(
     ln(f"Submitted:    {submitted_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Completed:    {completed_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Total time:   {_fmt_duration(total_seconds)}")
+    ln(f"Queue pos.:   {queue_position}  (wait: {_fmt_duration(wait_seconds)})")
     ln(f"Status:       {status_line}")
     ln("")
     ln("Step timings:")
@@ -615,6 +631,8 @@ def _write_server_log(
         "submitted_at":              submitted_at.isoformat(),
         "completed_at":              completed_at.isoformat(),
         "total_seconds":             round(total_seconds, 1),
+        "queue_position_at_submission": queue_position,
+        "wait_seconds":              round(wait_seconds, 1),
         "status":                    "success" if failed_step is None else "failed",
         "failed_step":               failed_step,
         "error_type":                error_type,
@@ -643,6 +661,13 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
     """Run pipeline steps in a background thread, honoring the steps config."""
     job_dir = JOBS_DIR / job_id
     submitted_at = datetime.fromisoformat(jobs[job_id]["created_at"])
+    started_at = datetime.now(timezone.utc)
+    wait_seconds = (started_at - submitted_at).total_seconds()
+    jobs[job_id].update(
+        status="running",
+        started_at=started_at.isoformat(),
+        wait_seconds=round(wait_seconds, 1),
+    )
     step_times: list[tuple[str, float]] = []
     current_step: str | None = None
     error_tb: str | None = None
@@ -720,6 +745,10 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         _cleanup_intermediates(job_dir, audio_path)
         _cleanup_orphaned_audio()
         _expire_old_jobs()
+        try:
+            active_jobs.remove(job_id)
+        except ValueError:
+            pass
 
 
 @app.post("/api/jobs")
@@ -835,7 +864,7 @@ async def create_job(
     download_token = uuid.uuid4().hex
 
     jobs[job_id] = {
-        "status": "running",
+        "status": "queued",
         "step": 0,
         "step_name": "Queued",
         "error": None,
@@ -843,8 +872,12 @@ async def create_job(
         "audio_filename": audio_path.name,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "download_token": download_token,
+        # 1 = no one ahead (next up); >1 = that many jobs (including this one)
+        # were queued or running when this job was submitted.
+        "queue_position_at_submission": len(active_jobs) + 1,
     }
 
+    active_jobs.append(job_id)
     executor.submit(_run_pipeline, job_id, audio_path, config)
 
     return JSONResponse({"job_id": job_id, "download_token": download_token})
@@ -854,7 +887,17 @@ async def create_job(
 async def get_job(job_id: str):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    return JSONResponse(jobs[job_id])
+    job = dict(jobs[job_id])
+    if job["status"] == "queued" and job_id in active_jobs:
+        position = active_jobs.index(job_id) + 1  # 1 = up next / currently starting
+        total = len(active_jobs)
+        job["queue_position"] = position
+        job["queue_length"] = total
+        job["step_name"] = (
+            "Starting…" if position == 1
+            else f"Waiting in queue (position {position} of {total})"
+        )
+    return JSONResponse(job)
 
 
 @app.get("/api/jobs/{job_id}/download")

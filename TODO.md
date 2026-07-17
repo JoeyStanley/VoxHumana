@@ -255,9 +255,21 @@ The full intended workflow, when built:
 - Wire up an email library (e.g. `smtplib` with BYU SMTP, or SendGrid)
 - Store email in the job record for logging; do not persist it after the email is sent
 - After job completion in close-tab mode: zip results and send/link via email
-- Queue system: the single-threaded executor already serialises jobs, but users
-  in close-tab mode need to know their position. Consider a simple queue-position
-  field in the job status response.
+- Queue system ✓ (implemented) — the single-threaded executor already serialises
+  jobs; `GET /api/jobs/{job_id}` now reports `queue_position` / `queue_length` and
+  a `step_name` like "Waiting in queue (position 2 of 3)" while a job is queued
+  behind another. Tracked via a module-level `active_jobs` list in `web/app.py`
+  (FIFO, matches the executor's own processing order). Tested locally by
+  submitting three jobs concurrently and confirming positions were reported
+  and decremented correctly as earlier jobs finished.
+- Queue wait reporting ✓ (implemented) — every job now records
+  `queue_position_at_submission` (1 = started immediately) and `wait_seconds`
+  (time between submission and actually starting) in the jobs dict. This shows
+  up in three places: the user-facing `processing_log.txt` ("Queue: started at
+  position 2 in line — waited 0m 8s..."), the internal per-job server log in
+  `data/logs/YYYY-MM/<job_id>.txt` ("Queue pos.: 2 (wait: 0m 8s)"), and as
+  `queue_position_at_submission` / `wait_seconds` fields in `data/logs/summary.jsonl`
+  for aggregate analysis of typical wait times once real usage data accumulates.
 
 ### Privacy wording (for the UI)
 "Your email is used to deliver your results and is recorded in our job log alongside
