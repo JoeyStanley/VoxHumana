@@ -9,6 +9,10 @@ Github cheatsheet.yaml
 # Research files
 _LSA2026
 _manuscripts
+# R files (for analyzing output)
+.Rproj.user
+.positai
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
