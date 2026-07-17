@@ -3,8 +3,10 @@ from pathlib import Path
 
 from pipeline.transcribe_with_whisper import transcribe
 from pipeline.convert_whisper_to_textgrid import convert_whisper_to_textgrid
+from pipeline.generate_transcript import generate_transcript
 from pipeline.align_with_mfa import align_with_mfa
 from pipeline.extract_with_newfave import extract_with_newfave
+from pipeline.combine_textgrids import combine_textgrids
 
 
 def run_pipeline(audio_path, job_dir, config=None):
@@ -13,9 +15,10 @@ def run_pipeline(audio_path, job_dir, config=None):
 
     Steps:
         1. Transcribe with Whisper
-        2. Convert transcript to TextGrid
+        2. Convert transcript to TextGrid, then generate a line-by-line transcript
         3. Forced-align with MFA
         4. Extract vowel formants with new-fave
+        5. Add the utterance tier to the MFA TextGrid
 
     Returns the path to the new-fave output directory.
     """
@@ -23,12 +26,14 @@ def run_pipeline(audio_path, job_dir, config=None):
         config = {}
 
     Path(job_dir).mkdir(parents=True, exist_ok=True)
+    stem = Path(audio_path).stem
 
     print("Step 1: Transcribing with Whisper...")
     whisper_result = transcribe(audio_path, job_dir, config.get("whisper"))
 
     print("Step 2: Converting transcript to TextGrid...")
     convert_whisper_to_textgrid(whisper_result, audio_path, job_dir)
+    generate_transcript(job_dir, stem, config.get("praat"))
 
     print("Step 3: Aligning with MFA...")
     mfa_output_dir = align_with_mfa(audio_path, job_dir)
@@ -37,6 +42,9 @@ def run_pipeline(audio_path, job_dir, config=None):
     newfave_output_dir = extract_with_newfave(
         audio_path, mfa_output_dir, job_dir, config.get("newfave")
     )
+
+    print("Step 5: Adding utterance tier to MFA TextGrid...")
+    combine_textgrids(job_dir, stem, config.get("praat"))
 
     print(f"Done. Results written to: {newfave_output_dir}")
     return newfave_output_dir
