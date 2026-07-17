@@ -281,6 +281,81 @@ happen soon, I should fix that so that canceled jobs don't clog the queue.
 
 ---
 
+## Client-side job persistence & status recovery (not yet built)
+
+**Discovered:** while stress-testing the queue locally by submitting several large
+real files back-to-back, the laptop went to sleep partway through and killed the
+dev server. That's a separate problem (see the "computer sleep kills the local dev
+server" note in Alpha/Beta testing below) — but investigating it surfaced a real gap
+that matters independent of the email/close-tab feature above: **if the browser tab
+is closed, reloaded, or crashes while a job is running, there is currently no way to
+get back to it.**
+
+### The gap
+`currentJobId` and `currentDownloadToken` (`web/static/index.html` — the two
+module-level `let`s near the top of the polling script) exist only in that tab's
+JS memory. Nothing is written to `localStorage` or anywhere else. So even though:
+- job results sit server-side for `JOB_RETENTION_HOURS` (72h,
+  see `_expire_old_jobs` in `web/app.py`), and
+- server-side processing is unaffected by the client disconnecting
+  (`_run_pipeline` runs in the background executor regardless of the tab),
+
+...losing that JS state means losing the only record of the download token, which
+is never displayed to the user as text — only the job ID is shown on screen
+(`running-job-id` / `done-job-id` elements). Without the token, `GET
+/api/jobs/{job_id}/download` returns 403.
+
+This is exactly the scenario the user is likely to hit in real use: submitting a
+large file, walking away, and coming back later on the same machine (not
+necessarily wanting full email delivery, just wanting the tab to still work).
+
+### Proposed fix — two layers, can ship independently
+
+**1. `localStorage` persistence (small, no backend changes)**
+- On successful submit, write `{job_id, download_token, filename, submitted_at}`
+  to `localStorage` (key e.g. `vxh_jobs`, structured as an array — see "handle
+  multiple jobs per browser" below, since one user submitting several files in a
+  row is the actual use case that surfaced this).
+- On page load, before showing the empty upload form: check `localStorage` for
+  any job(s) not already known to be finished/downloaded. For each, call
+  `GET /api/jobs/{job_id}`:
+  - 404 (job expired past 72h, or server restarted and lost its in-memory
+    `jobs` dict — see the orphaned-job scenario from the sleep incident) →
+    drop it from `localStorage`, nothing to recover.
+  - still queued/running → restore `currentJobId`/`currentDownloadToken` and
+    resume the progress view / polling exactly where it would have been.
+  - done/error → show the done/error screen directly, skip polling.
+- Clear a job's `localStorage` entry once the user downloads results or
+  dismisses an error, so the list doesn't grow unbounded.
+
+**2. Handle multiple jobs per browser (natural extension, not a separate feature)**
+Since the motivating case is someone submitting several files in sequence (the
+whole point of the queue system above), a single `currentJobId` doesn't fit —
+`localStorage` should hold a small list. Add a lightweight "your recent jobs"
+view (job ID, filename, status, queue position if waiting, download link if
+done) instead of just the current single-job progress screen. This also gives
+users visibility into concurrent submissions without needing the email feature.
+
+**3. Cross-machine / cross-browser recovery (optional, security tradeoff)**
+`localStorage` only helps if it's the same browser profile on the same machine.
+For "I want to check a job from my phone" or "I cleared my browser data,"
+recovery requires a job-ID-only lookup form. Whether that should expose only
+status (queued/running/done/error — safe, no data leak) or also the download
+link is an open question tied to the existing "Job ID guessability" item under
+Security audit below (job IDs are only ~1,190 combinations/day and are not
+secret). Recommendation: status-only for a bare job ID; still require the
+token for downloads. This keeps the download token as the actual bearer
+credential and avoids weakening the existing security posture.
+
+### Relationship to the email/close-tab feature above
+This is a much smaller, backend-change-free version of the same underlying
+problem ("I walked away, how do I get back to my results?"). It's worth doing
+on its own regardless of whether/when SMTP email delivery gets built — once
+email exists, this becomes a nice-to-have fallback rather than the primary
+recovery path.
+
+---
+
 ## Processing time estimation (not yet built)
 
 Currently shows: "Processing time scales with recording length — a 1-hour interview
@@ -455,3 +530,20 @@ parse the prose logs by hand.
 * Valerie Freeman
 * Peggy Renwick
 * Dan Villarreal
+
+### Local testing notes
+- **Computer sleep kills the local dev server.** While stress-testing the queue
+  by submitting several large real files back-to-back locally, the laptop went
+  to sleep partway through and the `uvicorn` process died outright — not
+  suspended/resumed, just gone (no error.log, no crash trace, nothing left
+  running afterward). Everything queued behind the in-flight job at that point
+  was silently orphaned (audio left on disk, never processed — see
+  `_cleanup_orphaned_audio`, which only cleans up on the *next* server start,
+  not proactively). Not a VoxHumana bug — a local-only concern from running the
+  server and doing the submitting on the same machine. Once deployed on the
+  real (always-on) server this won't apply, since the client sleeping doesn't
+  touch the server process. For further local multi-job testing in the
+  meantime: keep the machine awake (e.g. `caffeinate` on macOS) for the
+  duration of the batch. This also motivated the
+  "[Client-side job persistence & status recovery](#client-side-job-persistence--status-recovery-not-yet-built)"
+  item above.
