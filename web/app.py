@@ -30,6 +30,11 @@ from pipeline.generate_transcript import generate_transcript
 from pipeline.align_with_mfa import align_with_mfa
 from pipeline.extract_with_newfave import extract_with_newfave, LANGUAGE_DEFAULTS
 from pipeline.combine_textgrids import combine_textgrids
+from pipeline.languages import (
+    NEWFAVE_LANGUAGE_PRESETS,
+    SUPPORTED_MFA_ACOUSTIC_MODELS,
+    SUPPORTED_MFA_DICTIONARIES,
+)
 
 # Strip any trailing slash so ROOT_PATH + "/api/..." is always well-formed.
 # Set VXH_ROOT_PATH="" (or omit it) for a root-path deployment.
@@ -43,36 +48,10 @@ app = FastAPI(title="VoxHumana")
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 JOB_RETENTION_HOURS = 72
 
-# MFA acoustic models for which new-fave formant extraction is supported,
-# mapped to the new-fave "language" preset (see
-# pipeline.extract_with_newfave.LANGUAGE_DEFAULTS) used to pick the
-# matching vowel-identification regex and recoding rules. Formant
-# extraction is skipped automatically for any other acoustic model.
-NEWFAVE_LANGUAGE_PRESETS = {
-    "english_us_arpa": "en",
-    "spanish_mfa": "es",
-    "french_mfa": "fr",
-    "german_mfa": "de",
-    "portuguese_mfa": "pt",
-}
-
-# Allowlists for MFA model/dictionary names — these values are passed
-# directly to the MFA CLI, so we validate them server-side to prevent
-# unexpected inputs. Expand as new language models are added.
-SUPPORTED_MFA_ACOUSTIC_MODELS = {
-    "english_us_arpa",
-    "french_mfa",
-    "german_mfa",
-    "portuguese_mfa",
-    "spanish_mfa",
-}
-SUPPORTED_MFA_DICTIONARIES = {
-    "english_us_arpa",
-    "french_mfa",
-    "german_mfa",
-    "portuguese_mfa",
-    "spanish_mfa",
-}
+# NEWFAVE_LANGUAGE_PRESETS, SUPPORTED_MFA_ACOUSTIC_MODELS, and
+# SUPPORTED_MFA_DICTIONARIES now live in pipeline/languages.py, shared with
+# main.py, so the CLI and the web app can't drift out of sync on which
+# languages are supported (see pipeline/languages.py for details).
 
 BASE_DIR = Path(__file__).parent.parent
 JOBS_DIR = BASE_DIR / "data" / "jobs"
@@ -373,9 +352,9 @@ def _write_processing_log(
         ln("alignment quality around those words. To improve results, paste the OOV words")
         ln("into the Transcription Hint box and rerun — Whisper will have more context and")
         ln("is less likely to misspell or misrecognize them.")
-        if run_transcription:
+        if ran_transcription:
             ln("")
-            if run_formants:
+            if ran_formants:
                 ln("After new-fave (Step 3) has read this TextGrid, a Praat script")
                 ln("(pipeline/praat/combine_textgrids.praat) reorders its tiers to")
                 ln("Phone, Word and adds the Whisper utterance tier at the bottom, so")

@@ -7,6 +7,7 @@ from pipeline.generate_transcript import generate_transcript
 from pipeline.align_with_mfa import align_with_mfa
 from pipeline.extract_with_newfave import extract_with_newfave
 from pipeline.combine_textgrids import combine_textgrids
+from pipeline.languages import MFA_MODEL_BY_LANGUAGE, NEWFAVE_LANGUAGE_PRESETS
 
 
 def run_pipeline(audio_path, job_dir, config=None):
@@ -36,7 +37,7 @@ def run_pipeline(audio_path, job_dir, config=None):
     generate_transcript(job_dir, stem, config.get("praat"))
 
     print("Step 3: Aligning with MFA...")
-    mfa_output_dir = align_with_mfa(audio_path, job_dir)
+    mfa_output_dir = align_with_mfa(audio_path, job_dir, config.get("mfa"))
 
     print("Step 4: Extracting vowel formants with new-fave...")
     newfave_output_dir = extract_with_newfave(
@@ -54,9 +55,22 @@ def main():
     parser = argparse.ArgumentParser(description="Run the VoxHumana pipeline.")
     parser.add_argument("audio_path", help="Path to the input .wav file")
     parser.add_argument("job_dir", help="Directory for all intermediate and final output")
+    parser.add_argument(
+        "--language",
+        choices=sorted(MFA_MODEL_BY_LANGUAGE),
+        default="en",
+        help="Language of the recording (default: en). Selects the matching "
+             "MFA acoustic model/dictionary and new-fave vowel preset.",
+    )
     args = parser.parse_args()
 
-    run_pipeline(args.audio_path, args.job_dir)
+    mfa_model = MFA_MODEL_BY_LANGUAGE[args.language]
+    config = {
+        "whisper": {"language": args.language},
+        "mfa": {"acoustic_model": mfa_model, "dictionary": mfa_model},
+        "newfave": {"language": NEWFAVE_LANGUAGE_PRESETS.get(mfa_model, "en")},
+    }
+    run_pipeline(args.audio_path, args.job_dir, config)
 
 
 if __name__ == "__main__":
