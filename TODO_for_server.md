@@ -69,6 +69,17 @@ conda run -n aligner mfa model download acoustic english_us_arpa
 conda run -n aligner mfa model download dictionary english_us_arpa
 ```
 
+VoxHumana also supports Spanish, French, German, and Portuguese (Whisper, MFA,
+and new-fave steps all handle these languages). Download their MFA models too,
+or jobs submitted in these languages will fail at the alignment step:
+
+```bash
+for m in spanish_mfa french_mfa german_mfa portuguese_mfa; do
+  conda run -n aligner mfa model download acoustic $m
+  conda run -n aligner mfa model download dictionary $m
+done
+```
+
 Models are stored in `~/Documents/MFA/pretrained_models/` (MFA's global model store).
 This is expected — models are shared across all jobs on the server and are never
 duplicated. Per-job working data is isolated via `--temporary_directory` in the code.
