@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+
+## [0.11.0] - 2026-07-22
 ### Added
 - new-fave formant extraction for French, German, and Portuguese (previously English and Spanish only)
 - Queue information to the UI and logs
