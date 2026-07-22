@@ -1,6 +1,7 @@
 from pathlib import Path
 import warnings
 import yaml
+import tgt
 from new_fave import fave_audio_textgrid, write_data
 
 RESOURCES_DIR = Path(__file__).parent / "resources"
@@ -89,6 +90,28 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
             "VoxHumana processes one speaker per job."
         )
     textgrid_path = textgrid_files[0]
+
+    # new-fave (via aligned_textgrid/fasttrackpy) pairs a speaker's tiers
+    # positionally as (Word, Phone) — it does not look at tier names. A
+    # TextGrid with any other tier count silently misassigns roles instead of
+    # failing: e.g. a 3-tier grid gets read as (tier1=Word, tier2=Phone),
+    # dropping tier3, which is exactly the shape of a VoxHumana *output*
+    # TextGrid (Step 5 appends an utterance tier) re-uploaded as if it were a
+    # fresh MFA TextGrid. Catch that here with an actionable error rather than
+    # let new-fave run against the wrong tiers and produce empty/garbage data.
+    tg_for_validation = tgt.io.read_textgrid(str(textgrid_path), include_empty_intervals=True)
+    n_tiers = len(tg_for_validation.tiers)
+    if n_tiers != 2:
+        tier_names = ", ".join(repr(t.name) for t in tg_for_validation.tiers)
+        raise RuntimeError(
+            f"Expected exactly 2 tiers (words, then phones) in {textgrid_path.name}, "
+            f"found {n_tiers}: {tier_names}. new-fave pairs a speaker's tiers "
+            "positionally, not by name, so an extra tier (e.g. an 'utterance' tier "
+            "from a previously downloaded VoxHumana output) causes it to silently "
+            "misread the wrong tiers as words/phones instead of failing loudly. "
+            "Remove any extra tier and make sure the first tier is words and the "
+            "second is phones before re-uploading."
+        )
 
     output_dir = job_dir / "newfave_output"
     output_dir.mkdir(parents=True, exist_ok=True)

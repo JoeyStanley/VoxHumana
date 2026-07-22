@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import random
+import tempfile
 import zipfile
 import traceback
 from datetime import datetime, timezone
@@ -30,6 +31,11 @@ from pipeline.generate_transcript import generate_transcript
 from pipeline.align_with_mfa import align_with_mfa
 from pipeline.extract_with_newfave import extract_with_newfave, LANGUAGE_DEFAULTS
 from pipeline.combine_textgrids import combine_textgrids
+from pipeline.tier_selection import (
+    list_tier_names,
+    guess_tier_roles,
+    extract_word_phone_tiers,
+)
 from pipeline.languages import (
     NEWFAVE_LANGUAGE_PRESETS,
     SUPPORTED_MFA_ACOUSTIC_MODELS,
@@ -768,10 +774,42 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
             pass
 
 
+@app.post("/api/textgrid-tiers")
+async def get_textgrid_tiers(textgrid: UploadFile = File(...)):
+    """
+    List the tiers in an uploaded TextGrid, with a best-effort guess at
+    which one is the phone tier and which is the word tier.
+
+    Used by the "Extract only" upload flow to let the user confirm/correct
+    tier roles before a job is submitted, since new-fave pairs tiers
+    positionally and silently misreads TextGrids with the wrong tier count
+    or order (see pipeline/tier_selection.py).
+    """
+    contents = await textgrid.read()
+    with tempfile.NamedTemporaryFile(suffix=".TextGrid", delete=False) as tmp:
+        tmp.write(contents)
+        tmp_path = Path(tmp.name)
+
+    try:
+        tier_names = list_tier_names(tmp_path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not parse TextGrid: {exc}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    phone_idx, word_idx = guess_tier_roles(tier_names)
+    return {
+        "tiers": tier_names,
+        "guess": {"phone": phone_idx, "word": word_idx},
+    }
+
+
 @app.post("/api/jobs")
 async def create_job(
     audio: UploadFile = File(...),
     textgrid: Optional[UploadFile] = File(None),
+    phone_tier_index: Optional[int] = Form(None),
+    word_tier_index: Optional[int] = Form(None),
     whisper_model: str = Form("turbo"),
     language: Optional[str] = Form(None),
     initial_prompt: Optional[str] = Form(None),
@@ -852,6 +890,37 @@ async def create_job(
         tg_contents = await textgrid.read()
         tg_path.write_bytes(tg_contents)
         uploaded_files.append(tg_original)
+
+        # Align skipped: this TextGrid feeds new-fave directly, which pairs
+        # tiers positionally as (Word, Phone) and breaks silently on any
+        # other tier count or order. Rebuild it as a canonical 2-tier grid
+        # from the user's tier picks (or a best-effort name-based guess, if
+        # the UI didn't send picks — e.g. a direct API call).
+        if not run_alignment:
+            try:
+                tier_names = list_tier_names(tg_path)
+            except Exception as exc:
+                shutil.rmtree(job_dir, ignore_errors=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Could not parse {tg_original} as a TextGrid: {exc}",
+                )
+            guessed_phone, guessed_word = guess_tier_roles(tier_names)
+            phone_idx = phone_tier_index if phone_tier_index is not None else guessed_phone
+            word_idx = word_tier_index if word_tier_index is not None else guessed_word
+            valid_range = range(len(tier_names))
+            if (
+                phone_idx is None or word_idx is None or phone_idx == word_idx
+                or phone_idx not in valid_range or word_idx not in valid_range
+            ):
+                shutil.rmtree(job_dir, ignore_errors=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Could not determine word/phone tiers in {tg_original} "
+                           f"(found {len(tier_names)} tier(s): {tier_names}). "
+                           "Please select the word and phone tiers explicitly.",
+                )
+            extract_word_phone_tiers(tg_path, word_idx=word_idx, phone_idx=phone_idx)
 
     config = {
         "whisper": {

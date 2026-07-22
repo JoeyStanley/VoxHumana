@@ -839,6 +839,27 @@
             <div class="upload-secondary" id="textgrid-drop-secondary">.TextGrid (Praat format, utterance tier)</div>
             <div class="upload-filename" id="textgrid-drop-filename" style="display:none"></div>
           </div>
+
+          <!-- Tier picker — shown only for Extract-only jobs (Transcribe and Align
+               both off), where the uploaded TextGrid feeds new-fave directly.
+               new-fave pairs tiers positionally, not by name, so the user must
+               confirm which tier is which rather than let it guess silently. -->
+          <div id="tier-picker-section" style="display:none; margin-top:12px; padding:12px 14px; background:var(--pc); border:1px solid var(--pcb); border-radius:4px;">
+            <div style="font-size:11px; font-weight:bold; color:var(--pbm); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:8px;">Which tier is which?</div>
+            <p style="font-size:12px; color:var(--pbl); margin:0 0 10px; line-height:1.5;">new-fave matches tiers by position, not name, so it needs to know which tier holds phones and which holds words. We've guessed below — check it, or pick manually.</p>
+            <div style="display:flex; align-items:flex-end; gap:10px;">
+              <div class="field" style="flex:1; min-width:0;">
+                <label for="phone-tier-select">Phone tier</label>
+                <select id="phone-tier-select" onchange="onTierPickChange()"></select>
+              </div>
+              <button type="button" class="btn-outline" id="swap-tiers-btn" style="padding:7px 10px; font-size:13px; line-height:1;" onclick="swapTierSelection()" title="Swap phone and word tiers" aria-label="Swap phone and word tiers">⇄</button>
+              <div class="field" style="flex:1; min-width:0;">
+                <label for="word-tier-select">Word tier</label>
+                <select id="word-tier-select" onchange="onTierPickChange()"></select>
+              </div>
+            </div>
+            <p id="tier-picker-status" style="display:none; margin:8px 0 0; font-size:12px; color:#7a3a20; line-height:1.5;"></p>
+          </div>
         </div>
       </div>
 
@@ -1195,6 +1216,105 @@
     const fn = document.getElementById('textgrid-drop-filename');
     fn.textContent   = file.name;
     fn.style.display = 'block';
+    maybeLoadTierPicker();
+  }
+
+  // ─── Tier picker (Extract-only: Transcribe and Align both off) ───────────────
+  // new-fave pairs a speaker's tiers positionally as (Word, Phone) — it never
+  // looks at tier names, and silently misreads any other tier count or order.
+  // When the uploaded TextGrid feeds new-fave directly, ask the user which
+  // tier is which instead of guessing silently.
+  let tierPickerLoadedFor = null;
+  let _phonePrev = null;
+  let _wordPrev  = null;
+
+  function isExtractOnlyMode() {
+    return !stepActive.transcription && !stepActive.alignment;
+  }
+
+  function populateTierSelects(tierNames, guess) {
+    const phoneSel = document.getElementById('phone-tier-select');
+    const wordSel  = document.getElementById('word-tier-select');
+    phoneSel.innerHTML = '';
+    wordSel.innerHTML  = '';
+    tierNames.forEach((name, i) => {
+      const label = `${i + 1}. ${name}`;
+      const opt1 = document.createElement('option');
+      opt1.value = String(i); opt1.textContent = label;
+      phoneSel.appendChild(opt1);
+      const opt2 = document.createElement('option');
+      opt2.value = String(i); opt2.textContent = label;
+      wordSel.appendChild(opt2);
+    });
+
+    const hasGuess = (v) => v !== null && v !== undefined;
+    const phoneIdx = hasGuess(guess.phone) ? guess.phone : 0;
+    const wordIdx  = hasGuess(guess.word)  ? guess.word  : (tierNames.length > 1 ? 1 : 0);
+    phoneSel.value = String(phoneIdx);
+    wordSel.value  = String(wordIdx);
+    _phonePrev = phoneSel.value;
+    _wordPrev  = wordSel.value;
+
+    const statusEl = document.getElementById('tier-picker-status');
+    if (tierNames.length < 2) {
+      statusEl.textContent = 'This TextGrid only has one tier — new-fave needs separate word and phone tiers.';
+      statusEl.style.display = '';
+    } else {
+      statusEl.style.display = 'none';
+    }
+  }
+
+  function onTierPickChange() {
+    const phoneSel = document.getElementById('phone-tier-select');
+    const wordSel  = document.getElementById('word-tier-select');
+    if (phoneSel.value === wordSel.value) {
+      // Whichever select just changed stole the other's tier — hand the
+      // other select the value it gave up, so the two never collide.
+      if (phoneSel.value !== _phonePrev) wordSel.value = _phonePrev;
+      else phoneSel.value = _wordPrev;
+    }
+    _phonePrev = phoneSel.value;
+    _wordPrev  = wordSel.value;
+  }
+
+  function swapTierSelection() {
+    const phoneSel = document.getElementById('phone-tier-select');
+    const wordSel  = document.getElementById('word-tier-select');
+    const tmp = phoneSel.value;
+    phoneSel.value = wordSel.value;
+    wordSel.value  = tmp;
+    _phonePrev = phoneSel.value;
+    _wordPrev  = wordSel.value;
+  }
+
+  async function maybeLoadTierPicker() {
+    const section = document.getElementById('tier-picker-section');
+    if (!isExtractOnlyMode() || !selectedTextGrid) {
+      section.style.display = 'none';
+      tierPickerLoadedFor = null;
+      return;
+    }
+    section.style.display = '';
+    if (tierPickerLoadedFor === selectedTextGrid) return; // already loaded for this file
+    tierPickerLoadedFor = selectedTextGrid;
+
+    const statusEl = document.getElementById('tier-picker-status');
+    statusEl.textContent = 'Reading tiers…';
+    statusEl.style.display = '';
+
+    const data = new FormData();
+    data.append('textgrid', selectedTextGrid);
+    try {
+      const res  = await fetch(`${ROOT_PATH}/api/textgrid-tiers`, { method: 'POST', body: data });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.detail || 'Could not read TextGrid tiers.');
+      populateTierSelects(body.tiers, body.guess);
+    } catch (err) {
+      document.getElementById('phone-tier-select').innerHTML = '';
+      document.getElementById('word-tier-select').innerHTML  = '';
+      statusEl.textContent   = err.message;
+      statusEl.style.display = '';
+    }
   }
 
   // ─── Step combination validation ─────────────────────────────────────────────
@@ -1274,6 +1394,7 @@
     }
     updateTextGridHint();
     checkStepCombination();
+    maybeLoadTierPicker();
   }
 
   function toggleStep(id) {
@@ -1291,6 +1412,7 @@
     }
     updateTextGridHint();
     checkStepCombination();
+    maybeLoadTierPicker();
   }
 
   // ─── Submit ───────────────────────────────────────────────────────────────────
@@ -1310,6 +1432,17 @@
       return;
     }
 
+    const tierPickerSection = document.getElementById('tier-picker-section');
+    const tierPickerVisible = tierPickerSection.style.display !== 'none';
+    const phoneTierSelect = document.getElementById('phone-tier-select');
+    const wordTierSelect  = document.getElementById('word-tier-select');
+    if (tierPickerVisible && (!phoneTierSelect.value || !wordTierSelect.value || phoneTierSelect.value === wordTierSelect.value)) {
+      const statusEl = document.getElementById('tier-picker-status');
+      statusEl.textContent   = 'Pick a word tier and a phone tier before submitting.';
+      statusEl.style.display = '';
+      return;
+    }
+
     const btn = document.getElementById('submit-btn');
     btn.disabled    = true;
     btn.textContent = 'Submitting…';
@@ -1318,6 +1451,10 @@
     const data = new FormData();
     data.append('audio',                     selectedFile);
     if (selectedTextGrid) data.append('textgrid', selectedTextGrid);
+    if (tierPickerVisible) {
+      data.append('phone_tier_index', phoneTierSelect.value);
+      data.append('word_tier_index',  wordTierSelect.value);
+    }
     data.append('whisper_model',             form.whisper_model.value);
     data.append('language',                  form.language.value);
     data.append('initial_prompt',            form.initial_prompt.value);
@@ -1547,6 +1684,11 @@
     document.getElementById('textgrid-drop-secondary').style.display = '';
     document.getElementById('textgrid-drop-filename').style.display  = 'none';
     tgFileInput.value = '';
+
+    tierPickerLoadedFor = null;
+    document.getElementById('tier-picker-section').style.display = 'none';
+    document.getElementById('phone-tier-select').innerHTML = '';
+    document.getElementById('word-tier-select').innerHTML  = '';
 
     // Step toggles are intentionally preserved across jobs — if the user ran
     // Spanish last time, the same steps (and language warning) carry forward.
