@@ -1,8 +1,12 @@
+import shutil
 from pathlib import Path
 import warnings
 import yaml
 import tgt
 from new_fave import fave_audio_textgrid, write_data
+
+from pipeline.combine_preliquid_sequences import combine_preliquid_sequences
+from pipeline.tier_selection import extract_word_phone_tiers
 
 RESOURCES_DIR = Path(__file__).parent / "resources"
 
@@ -60,6 +64,25 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
         labelset_parser (str):  Phonetic label parser, default from LANGUAGE_DEFAULTS
         point_heuristic (str):  Measurement point method, default from LANGUAGE_DEFAULTS
         ft_config (str):        FastTrack configuration, default "default"
+        combine_preliquid (bool): Merge word-internal vowel+liquid (L/R) phone
+                                 intervals into a single combined interval
+                                 before extraction (e.g. "UH1"+"L" -> "UHL1"),
+                                 so the vowel and liquid are measured as one
+                                 unit. Only applies when language == "en" (it's
+                                 silently ignored otherwise, since it depends
+                                 on CMU ARPABET stress-digit labels); default
+                                 False. Forces recode_rules to "norecode" (raw
+                                 CMU ARPABET labels for everything, not just
+                                 the combined ones) unless recode_rules is
+                                 explicitly set, since new-fave's Labov-style
+                                 English recoding has no equivalent category
+                                 for combined vowel+liquid labels. See
+                                 pipeline.combine_preliquid_sequences.
+        include_intervocalic (bool): When combine_preliquid is on, whether to
+                                 also merge a liquid followed by another vowel
+                                 in the same word (e.g. "yellow", "fuller").
+                                 Default True. See combine_preliquid_sequences
+                                 for the caveat this involves.
 
     Returns:
         Path to the new-fave output directory.
@@ -116,6 +139,42 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
     output_dir = job_dir / "newfave_output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Only meaningful for English (CMU ARPABET stress-digit labels) -- silently
+    # ignored for any other language rather than erroring, mirroring how an
+    # unsupported acoustic model silently disables the whole formants step
+    # elsewhere in the pipeline (see web/app.py's create_job()).
+    combine_preliquid = bool(config.get("combine_preliquid", False)) and language == "en"
+    extraction_textgrid_path = textgrid_path
+    preliquid_textgrid_path = None
+    if combine_preliquid:
+        # Work on a copy in newfave_output/, not the mfa_output TextGrid itself
+        # -- this tier only exists because of a new-fave option, and mfa_output
+        # may not even correspond to an actual MFA run (e.g. the "Extract only"
+        # flow uploads a TextGrid directly). Adds a 3rd tier, "phones - combined
+        # - liquids", to the copy; the original word/phone tiers are left
+        # untouched.
+        preliquid_textgrid_path = output_dir / f"{textgrid_path.stem}_preliquid.TextGrid"
+        shutil.copy2(textgrid_path, preliquid_textgrid_path)
+        combine_preliquid_sequences(
+            preliquid_textgrid_path,
+            config=config,
+            include_intervocalic=config.get("include_intervocalic", True),
+        )
+        # new-fave requires exactly 2 tiers and pairs them positionally as
+        # (Word, Phone), so build a throwaway 2-tier copy pointing at the new
+        # tier instead of the original phone tier, and extract from that.
+        # Tier order at this point is always (word, phone, phones - combined -
+        # liquids) -- see combine_preliquid_sequences, which always appends
+        # the new tier last -- so word is tier 0 and the new tier is the last one.
+        extraction_textgrid_path = output_dir / f"{textgrid_path.stem}_for_extraction.TextGrid"
+        n_tiers_with_combined = len(tgt.io.read_textgrid(str(preliquid_textgrid_path)).tiers)
+        extract_word_phone_tiers(
+            preliquid_textgrid_path,
+            word_idx=0,
+            phone_idx=n_tiers_with_combined - 1,
+            output_path=extraction_textgrid_path,
+        )
+
     formant_ceiling = config.get("formant_ceiling", None)
     num_formants = config.get("num_formants", None)
     include_overlaps = config.get("include_overlaps", True)
@@ -131,6 +190,17 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
         ft_config_path.write_text(yaml.dump(override))
         ft_config = str(ft_config_path)
 
+    # When combine_preliquid is active, the default recode scheme switches to
+    # "norecode" (raw CMU ARPABET labels, left alone) for every token, not
+    # just the combined ones. new-fave's Labov-style English recoding
+    # (cmu2labov) has no equivalent category for a combined vowel+liquid
+    # label like "UHL1" -- and there's no way to recode just the combined
+    # ones without producing a file that mixes two different transcription
+    # conventions (Labov shorthand for plain vowels, raw ARPABET for
+    # preliquid ones). An explicit recode_rules override in config still
+    # takes precedence.
+    recode_rules_default = "norecode" if combine_preliquid else lang_defaults["recode_rules"]
+
     # fave_audio_textgrid() catches its own exceptions and returns None on
     # failure (e.g. a corrupt or mislabeled audio file), warning instead of
     # raising. Capture that warning so a None result produces a clear error
@@ -139,14 +209,20 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
         warnings.simplefilter("always")
         speakers = fave_audio_textgrid(
             audio_path,
-            textgrid_path,
+            extraction_textgrid_path,
             speakers=config.get("speakers", "all"),
-            recode_rules=config.get("recode_rules", lang_defaults["recode_rules"]),
+            recode_rules=config.get("recode_rules", recode_rules_default),
             labelset_parser=config.get("labelset_parser", lang_defaults["labelset_parser"]),
             point_heuristic=config.get("point_heuristic", lang_defaults["point_heuristic"]),
             ft_config=ft_config,
             include_overlaps=include_overlaps,
         )
+
+    if combine_preliquid:
+        # Throwaway file, not meant to be part of the user's download -- the
+        # tier it was built from is already in {stem}_preliquid.TextGrid,
+        # which is kept.
+        extraction_textgrid_path.unlink(missing_ok=True)
 
     if speakers is None:
         detail = "; ".join(str(w.message) for w in caught) or "no further detail was reported by new-fave"

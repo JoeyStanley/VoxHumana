@@ -81,12 +81,14 @@ active_jobs: list[str] = []
 # Organ stops drawn from the Salt Lake Tabernacle organ — used to generate
 # memorable job IDs in the form YYMMDD_Stop1_Stop2.
 _ORGAN_STOPS = [
-    "Bombarde", "Bourdon", "Celeste", "Clarinet", "Clarion", "CorAnglais",
-    "Cornopean", "Cymbelstern", "Diaphone", "Diapason", "Doppelflote",
-    "Dulciana", "Flugelhorn", "Flute", "FrenchHorn", "Fugara", "Gamba",
-    "Gemshorn", "Harp", "LieblichBourdon", "Mixture", "Nachthorn", "Nazard",
-    "Oboe", "Octave", "Piccolo", "Principal", "Rauschquinte", "Trombone",
-    "Trompette", "Tremulant", "Trumpet", "Tuba", "Tutti", "Viole",
+    "Bombarde", "Bourdon", "BourdonDoux", "Celeste", "ChimneyFlute", "ChoralBass", "Chromorne", 
+    "Clarinet", "Clarion", "CorAnglais", "ContreBourdon", "ContreTrompette", "Cornopean", 
+    "Cymbelstern", "Diaphone", "Diapason", "Doppelflote", "Dulciana", "Flugelhorn", "Flute", 
+    "FluteCeleste", "Fourniture", "FrenchHorn", "Fugara", "Gamba", "Gedeckt", "GeigenPrincipal"
+    "Gemshorn", "Harp", "HarmonicFlute", "LieblichBourdon", "Mixture", "Nachthorn", "Nazard",
+    "Oboe", "Octave", "Piccolo", "PleinJeu", "Prestant", "Principal", "Rauschquinte", "Spitzflote", 
+    "SuperOctave", "Tierce", "Trombone", "Trompette", "Tremulant", "Trumpet", "Tuba", "Tutti", 
+    "Viole", "VioleCeleste"
 ]
 
 
@@ -410,8 +412,15 @@ def _write_processing_log(
         nf_language = nf_cfg.get("language", "en")
         lang_defaults = LANGUAGE_DEFAULTS.get(nf_language, LANGUAGE_DEFAULTS["en"])
 
+        # Mirrors the gating in pipeline.extract_with_newfave: only meaningful
+        # for English (CMU ARPABET stress-digit labels), silently ignored
+        # otherwise.
+        combine_preliquid = bool(nf_cfg.get("combine_preliquid", False)) and nf_language == "en"
+        include_intervocalic = nf_cfg.get("include_intervocalic", True)
+        recode_rules_default = "norecode" if combine_preliquid else lang_defaults["recode_rules"]
+
         speakers = nf_cfg.get("speakers", "all")
-        recode_rules = nf_cfg.get("recode_rules", lang_defaults["recode_rules"])
+        recode_rules = nf_cfg.get("recode_rules", recode_rules_default)
         labelset_parser = nf_cfg.get("labelset_parser", lang_defaults["labelset_parser"])
         point_heuristic = nf_cfg.get("point_heuristic", lang_defaults["point_heuristic"])
         formant_ceiling = nf_cfg.get("formant_ceiling")
@@ -427,12 +436,28 @@ def _write_processing_log(
         ln(f"STEP 3 — VOWEL FORMANT EXTRACTION: new-fave  v{newfave_ver}")
         ln(BAR)
         ln("")
+        if combine_preliquid:
+            ln("Before new-fave ran, a Praat script (pipeline/praat/combine_preliquid_sequences.praat)")
+            ln("added a new tier, \"phones - combined - liquids\", to a copy of the aligned TextGrid")
+            ln("(saved as *_preliquid.TextGrid below): a copy of the phone tier with each word-internal")
+            ln("vowel immediately followed by an \"L\" or \"R\" merged into a single combined interval,")
+            ln("e.g. \"UH1\"+\"L\" -> \"UHL1\" (the stress marker moves to the end). The original phone")
+            ln("tier is left untouched, so both are in *_preliquid.TextGrid side by side. new-fave")
+            ln("extracted formants from the new combined tier, not the original phone tier. Because")
+            ln("new-fave's Labov-style English recoding has no equivalent category for a combined")
+            ln("vowel+liquid label like \"UHL1\", recode_rules was set to \"norecode\" for this run --")
+            ln("every label (combined or not) is left as raw CMU ARPABET rather than mixing Labov")
+            ln("shorthand and ARPABET in the same file.")
+            ln("")
         ln("new-fave locates vowel tokens in the MFA-aligned TextGrid, estimates")
         ln("formant trajectories across each vowel using FastTrack, and applies a")
         ln("point-measurement heuristic to pick a single representative F1/F2")
-        if nf_language == "en":
+        if nf_language == "en" and not combine_preliquid:
             ln("value per token. Phonetic labels are recoded from CMU ARPABET to Labov")
             ln("vowel-class notation. Five output files are written:")
+        elif combine_preliquid:
+            ln("value per token. Phonetic labels are left as raw CMU ARPABET (recode_rules")
+            ln("\"norecode\" -- see above). Six output files are written:")
         else:
             ln("value per token. Vowels are identified with a labelset parser matching")
             ln(f"the '{nf_language}' phone set. Five output files are written:")
@@ -442,6 +467,9 @@ def _write_processing_log(
         ln("  *_param.csv        — DCT coefficients of the formant tracks (Hz scale)")
         ln("  *_logparam.csv     — DCT coefficients of the formant tracks (log Hz scale)")
         ln("  *_recoded.TextGrid — Praat TextGrid with recoded labels applied (see recode_rules)")
+        if combine_preliquid:
+            ln("  *_preliquid.TextGrid — copy of the aligned TextGrid with the \"phones - combined -")
+            ln("                       liquids\" tier added, as fed into new-fave (see above)")
         if has_ft_override:
             ln("  ft_config.yml      — FastTrack parameter overrides used for this run;")
             ln("                       only needed if you want to rerun the extraction offline")
@@ -456,9 +484,25 @@ def _write_processing_log(
         ln(f"  - formant_ceiling:    {fc_str}")
         ln(f"  - num_formants:       {nf_str}")
         ln(f"  - include_overlaps:   {include_overlaps}{dflt(include_overlaps, True)}")
+        ln(f"  - combine_preliquid:  {combine_preliquid}{dflt(combine_preliquid, False)}")
+        if combine_preliquid:
+            ln(f"  - include_intervocalic: {include_intervocalic}{dflt(include_intervocalic, True)}")
         ln("")
         ln("To replicate what VoxHumana did offline in a Python script:")
         ln("")
+        if combine_preliquid:
+            ln(f"    # newfave_output/{stem}_preliquid.TextGrid in this download already has the")
+            ln("    # \"phones - combined - liquids\" tier (see pipeline/praat/combine_preliquid_sequences.praat),")
+            ln("    # alongside the original, untouched phone tier. new-fave needs exactly 2 tiers")
+            ln("    # paired positionally as (Word, Phone), so rebuild a 2-tier copy pointing at")
+            ln("    # the combined tier instead of the original phone tier:")
+            ln("    import tgt")
+            ln(f"    tg = tgt.io.read_textgrid('newfave_output/{stem}_preliquid.TextGrid')")
+            ln("    out_tg = tgt.TextGrid()")
+            ln("    out_tg.add_tier(tg.tiers[0])   # words")
+            ln("    out_tg.add_tier(tg.tiers[-1])  # phones - combined - liquids")
+            ln("    tgt.write_to_file(out_tg, 'for_extraction.TextGrid')")
+            ln("")
         ln("    from new_fave import fave_audio_textgrid, write_data")
         ln("")
         if has_ft_override:
@@ -478,9 +522,10 @@ def _write_processing_log(
         else:
             ft_repr = "'default'"
 
+        textgrid_repr = "'for_extraction.TextGrid'" if combine_preliquid else f"'mfa_output/{stem}.TextGrid'"
         ln(f"    speakers = fave_audio_textgrid(")
         ln(f"        {audio_filename!r},")
-        ln(f"        'mfa_output/{stem}.TextGrid',")
+        ln(f"        {textgrid_repr},")
         ln(f"        speakers={speakers!r},")
         ln(f"        recode_rules={recode_rules!r},")
         ln(f"        labelset_parser={labelset_parser!r},")
@@ -586,15 +631,20 @@ def _write_server_log(
     nf_language = nf_cfg.get("language", "en")
     nf_lang_defaults = LANGUAGE_DEFAULTS.get(nf_language, LANGUAGE_DEFAULTS["en"])
     nf_point_heuristic = nf_cfg.get("point_heuristic", nf_lang_defaults["point_heuristic"])
+    nf_combine_preliquid = bool(nf_cfg.get("combine_preliquid", False)) and nf_language == "en"
+    nf_recode_rules_default = "norecode" if nf_combine_preliquid else nf_lang_defaults["recode_rules"]
     ln(f"  [new-fave]")
     ln(f"  language:                 {nf_language}")
     ln(f"  speakers:                 {nf_cfg.get('speakers', 'all')}")
-    ln(f"  recode_rules:             {nf_cfg.get('recode_rules', nf_lang_defaults['recode_rules'])}")
+    ln(f"  recode_rules:             {nf_cfg.get('recode_rules', nf_recode_rules_default)}")
     ln(f"  labelset_parser:          {nf_cfg.get('labelset_parser', nf_lang_defaults['labelset_parser'])}")
     ln(f"  point_heuristic:          {nf_point_heuristic if nf_point_heuristic is not None else 'default (1/3 point)'}")
     ln(f"  formant_ceiling:          {nf_cfg.get('formant_ceiling') or '(default)'}")
     ln(f"  num_formants:             {nf_cfg.get('num_formants') or '(default)'}")
     ln(f"  include_overlaps:         {nf_cfg.get('include_overlaps', True)}")
+    ln(f"  combine_preliquid:        {nf_combine_preliquid}")
+    if nf_combine_preliquid:
+        ln(f"  include_intervocalic:     {nf_cfg.get('include_intervocalic', True)}")
 
     if error_tb:
         ln("")
@@ -648,6 +698,8 @@ def _write_server_log(
         "formant_ceiling":           nf_cfg.get("formant_ceiling"),
         "num_formants":              nf_cfg.get("num_formants"),
         "include_overlaps":          nf_cfg.get("include_overlaps", True),
+        "combine_preliquid":         nf_combine_preliquid,
+        "include_intervocalic":      nf_cfg.get("include_intervocalic", True) if nf_combine_preliquid else None,
         "step_seconds":              step_seconds,
         "versions": {
             "openai-whisper": whisper_ver,
@@ -820,6 +872,8 @@ async def create_job(
     formant_ceiling: Optional[str] = Form(None),
     num_formants: Optional[str] = Form(None),
     include_overlaps: bool = Form(True),
+    combine_preliquid: bool = Form(False),
+    include_intervocalic: bool = Form(True),
     run_transcription: bool = Form(True),
     run_alignment: bool = Form(True),
     run_formants: bool = Form(True),
@@ -939,6 +993,8 @@ async def create_job(
             "formant_ceiling": int(formant_ceiling) if formant_ceiling else None,
             "num_formants": int(num_formants) if num_formants else None,
             "include_overlaps": include_overlaps,
+            "combine_preliquid": combine_preliquid,
+            "include_intervocalic": include_intervocalic,
         },
         "steps": {
             "transcription": run_transcription,
