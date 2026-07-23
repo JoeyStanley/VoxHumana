@@ -15,6 +15,7 @@ _manuscripts
 check_output.Rmd
 VoxHumana.Rproj
 .Rhistory
+scripts/audit.Rmd
 
 
 # Byte-compiled / optimized / DLL files
