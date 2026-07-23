@@ -993,6 +993,21 @@
               <label for="include-overlaps">Include vowels during overlapping speech</label>
             </div>
             <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When unchecked, vowels that occur while another speaker is talking are excluded from measurement.</p>
+
+            <div class="field-check" style="margin-top:10px">
+              <input type="checkbox" id="combine-preliquid" name="combine_preliquid" onchange="onCombinePreliquidChange()">
+              <label for="combine-preliquid">Treat vowels and following liquids as single units</label>
+            </div>
+            <p class="adv-coming-soon" style="margin: 2px 0 0 22px">If a vowel is followed by an &quot;L&quot; or &quot;R&quot; within the same word, the two intervals are combined. This, in the case of the word <em>pull</em>, &quot;P + UH1 + L&quot; becomes &quot;P + UHL1&quot;.</p>
+            <p class="adv-coming-soon" id="combine-preliquid-lang-note" style="display:none; margin: 4px 0 0 22px; color:#7a3a20;">English only — requires CMU ARPABET stress-marked phone labels.</p>
+
+            <div id="combine-preliquid-sub" style="display:none; margin-top:8px; margin-left:22px">
+              <div class="field-check">
+                <input type="checkbox" id="include-intervocalic" name="include_intervocalic" checked>
+                <label for="include-intervocalic">Include intervocalic liquids</label>
+              </div>
+              <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When checked (default), a liquid is combined with the previous vowel even if it's followed by another vowel in the same word — e.g. the "L" in <em>yellow</em>, or in <em>fuller</em>/<em>pooling</em> where a vowel-initial suffix follows what's really a coda liquid. When unchecked, only word-final or preconsonantal liquids are combined (as in <em>pull</em> or <em>world</em>) — but this also excludes cases like <em>fuller</em>/<em>pooling</em> that arguably should still count, since there's no way to tell those apart from true onset liquids like the one in <em>yellow</em> using phone adjacency alone.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -1380,6 +1395,24 @@
     }
 
     note.style.display = formantsSupported ? 'none' : '';
+
+    // "Treat vowels and following liquids as single units" relies on CMU
+    // ARPABET stress-digit labels, so it only works for English.
+    const preliquidCb   = document.getElementById('combine-preliquid');
+    const preliquidNote = document.getElementById('combine-preliquid-lang-note');
+    const englishOnly   = (lang === 'en');
+    preliquidCb.disabled = !englishOnly;
+    if (!englishOnly && preliquidCb.checked) {
+      preliquidCb.checked = false;
+      onCombinePreliquidChange();
+    }
+    preliquidNote.style.display = englishOnly ? 'none' : '';
+  }
+
+  // ─── Combine pre-liquid vowel sequences ──────────────────────────────────────
+  function onCombinePreliquidChange() {
+    const checked = document.getElementById('combine-preliquid').checked;
+    document.getElementById('combine-preliquid-sub').style.display = checked ? '' : 'none';
   }
 
   // ─── Step toggle ──────────────────────────────────────────────────────────────
@@ -1465,6 +1498,8 @@
     data.append('formant_ceiling',           form.formant_ceiling.value);
     data.append('num_formants',              form.num_formants.value);
     data.append('include_overlaps',          form.include_overlaps.checked);
+    data.append('combine_preliquid',         form.combine_preliquid.checked);
+    data.append('include_intervocalic',      form.include_intervocalic.checked);
     data.append('run_transcription',         stepActive.transcription);
     data.append('run_alignment',             stepActive.alignment);
     data.append('run_formants',              stepActive.formants);
