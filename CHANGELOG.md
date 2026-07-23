@@ -5,6 +5,8 @@ All notable changes to VoxHumana will be documented here.
 ## [Unreleased]
 
 ## [0.12.0] - 2026-07-23
+### Added
+- In English analyses, prelaterals and prerhotics can be combined with their following liquids in new-fave analysis.
 
 ## [0.11.0] - 2026-07-22
 ### Added
