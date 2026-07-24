@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+### Added
+- When uploading a TextGrid to MFA, users can now specify which tier to use.
 
 ## [0.12.0] - 2026-07-23
 ### Added
