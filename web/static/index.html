@@ -860,6 +860,20 @@
             </div>
             <p id="tier-picker-status" style="display:none; margin:8px 0 0; font-size:12px; color:#7a3a20; line-height:1.5;"></p>
           </div>
+
+          <!-- Utterance tier picker — shown when Align is running against a
+               user-supplied TextGrid (Transcribe off). MFA reads every tier
+               in the file as a separate speaker's utterance list, so the
+               user must confirm which single tier holds the transcription. -->
+          <div id="utterance-tier-picker-section" style="display:none; margin-top:12px; padding:12px 14px; background:var(--pc); border:1px solid var(--pcb); border-radius:4px;">
+            <div style="font-size:11px; font-weight:bold; color:var(--pbm); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:8px;">Which tier has the transcription?</div>
+            <p style="font-size:12px; color:var(--pbl); margin:0 0 10px; line-height:1.5;">MFA reads every tier in the file as a separate speaker's utterances, so it needs to know which single tier holds the utterance-level transcription. We've guessed below — check it, or pick manually.</p>
+            <div class="field">
+              <label for="utterance-tier-select">Utterance tier</label>
+              <select id="utterance-tier-select"></select>
+            </div>
+            <p id="utterance-tier-picker-status" style="display:none; margin:8px 0 0; font-size:12px; color:#7a3a20; line-height:1.5;"></p>
+          </div>
         </div>
       </div>
 
@@ -1234,17 +1248,47 @@
     maybeLoadTierPicker();
   }
 
-  // ─── Tier picker (Extract-only: Transcribe and Align both off) ───────────────
-  // new-fave pairs a speaker's tiers positionally as (Word, Phone) — it never
-  // looks at tier names, and silently misreads any other tier count or order.
-  // When the uploaded TextGrid feeds new-fave directly, ask the user which
-  // tier is which instead of guessing silently.
+  // ─── Tier picker ───────────────────────────────────────────────────────────
+  // Two upload flows need the user to confirm which tier in their TextGrid
+  // plays which role, rather than let the app guess silently:
+  //   - Extract-only (Transcribe and Align both off): new-fave pairs a
+  //     speaker's tiers positionally as (Word, Phone) — it never looks at
+  //     tier names, and silently misreads any other tier count or order.
+  //   - Align-only (Transcribe off, Align on): MFA reads every tier in the
+  //     file as a separate speaker's utterance list, so the user must
+  //     confirm which single tier holds the transcription.
   let tierPickerLoadedFor = null;
   let _phonePrev = null;
   let _wordPrev  = null;
 
   function isExtractOnlyMode() {
     return !stepActive.transcription && !stepActive.alignment;
+  }
+
+  function isAlignOnlyTextGridMode() {
+    return !stepActive.transcription && stepActive.alignment;
+  }
+
+  function populateUtteranceTierSelect(tierNames, guess) {
+    const sel = document.getElementById('utterance-tier-select');
+    sel.innerHTML = '';
+    tierNames.forEach((name, i) => {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = `${i + 1}. ${name}`;
+      sel.appendChild(opt);
+    });
+
+    const hasGuess = (v) => v !== null && v !== undefined;
+    sel.value = String(hasGuess(guess.utterance) ? guess.utterance : 0);
+
+    const statusEl = document.getElementById('utterance-tier-picker-status');
+    if (tierNames.length > 1) {
+      statusEl.textContent = 'This TextGrid has more than one tier — MFA reads each as a separate speaker, so pick the one with the transcription.';
+      statusEl.style.display = '';
+    } else {
+      statusEl.style.display = 'none';
+    }
   }
 
   function populateTierSelects(tierNames, guess) {
@@ -1303,17 +1347,28 @@
   }
 
   async function maybeLoadTierPicker() {
-    const section = document.getElementById('tier-picker-section');
-    if (!isExtractOnlyMode() || !selectedTextGrid) {
-      section.style.display = 'none';
+    const wordPhoneSection = document.getElementById('tier-picker-section');
+    const utteranceSection = document.getElementById('utterance-tier-picker-section');
+    const mode = isExtractOnlyMode() ? 'wordphone' : (isAlignOnlyTextGridMode() ? 'utterance' : null);
+
+    if (!mode || !selectedTextGrid) {
+      wordPhoneSection.style.display = 'none';
+      utteranceSection.style.display = 'none';
       tierPickerLoadedFor = null;
       return;
     }
-    section.style.display = '';
+    wordPhoneSection.style.display = mode === 'wordphone' ? '' : 'none';
+    utteranceSection.style.display = mode === 'utterance' ? '' : 'none';
+
     if (tierPickerLoadedFor === selectedTextGrid) return; // already loaded for this file
     tierPickerLoadedFor = selectedTextGrid;
 
-    const statusEl = document.getElementById('tier-picker-status');
+    // Whichever picker is visible shows the "reading" status while the
+    // fetch is in flight; the response populates both pickers at once so
+    // switching modes afterward (e.g. toggling Align) needs no refetch.
+    const statusEl = mode === 'wordphone'
+      ? document.getElementById('tier-picker-status')
+      : document.getElementById('utterance-tier-picker-status');
     statusEl.textContent = 'Reading tiers…';
     statusEl.style.display = '';
 
@@ -1324,9 +1379,11 @@
       const body = await res.json();
       if (!res.ok) throw new Error(body.detail || 'Could not read TextGrid tiers.');
       populateTierSelects(body.tiers, body.guess);
+      populateUtteranceTierSelect(body.tiers, body.guess);
     } catch (err) {
       document.getElementById('phone-tier-select').innerHTML = '';
       document.getElementById('word-tier-select').innerHTML  = '';
+      document.getElementById('utterance-tier-select').innerHTML = '';
       statusEl.textContent   = err.message;
       statusEl.style.display = '';
     }
@@ -1476,6 +1533,16 @@
       return;
     }
 
+    const utteranceTierSection = document.getElementById('utterance-tier-picker-section');
+    const utteranceTierVisible = utteranceTierSection.style.display !== 'none';
+    const utteranceTierSelect  = document.getElementById('utterance-tier-select');
+    if (utteranceTierVisible && !utteranceTierSelect.value) {
+      const statusEl = document.getElementById('utterance-tier-picker-status');
+      statusEl.textContent   = 'Pick the tier that holds the utterance transcription before submitting.';
+      statusEl.style.display = '';
+      return;
+    }
+
     const btn = document.getElementById('submit-btn');
     btn.disabled    = true;
     btn.textContent = 'Submitting…';
@@ -1487,6 +1554,9 @@
     if (tierPickerVisible) {
       data.append('phone_tier_index', phoneTierSelect.value);
       data.append('word_tier_index',  wordTierSelect.value);
+    }
+    if (utteranceTierVisible) {
+      data.append('utterance_tier_index', utteranceTierSelect.value);
     }
     data.append('whisper_model',             form.whisper_model.value);
     data.append('language',                  form.language.value);
@@ -1724,6 +1794,8 @@
     document.getElementById('tier-picker-section').style.display = 'none';
     document.getElementById('phone-tier-select').innerHTML = '';
     document.getElementById('word-tier-select').innerHTML  = '';
+    document.getElementById('utterance-tier-picker-section').style.display = 'none';
+    document.getElementById('utterance-tier-select').innerHTML = '';
 
     // Step toggles are intentionally preserved across jobs — if the user ran
     // Spanish last time, the same steps (and language warning) carry forward.

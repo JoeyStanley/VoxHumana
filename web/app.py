@@ -35,6 +35,8 @@ from pipeline.tier_selection import (
     list_tier_names,
     guess_tier_roles,
     extract_word_phone_tiers,
+    guess_utterance_tier,
+    extract_utterance_tier,
 )
 from pipeline.languages import (
     NEWFAVE_LANGUAGE_PRESETS,
@@ -829,13 +831,19 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
 @app.post("/api/textgrid-tiers")
 async def get_textgrid_tiers(textgrid: UploadFile = File(...)):
     """
-    List the tiers in an uploaded TextGrid, with a best-effort guess at
-    which one is the phone tier and which is the word tier.
+    List the tiers in an uploaded TextGrid, with best-effort guesses at
+    which tier plays which role.
 
-    Used by the "Extract only" upload flow to let the user confirm/correct
-    tier roles before a job is submitted, since new-fave pairs tiers
-    positionally and silently misreads TextGrids with the wrong tier count
-    or order (see pipeline/tier_selection.py).
+    Used by two upload flows to let the user confirm/correct tier roles
+    before a job is submitted (see pipeline/tier_selection.py):
+      - "Extract only" (Transcribe and Align both off): new-fave pairs
+        tiers positionally as (Word, Phone) and silently misreads
+        TextGrids with the wrong tier count or order.
+      - "Align only" (Transcribe off, Align on): MFA reads every tier in
+        the TextGrid as a separate speaker's utterance list, so the user
+        must confirm which single tier holds the utterance transcription.
+    Both guesses are returned regardless of which flow is active, since
+    computing either is cheap.
     """
     contents = await textgrid.read()
     with tempfile.NamedTemporaryFile(suffix=".TextGrid", delete=False) as tmp:
@@ -850,9 +858,10 @@ async def get_textgrid_tiers(textgrid: UploadFile = File(...)):
         tmp_path.unlink(missing_ok=True)
 
     phone_idx, word_idx = guess_tier_roles(tier_names)
+    utterance_idx = guess_utterance_tier(tier_names)
     return {
         "tiers": tier_names,
-        "guess": {"phone": phone_idx, "word": word_idx},
+        "guess": {"phone": phone_idx, "word": word_idx, "utterance": utterance_idx},
     }
 
 
@@ -862,6 +871,7 @@ async def create_job(
     textgrid: Optional[UploadFile] = File(None),
     phone_tier_index: Optional[int] = Form(None),
     word_tier_index: Optional[int] = Form(None),
+    utterance_tier_index: Optional[int] = Form(None),
     whisper_model: str = Form("turbo"),
     language: Optional[str] = Form(None),
     initial_prompt: Optional[str] = Form(None),
@@ -975,6 +985,33 @@ async def create_job(
                            "Please select the word and phone tiers explicitly.",
                 )
             extract_word_phone_tiers(tg_path, word_idx=word_idx, phone_idx=phone_idx)
+        else:
+            # Align running: this TextGrid feeds MFA directly as its transcript
+            # input. MFA treats every tier in the file as a separate speaker's
+            # utterance list, so extra tiers (or the wrong tier holding the
+            # transcription) would confuse alignment. Trim it down to just the
+            # user-selected (or best-effort guessed) utterance tier.
+            try:
+                tier_names = list_tier_names(tg_path)
+            except Exception as exc:
+                shutil.rmtree(job_dir, ignore_errors=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Could not parse {tg_original} as a TextGrid: {exc}",
+                )
+            guessed_utterance = guess_utterance_tier(tier_names)
+            utterance_idx = (
+                utterance_tier_index if utterance_tier_index is not None else guessed_utterance
+            )
+            if utterance_idx is None or utterance_idx not in range(len(tier_names)):
+                shutil.rmtree(job_dir, ignore_errors=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Could not determine the utterance-transcript tier in {tg_original} "
+                           f"(found {len(tier_names)} tier(s): {tier_names}). "
+                           "Please select the utterance tier explicitly.",
+                )
+            extract_utterance_tier(tg_path, utterance_idx=utterance_idx)
 
     config = {
         "whisper": {

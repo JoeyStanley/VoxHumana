@@ -20,6 +20,7 @@ import tgt
 
 PHONE_KEYWORDS = ("phone", "phoneme", "segment")
 WORD_KEYWORDS = ("word",)
+UTTERANCE_KEYWORDS = ("utterance", "sentence", "transcript", "line", "text")
 
 
 def list_tier_names(textgrid_path):
@@ -76,6 +77,62 @@ def guess_tier_roles(tier_names):
         word_idx = 1 if len(tier_names) > 1 else None
 
     return phone_idx, word_idx
+
+
+def guess_utterance_tier(tier_names):
+    """
+    Guess which tier index holds the utterance-level transcription.
+
+    Defaults to the first tier, then overrides that if some tier name
+    fuzzily matches an utterance-ish keyword (case-insensitive substring
+    match) — e.g. a tier named "Sentence" or "IPU transcript" is recognized
+    regardless of position.
+
+    Args:
+        tier_names (list[str]): Tier names in file order.
+
+    Returns:
+        int | None: 0-based tier index, or None if there are no tiers.
+    """
+    if not tier_names:
+        return None
+
+    lowered = [name.lower() for name in tier_names]
+    match = next(
+        (i for i, n in enumerate(lowered) if any(k in n for k in UTTERANCE_KEYWORDS)),
+        None,
+    )
+    return match if match is not None else 0
+
+
+def extract_utterance_tier(textgrid_path, utterance_idx, output_path=None):
+    """
+    Rebuild a TextGrid as a single-tier grid containing only the selected
+    utterance tier, discarding any other tiers.
+
+    MFA reads every tier in a TextGrid as a separate speaker's utterance
+    list, so a user-supplied TextGrid with extra tiers (or the wrong tier
+    holding the transcription) needs trimming down to just the one tier
+    before it's handed to `mfa align`.
+
+    Args:
+        textgrid_path (str | Path): Source TextGrid.
+        utterance_idx (int):        0-based index of the utterance tier.
+        output_path (str | Path, optional):
+            Where to write the result. Defaults to overwriting textgrid_path.
+
+    Returns:
+        Path to the written TextGrid.
+    """
+    tg = tgt.io.read_textgrid(str(textgrid_path), include_empty_intervals=True)
+    utterance_tier = tg.tiers[utterance_idx]
+
+    out_tg = tgt.TextGrid()
+    out_tg.add_tier(utterance_tier)
+
+    dest = Path(output_path) if output_path else Path(textgrid_path)
+    tgt.write_to_file(out_tg, str(dest))
+    return dest
 
 
 def extract_word_phone_tiers(textgrid_path, word_idx, phone_idx, output_path=None):
