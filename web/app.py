@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import random
 import tempfile
+import tomllib
 import zipfile
 import traceback
 from datetime import datetime, timezone
@@ -50,8 +51,23 @@ from pipeline.languages import (
 ROOT_PATH = os.environ.get("VXH_ROOT_PATH", "").rstrip("/")
 
 _INDEX_HTML = Path(__file__).parent / "static" / "index.html"
+_PYPROJECT_TOML = Path(__file__).parent.parent / "pyproject.toml"
 
 app = FastAPI(title="VoxHumana")
+
+
+def _get_app_version() -> str:
+    """Return VoxHumana's own version, read straight from pyproject.toml.
+
+    Installed package metadata (importlib.metadata) can go stale here since
+    the editable install isn't reinstalled on every bump-my-version bump, so
+    read the source of truth directly instead.
+    """
+    with _PYPROJECT_TOML.open("rb") as f:
+        return tomllib.load(f)["project"]["version"]
+
+
+APP_VERSION = _get_app_version()
 
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 JOB_RETENTION_HOURS = 72
@@ -1117,6 +1133,7 @@ async def download_results(job_id: str, token: str = ""):
 async def serve_index():
     html = _INDEX_HTML.read_text()
     html = html.replace("__ROOT_PATH__", ROOT_PATH)
+    html = html.replace("__VERSION__", APP_VERSION)
     return HTMLResponse(html)
 
 
