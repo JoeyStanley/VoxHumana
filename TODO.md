@@ -547,3 +547,9 @@ parse the prose logs by hand.
   duration of the batch. This also motivated the
   "[Client-side job persistence & status recovery](#client-side-job-persistence--status-recovery-not-yet-built)"
   item above.
+
+
+
+### In conversation with Lisa
+  Batch file upload
+  Add OOV words to MFA. 
