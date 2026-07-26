@@ -824,23 +824,44 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         jobs[job_id].update(status="error", error=str(exc))
 
     finally:
-        completed_at = datetime.now(timezone.utc)
-        _write_server_log(
-            job_id=job_id,
-            audio_filename=audio_path.name,
-            submitted_at=submitted_at,
-            completed_at=completed_at,
-            step_times=step_times,
-            failed_step=current_step,
-            error_tb=error_tb,
-            config=config,
-        )
-        _cleanup_intermediates(job_dir, audio_path)
-        _cleanup_orphaned_audio()
-        _expire_old_jobs()
+        # Each step below is independently guarded — this function runs on
+        # the single background worker thread, so if a step here ever raised
+        # (or, before this fix, if an earlier step's raise skipped the
+        # active_jobs.remove() below), it wouldn't just corrupt this job's
+        # bookkeeping — every job queued behind it would appear stuck.
+        # active_jobs.remove() runs first, before best-effort logging/
+        # cleanup, so queue position for the rest of the queue is correct
+        # even if a cleanup step below fails.
         try:
             active_jobs.remove(job_id)
         except ValueError:
+            pass
+
+        completed_at = datetime.now(timezone.utc)
+        try:
+            _write_server_log(
+                job_id=job_id,
+                audio_filename=audio_path.name,
+                submitted_at=submitted_at,
+                completed_at=completed_at,
+                step_times=step_times,
+                failed_step=current_step,
+                error_tb=error_tb,
+                config=config,
+            )
+        except Exception:
+            pass
+        try:
+            _cleanup_intermediates(job_dir, audio_path)
+        except Exception:
+            pass
+        try:
+            _cleanup_orphaned_audio()
+        except Exception:
+            pass
+        try:
+            _expire_old_jobs()
+        except Exception:
             pass
 
 

@@ -570,7 +570,176 @@
     }
 
     /* Hidden file inputs */
-    #audio-input, #textgrid-input { display: none; }
+    #audio-input, #textgrid-input, #batch-file-input { display: none; }
+
+    /* Primary job inline done/error (shown instead of navigating away, when
+       additional files are also in flight) */
+    .primary-done-inline, .primary-error-inline {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+      padding: 12px 16px;
+      border-radius: 4px;
+      text-align: center;
+    }
+    .primary-done-inline  { background: var(--pgl); border: 1px solid var(--pg); }
+    .primary-error-inline { background: #fff5f0;    border: 1px solid #d4856a; }
+    .primary-inline-title { font-size: 12px; font-weight: bold; color: var(--pb); }
+    .primary-inline-message {
+      font-size: 11px;
+      color: #7a3a20;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: monospace;
+    }
+
+    /* Batch upload ("process additional files") */
+    .batch-drop-zone { margin-bottom: 14px; padding: 20px; }
+    #batch-cap-banner {
+      display: none;
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      background: #fff5f0;
+      border: 1px solid #d4856a;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #7a3a20;
+      line-height: 1.5;
+    }
+    .batch-table { display: flex; flex-direction: column; gap: 8px; }
+    .batch-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px;
+      border: 1px solid var(--pcb);
+      border-radius: 4px;
+      background: var(--pc);
+      font-size: 11px;
+    }
+    .batch-row.exact-match  { border-color: var(--pg); }
+    .batch-row.fuzzy-match  { border-color: var(--pbl); background: #fdf9f2; }
+    .batch-row.ambiguous,
+    .batch-row.error-singleton {
+      border-color: #d4856a;
+      background: #fff5f0;
+    }
+    .batch-row.locked { opacity: 0.85; }
+    .batch-row-files { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .batch-cell-note { font-size: 10px; color: var(--pbm); flex-basis: 100%; }
+    .batch-cell-file {
+      padding: 4px 8px;
+      background: white;
+      border: 1px solid var(--pcb);
+      border-radius: 3px;
+      cursor: grab;
+      font-size: 11px;
+      color: var(--pd);
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .batch-cell-file.batch-cell-empty { color: var(--pbl); font-style: italic; cursor: default; padding: 2px 4px; }
+    .batch-cell-remove { margin-left: auto; }
+    .batch-pair-select {
+      font-size: 11px;
+      padding: 4px 6px;
+      border: 1px solid var(--pcb);
+      border-radius: 3px;
+      max-width: 200px;
+    }
+    .batch-row-tiers {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding-top: 6px;
+      border-top: 1px dashed var(--pcb);
+    }
+    .batch-tier-caption { font-size: 10px; color: var(--pbl); flex-basis: 100%; margin-bottom: 2px; }
+    .tier-label {
+      font-size: 10px;
+      font-weight: bold;
+      color: var(--pbm);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .batch-tier-select {
+      font-size: 10px;
+      padding: 3px 6px;
+      border: 1px solid var(--pcb);
+      border-radius: 3px;
+      max-width: 130px;
+    }
+    .batch-propagate-btn {
+      border: 1px solid var(--pcb);
+      background: white;
+      color: var(--pbm);
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: bold;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      cursor: pointer;
+      padding: 3px 7px;
+      white-space: nowrap;
+    }
+    .batch-propagate-btn:hover { border-color: var(--pg); color: var(--pb); }
+    .batch-row-action { display: flex; justify-content: flex-end; align-items: center; padding-top: 2px; }
+    .batch-status-chip {
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+    .chip-queued  { background: var(--pgl); color: var(--pb); }
+    .chip-running { background: var(--pg);  color: white; }
+    .chip-error   { background: #fff5f0; color: #c4603a; border: 1px solid #d4856a; }
+    .batch-remove-btn {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      border: 1px solid var(--pcb);
+      background: white;
+      color: var(--pbl);
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+    }
+    .batch-remove-btn:hover { background: #fff5f0; border-color: #d4856a; color: #c4603a; }
+    .batch-summary-bar {
+      display: none;
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--pbm);
+      text-align: right;
+    }
+
+    /* Confirmed jobs — each a mini version of the primary processing view */
+    .confirmed-job-divider { border: none; border-top: 2px solid var(--pbl); margin: 0; }
+    .confirmed-job-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+      padding: 16px 28px;
+    }
+    .confirmed-job-chevron { font-size: 10px; color: var(--pbl); transition: transform 0.2s; flex-shrink: 0; }
+    .confirmed-job-header.open .confirmed-job-chevron { transform: rotate(90deg); }
+    .confirmed-job-filename-label { font-size: 12px; font-weight: bold; color: var(--pb); flex: 1; overflow-wrap: anywhere; }
+    .confirmed-job-status-label {
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--pbm);
+    }
+    .confirmed-job-body .progress-view { gap: 14px; }
 
     /* ─── Slide-in drawer ───────────────────────────────────────────── */
     .drawer-overlay {
@@ -817,7 +986,7 @@
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('audio')" title="Help">?</button>
         </div>
-        <input type="file" id="audio-input" accept=".wav,.mp3,.flac,.m4a,.ogg,.aac">
+        <input type="file" id="audio-input" accept=".wav,.mp3,.flac,.m4a,.ogg,.aiff,.aif">
         <div class="upload-zone" id="drop-zone">
           <div class="upload-icon-row">
             <div class="upload-pipe" style="width:6px;height:20px;"></div>
@@ -1062,6 +1231,45 @@
         <input type="checkbox" id="sound-notify" onchange="onSoundNotifyChange(this)">
         <label for="sound-notify" style="font-size:11px; color:var(--pbl)">Play a sound when processing is complete</label>
       </div>
+
+      <!-- Shown in place of the spinner once this job finishes, but only if
+           additional files (below) are also in flight — otherwise the app
+           navigates to the full-screen Done/Error state as usual. -->
+      <div class="primary-done-inline" id="primary-done-inline" style="display:none">
+        <span class="primary-inline-title">✓ Done</span>
+        <button type="button" class="btn" style="padding:6px 16px; font-size:10px;" onclick="downloadResults()">Download results</button>
+      </div>
+      <div class="primary-error-inline" id="primary-error-inline" style="display:none">
+        <div class="primary-inline-title" style="color:#c4603a;">✕ Processing failed</div>
+        <div class="primary-inline-message" id="primary-error-inline-message"></div>
+        <button type="button" class="btn-outline" style="padding:6px 14px; font-size:10px; margin-top:8px;" onclick="downloadResults()">Download partial results</button>
+      </div>
+    </div>
+
+    <!-- Each confirmed additional file gets its own mini version of the
+         panel above (filename, spinner, job ID, sound toggle), stacked here
+         in confirmation order and separated by a divider. -->
+    <div id="confirmed-jobs-container"></div>
+
+    <!-- ── Process additional files ──────────────────────────────────────
+         Uses the exact settings the job above was submitted with — there's
+         no live settings form on this page, so nothing here can drift out
+         of sync with it. -->
+    <div class="section" id="batch-add-section" style="margin-top:4px; padding:0 28px 24px;">
+      <div class="section-head">
+        Process additional files
+        <div class="section-rule"></div>
+        <button type="button" class="btn-outline" style="padding:5px 12px; font-size:9px;" onclick="resetForm()" title="Reset the page — jobs already running keep going and stay recoverable, they just leave this view">Start over</button>
+      </div>
+      <p style="font-size:11px; color:var(--pbl); margin:0 0 12px; line-height:1.6;" id="batch-add-hint">Uses the same settings as the job above. Drop more files here — each one runs through the queue on its own, so you don't have to wait for this job to finish.</p>
+      <input type="file" id="batch-file-input" multiple>
+      <div class="upload-zone batch-drop-zone" id="batch-drop-zone">
+        <div class="upload-primary" id="batch-drop-primary">Drop audio/TextGrid files here, or click to browse</div>
+        <div class="upload-secondary" id="batch-drop-secondary">Up to 25 files — matched automatically by filename</div>
+      </div>
+      <div id="batch-cap-banner"></div>
+      <div class="batch-table" id="batch-table" style="margin-top:12px"></div>
+      <div class="batch-summary-bar" id="batch-summary-bar"></div>
     </div>
   </div>
 
@@ -1203,6 +1411,23 @@
   // Mapping from backend step number → track position (rebuilt on submit)
   let trackStepMap = {};
 
+  // ─── Batch upload state ("process additional files", on the running page) ────
+  // There's no live settings form on the running page, so there's nothing to
+  // lock — every row submits with whatever the (hidden, unreachable) form
+  // fields already hold, which can't change once a job is in flight.
+  let batchFiles           = [];   // {fid, file, relDir, kind}
+  let batchRows            = [];   // see makeRow()
+  let fidCounter            = 0;
+  let rowIdCounter          = 0;
+  const MAX_BATCH_FILES        = 25;
+  const MAX_CONCURRENT_UPLOADS = 2;
+  let activeUploadCount    = 0;
+  const uploadQueue         = [];
+  let dragSource            = null; // {rowId, side} for drag-to-repair
+  const BATCH_AUDIO_EXTENSIONS = new Set(['.wav', '.mp3', '.flac', '.ogg', '.m4a', '.aiff', '.aif']);
+  const KNOWN_SUFFIXES = ['_aligned', '-aligned', '_corrected', '-corrected', '_edited', '-edited', '_final', '-final'];
+  const VXH_JOBS_KEY = 'vxh_jobs';
+
   // ─── File selection ───────────────────────────────────────────────────────────
   const dropZone  = document.getElementById('drop-zone');
   const fileInput = document.getElementById('audio-input');
@@ -1238,6 +1463,29 @@
     if (e.dataTransfer.files[0]) setTextGrid(e.dataTransfer.files[0]);
   });
   tgFileInput.addEventListener('change', () => { if (tgFileInput.files[0]) setTextGrid(tgFileInput.files[0]); });
+
+  // ─── "Process additional files" drop zone (on the running page) ─────────────
+  // Always goes through the batch table, even for a single file, since this
+  // zone's whole purpose is reviewing/pairing before it submits.
+  const batchDropZone  = document.getElementById('batch-drop-zone');
+  const batchFileInput = document.getElementById('batch-file-input');
+
+  batchDropZone.addEventListener('click', () => batchFileInput.click());
+  batchDropZone.addEventListener('dragover', (e) => { e.preventDefault(); batchDropZone.classList.add('drag-over'); });
+  batchDropZone.addEventListener('dragleave', () => batchDropZone.classList.remove('drag-over'));
+  batchDropZone.addEventListener('drop', async (e) => {
+    e.preventDefault(); batchDropZone.classList.remove('drag-over');
+    const entries = await collectFilesFromDataTransfer(e.dataTransfer);
+    if (entries.length) mergeIntoBatch(entries);
+  });
+  batchFileInput.addEventListener('change', () => {
+    const entries = Array.from(batchFileInput.files).map(file => ({
+      file,
+      relDir: file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(0, -1).join('/') : '',
+    }));
+    batchFileInput.value = '';
+    if (entries.length) mergeIntoBatch(entries);
+  });
 
   function setTextGrid(file) {
     selectedTextGrid = file;
@@ -1392,12 +1640,887 @@
   }
 
   // ─── Step combination validation ─────────────────────────────────────────────
-  function checkStepCombination() {
+  function isStepComboInvalid() {
     // The only invalid combo: Transcribe on + Align off + Extract on.
     // (Extract-only with a user-supplied MFA TextGrid is valid.)
-    const invalid = stepActive.transcription && !stepActive.alignment && stepActive.formants;
+    return stepActive.transcription && !stepActive.alignment && stepActive.formants;
+  }
+
+  function checkStepCombination() {
+    const invalid = isStepComboInvalid();
     document.getElementById('step-warning').style.display = invalid ? '' : 'none';
     document.getElementById('submit-btn').disabled = invalid;
+  }
+
+  // ═══════════════════════════════ Batch upload ═══════════════════════════════
+  // Lets many audio/TextGrid files be dropped at once (up to MAX_BATCH_FILES),
+  // paired automatically by filename, reviewed in a table, and submitted one
+  // row at a time through the exact same /api/jobs endpoint the single-file
+  // form uses — every row shares the settings currently in the form.
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function normalizeStem(filename) {
+    const dot = filename.lastIndexOf('.');
+    return (dot >= 0 ? filename.slice(0, dot) : filename).toLowerCase();
+  }
+
+  function stripKnownSuffixes(stem) {
+    for (const suf of KNOWN_SUFFIXES) {
+      if (stem.endsWith(suf)) return stem.slice(0, -suf.length);
+    }
+    return stem;
+  }
+
+  function classifyFile(file) {
+    const name = file.name.toLowerCase();
+    const dot = name.lastIndexOf('.');
+    const ext = dot >= 0 ? name.slice(dot) : '';
+    if (ext === '.textgrid') return 'textgrid';
+    if (BATCH_AUDIO_EXTENSIONS.has(ext)) return 'audio';
+    return 'unknown';
+  }
+
+  // ─── Folder-aware drop collection ────────────────────────────────────────────
+  // Uses the DataTransferItem Entry API (webkitGetAsEntry) to walk dropped
+  // folders and recover each file's relative directory — needed so same-named
+  // files in different speaker subfolders never get cross-paired. Falls back
+  // to a flat file list (no directory info) when the Entry API isn't available.
+  function walkEntry(entry, results) {
+    return new Promise((resolve) => {
+      if (entry.isFile) {
+        entry.file(file => {
+          const parts = (entry.fullPath || '/' + file.name).split('/').filter(Boolean);
+          parts.pop();
+          results.push({ file, relDir: parts.join('/') });
+          resolve();
+        }, () => resolve());
+      } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        const readBatch = () => {
+          reader.readEntries((batch) => {
+            if (!batch.length) { resolve(); return; }
+            Promise.all(batch.map(e => walkEntry(e, results))).then(readBatch);
+          }, () => resolve());
+        };
+        readBatch();
+      } else {
+        resolve();
+      }
+    });
+  }
+
+  async function collectFilesFromDataTransfer(dataTransfer) {
+    const items = dataTransfer.items;
+    if (!items || !items.length || typeof items[0].webkitGetAsEntry !== 'function') {
+      return Array.from(dataTransfer.files).map(file => ({ file, relDir: '' }));
+    }
+    const entries = [];
+    for (let i = 0; i < items.length; i++) {
+      const entry = items[i].webkitGetAsEntry();
+      if (entry) entries.push(entry);
+    }
+    if (!entries.length) {
+      return Array.from(dataTransfer.files).map(file => ({ file, relDir: '' }));
+    }
+    const results = [];
+    await Promise.all(entries.map(entry => walkEntry(entry, results)));
+    return results;
+  }
+
+  // ─── Row model ────────────────────────────────────────────────────────────────
+  function makeRow(audioEntry, tgEntry, matchType) {
+    return {
+      rowId: 'r' + (++rowIdCounter),
+      matchType, // 'exact' | 'fuzzy' | 'manual' | 'ambiguous' | 'unmatched'
+      audioFid: audioEntry ? audioEntry.fid : null,
+      tgFid:    tgEntry    ? tgEntry.fid    : null,
+      audioName: audioEntry ? audioEntry.file.name : null,
+      tgName:    tgEntry    ? tgEntry.file.name    : null,
+      tierInfo: null,
+      tierFetchStatus: 'idle', // idle | loading | loaded | error
+      phoneIdx: null, wordIdx: null, uttIdx: null,
+      confirmed: false, locked: false,
+      pollTimer: null,
+      jobId: null, downloadToken: null,
+      jobStatus: 'unsubmitted', stepName: null, errorMessage: null,
+      collapsed: false, soundEnabled: false,
+    };
+  }
+
+  function isExtractOnlyModeBatch() { return isExtractOnlyMode(); }
+  function isAlignOnlyModeBatch()   { return isAlignOnlyTextGridMode(); }
+
+  function rowNeedsTierPicker(row) {
+    if (!row.tgFid) return null;
+    if (isExtractOnlyModeBatch()) return 'wordphone';
+    if (isAlignOnlyModeBatch())   return 'utterance';
+    return null;
+  }
+
+  function isRowError(row) {
+    if (row.matchType === 'ambiguous') return true;
+    const tgMode = !stepActive.transcription;
+    if (tgMode) {
+      if (!row.audioFid || !row.tgFid) return true;
+    }
+    return false;
+  }
+
+  function isRowReadyToConfirm(row) {
+    if (row.locked || row.confirmed) return false;
+    if (isStepComboInvalid()) return false;
+    if (isRowError(row)) return false;
+    const tierMode = rowNeedsTierPicker(row);
+    if (tierMode === 'wordphone') {
+      if (row.tierFetchStatus !== 'loaded') return false;
+      if (row.phoneIdx === null || row.wordIdx === null || row.phoneIdx === row.wordIdx) return false;
+    } else if (tierMode === 'utterance') {
+      if (row.tierFetchStatus !== 'loaded') return false;
+      if (row.uttIdx === null) return false;
+    }
+    return true;
+  }
+
+  async function fetchTierInfoForRow(row) {
+    const mode = rowNeedsTierPicker(row);
+    if (!mode || row.tierFetchStatus === 'loading' || row.tierFetchStatus === 'loaded') return;
+    row.tierFetchStatus = 'loading';
+    renderPairingTable();
+    try {
+      const fileEntry = batchFiles.find(f => f.fid === row.tgFid);
+      const data = new FormData();
+      data.append('textgrid', fileEntry.file);
+      const res  = await fetch(`${ROOT_PATH}/api/textgrid-tiers`, { method: 'POST', body: data });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.detail || 'Could not read TextGrid tiers.');
+      row.tierInfo = body;
+      if (mode === 'wordphone') {
+        row.phoneIdx = (body.guess.phone ?? 0);
+        row.wordIdx  = (body.guess.word  ?? (body.tiers.length > 1 ? 1 : 0));
+      } else {
+        row.uttIdx = (body.guess.utterance ?? 0);
+      }
+      row.tierFetchStatus = 'loaded';
+    } catch (err) {
+      row.tierFetchStatus = 'error';
+      row.errorMessage = err.message;
+    }
+    renderPairingTable();
+  }
+
+  // ─── Matching ─────────────────────────────────────────────────────────────────
+  function computePool() {
+    const lockedFids = new Set();
+    batchRows.filter(r => r.locked).forEach(r => {
+      if (r.audioFid) lockedFids.add(r.audioFid);
+      if (r.tgFid)    lockedFids.add(r.tgFid);
+    });
+    return batchFiles.filter(f => !lockedFids.has(f.fid));
+  }
+
+  function groupByStem(files, transform) {
+    const map = new Map();
+    files.forEach(f => {
+      const stem = transform(normalizeStem(f.file.name));
+      if (!map.has(stem)) map.set(stem, []);
+      map.get(stem).push(f);
+    });
+    return map;
+  }
+
+  function pairByStemMaps(audioMap, tgMap, matchType, outRows, usedAudio, usedTg) {
+    for (const [stem, audioCands0] of audioMap) {
+      if (!tgMap.has(stem)) continue;
+      const audioCands = audioCands0.filter(f => !usedAudio.has(f.fid));
+      const tgCands     = tgMap.get(stem).filter(f => !usedTg.has(f.fid));
+      if (!audioCands.length || !tgCands.length) continue;
+
+      if (audioCands.length === 1 && tgCands.length === 1) {
+        outRows.push(makeRow(audioCands[0], tgCands[0], matchType));
+        usedAudio.add(audioCands[0].fid);
+        usedTg.add(tgCands[0].fid);
+        continue;
+      }
+
+      // Collision on this stem (e.g. same filename in two speaker folders) —
+      // only resolve a same-relative-directory bucket when it's itself
+      // unambiguous (exactly one file on each side for that directory).
+      // Anything left — including a same-directory bucket that's STILL a
+      // collision — is a genuine ambiguity, flagged below rather than guessed.
+      const audioByDir = new Map();
+      audioCands.forEach(a => { if (!audioByDir.has(a.relDir)) audioByDir.set(a.relDir, []); audioByDir.get(a.relDir).push(a); });
+      const tgByDir = new Map();
+      tgCands.forEach(t => { if (!tgByDir.has(t.relDir)) tgByDir.set(t.relDir, []); tgByDir.get(t.relDir).push(t); });
+
+      audioByDir.forEach((aList, dir) => {
+        const tList = tgByDir.get(dir);
+        if (aList.length === 1 && tList && tList.length === 1) {
+          outRows.push(makeRow(aList[0], tList[0], 'exact'));
+          usedAudio.add(aList[0].fid);
+          usedTg.add(tList[0].fid);
+        }
+      });
+    }
+  }
+
+  function runMatchingPass() {
+    const pool = computePool();
+    const tgMode = !stepActive.transcription;
+    const audioPool = pool.filter(f => f.kind === 'audio');
+    const tgPool     = tgMode ? pool.filter(f => f.kind === 'textgrid') : [];
+
+    const usedAudio = new Set();
+    const usedTg    = new Set();
+    const newRows   = [];
+
+    pairByStemMaps(
+      groupByStem(audioPool, s => s),
+      groupByStem(tgPool, s => s),
+      'exact', newRows, usedAudio, usedTg
+    );
+    pairByStemMaps(
+      groupByStem(audioPool.filter(f => !usedAudio.has(f.fid)), stripKnownSuffixes),
+      groupByStem(tgPool.filter(f => !usedTg.has(f.fid)), stripKnownSuffixes),
+      'fuzzy', newRows, usedAudio, usedTg
+    );
+
+    const audioStemSet = new Set(audioPool.map(f => normalizeStem(f.file.name)));
+    const tgStemSet     = new Set(tgPool.map(f => normalizeStem(f.file.name)));
+
+    audioPool.filter(f => !usedAudio.has(f.fid)).forEach(f => {
+      const collided = tgStemSet.has(normalizeStem(f.file.name));
+      newRows.push(makeRow(f, null, collided ? 'ambiguous' : 'unmatched'));
+    });
+    tgPool.filter(f => !usedTg.has(f.fid)).forEach(f => {
+      const collided = audioStemSet.has(normalizeStem(f.file.name));
+      newRows.push(makeRow(null, f, collided ? 'ambiguous' : 'unmatched'));
+    });
+
+    batchRows = batchRows.filter(r => r.locked).concat(newRows);
+
+    batchRows.forEach(row => {
+      if (!row.locked && rowNeedsTierPicker(row) && row.tierFetchStatus === 'idle') {
+        fetchTierInfoForRow(row);
+      }
+    });
+
+    renderPairingTable();
+  }
+
+  // ─── Adding / merging files ───────────────────────────────────────────────────
+  // Updates the "process additional files" copy to match the settings the
+  // primary job above was submitted with (called once when the running page
+  // is shown — nothing on this page can change those settings afterward).
+  function updateBatchAddZoneCopy() {
+    const tgMode = !stepActive.transcription;
+    document.getElementById('batch-drop-secondary').textContent = tgMode
+      ? 'Up to 25 files — audio and TextGrids are paired automatically by filename'
+      : 'Up to 25 audio files — each runs through the queue on its own';
+    document.getElementById('batch-add-hint').textContent = tgMode
+      ? 'Uses the same settings as the job above. Drop audio and TextGrids here — matching pairs are found automatically, and you can fix or reassign any that don\'t match by picking from the dropdown next to a file.'
+      : 'Uses the same settings as the job above. Drop more audio files here — each one runs through the queue on its own, so you don\'t have to wait for this job to finish.';
+  }
+
+  function showBatchRejectBanner(rejected) {
+    const el = document.getElementById('batch-cap-banner');
+    if (!el) return;
+    if (!rejected.length) { el.style.display = 'none'; return; }
+    el.innerHTML = 'Some files weren\'t added: ' + rejected.map(escapeHtml).join('; ');
+    el.style.display = '';
+  }
+
+  function mergeIntoBatch(fileEntries) {
+    const tgMode = !stepActive.transcription;
+    const rejected = [];
+    const accepted = [];
+
+    fileEntries.forEach(({ file, relDir }) => {
+      const kind = classifyFile(file);
+      if (kind === 'unknown') { rejected.push(`${file.name} (unsupported file type)`); return; }
+      if (kind === 'textgrid' && !tgMode) { rejected.push(`${file.name} (TextGrids aren't used while Transcribe is on)`); return; }
+      accepted.push({ file, relDir, kind });
+    });
+
+    const capacity = Math.max(0, MAX_BATCH_FILES - batchFiles.length);
+    const toAdd    = accepted.slice(0, capacity);
+    accepted.slice(toAdd.length).forEach(f => rejected.push(`${f.file.name} (batch is full — ${MAX_BATCH_FILES} file max)`));
+
+    toAdd.forEach(f => batchFiles.push({ fid: 'f' + (++fidCounter), file: f.file, relDir: f.relDir, kind: f.kind }));
+
+    showBatchRejectBanner(rejected);
+    runMatchingPass();
+  }
+
+  // ─── Drag-to-repair ───────────────────────────────────────────────────────────
+  function onFileCellDragStart(e, rowId, side) {
+    dragSource = { rowId, side };
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function onFileCellDrop(e, rowId, side) {
+    e.preventDefault();
+    if (!dragSource || dragSource.side !== side || dragSource.rowId === rowId) { dragSource = null; return; }
+    repairPairing(dragSource.rowId, rowId, side);
+    dragSource = null;
+  }
+
+  function repairPairing(fromRowId, toRowId, side) {
+    const fromRow = batchRows.find(r => r.rowId === fromRowId);
+    const toRow   = batchRows.find(r => r.rowId === toRowId);
+    if (!fromRow || !toRow || fromRow.locked || toRow.locked) return;
+
+    const fidKey  = side === 'audio' ? 'audioFid'  : 'tgFid';
+    const nameKey = side === 'audio' ? 'audioName' : 'tgName';
+    const movingFid  = fromRow[fidKey];
+    const movingName = fromRow[nameKey];
+    fromRow[fidKey]  = toRow[fidKey];
+    fromRow[nameKey] = toRow[nameKey];
+    toRow[fidKey]  = movingFid;
+    toRow[nameKey] = movingName;
+
+    [fromRow, toRow].forEach(row => {
+      row.matchType = (row.audioFid && row.tgFid) ? 'manual' : (row.audioFid || row.tgFid ? 'unmatched' : 'ambiguous');
+      row.confirmed = false;
+      row.tierInfo = null;
+      row.tierFetchStatus = 'idle';
+      row.phoneIdx = row.wordIdx = row.uttIdx = null;
+      if (rowNeedsTierPicker(row)) fetchTierInfoForRow(row);
+    });
+
+    batchRows = batchRows.filter(r => r.audioFid || r.tgFid);
+    renderPairingTable();
+  }
+
+  // ─── Tier selection in the table ─────────────────────────────────────────────
+  function onRowTierChange(rowId, role, value) {
+    const row = batchRows.find(r => r.rowId === rowId);
+    if (!row) return;
+    const idx = parseInt(value, 10);
+    if (role === 'phone') row.phoneIdx = idx;
+    else if (role === 'word') row.wordIdx = idx;
+    else if (role === 'utterance') row.uttIdx = idx;
+    renderPairingTable();
+  }
+
+  function propagateTierIndex(rowId, role) {
+    const src = batchRows.find(r => r.rowId === rowId);
+    if (!src) return;
+    const idx = role === 'phone' ? src.phoneIdx : role === 'word' ? src.wordIdx : src.uttIdx;
+    if (idx === null || idx === undefined) return;
+    batchRows.forEach(row => {
+      if (row.rowId === rowId || row.locked || !row.tierInfo) return;
+      const clamped = Math.min(idx, row.tierInfo.tiers.length - 1);
+      if (role === 'phone'     && rowNeedsTierPicker(row) === 'wordphone') row.phoneIdx = clamped;
+      if (role === 'word'      && rowNeedsTierPicker(row) === 'wordphone') row.wordIdx  = clamped;
+      if (role === 'utterance' && rowNeedsTierPicker(row) === 'utterance') row.uttIdx   = clamped;
+    });
+    renderPairingTable();
+  }
+
+  // ─── Manual pairing (dropdown) ────────────────────────────────────────────────
+  // The primary reconciliation UI for a mismatched name — drag also works
+  // (repairPairing), but a dropdown of the other unmatched files is far more
+  // discoverable than a drag interaction buried in a table.
+  function candidateRowsFor(rowId, side) {
+    const fidKey      = side === 'audio' ? 'audioFid' : 'tgFid';
+    const otherFidKey = side === 'audio' ? 'tgFid'    : 'audioFid';
+    return batchRows.filter(r => !r.locked && r.rowId !== rowId && r[fidKey] && !r[otherFidKey]);
+  }
+
+  function pairFromDropdown(rowId, side, sourceRowId) {
+    if (!sourceRowId) return;
+    repairPairing(sourceRowId, rowId, side);
+  }
+
+  // ─── Row confirm / remove ─────────────────────────────────────────────────────
+  // Sets a row's job status and, the moment it actually starts running,
+  // auto-expands its panel — that's the only automatic collapse-state
+  // change; queued rows stay collapsed and finished rows just stay however
+  // they were left (open, since they were running a moment ago).
+  function setRowStatus(row, status) {
+    row.jobStatus = status;
+    if (status === 'running' && row.collapsed) row.collapsed = false;
+  }
+
+  function onConfirmRow(rowId) {
+    const row = batchRows.find(r => r.rowId === rowId);
+    if (!row || !isRowReadyToConfirm(row)) return;
+    row.confirmed = true;
+    row.locked = true;
+    row.collapsed = true; // upcoming jobs start collapsed
+    setRowStatus(row, 'queued_for_upload');
+    renderBatchTable();
+    enqueueSubmission(rowId);
+  }
+
+  function toggleRowCollapse(rowId) {
+    const row = batchRows.find(r => r.rowId === rowId);
+    if (!row) return;
+    row.collapsed = !row.collapsed;
+    renderConfirmedJobsPanel();
+  }
+
+  function onRowSoundNotifyChange(rowId, checkbox) {
+    const row = batchRows.find(r => r.rowId === rowId);
+    if (!row) return;
+    row.soundEnabled = checkbox.checked;
+    if (checkbox.checked) {
+      try {
+        if (!_soundCtx) _soundCtx = new (window.AudioContext || window.webkitAudioContext)();
+        else if (_soundCtx.state === 'suspended') _soundCtx.resume();
+      } catch (e) {}
+    }
+  }
+
+  function onRemoveRow(rowId) {
+    const idx = batchRows.findIndex(r => r.rowId === rowId);
+    if (idx === -1) return;
+    const row = batchRows[idx];
+    if (row.locked && row.jobStatus !== 'done' && row.jobStatus !== 'error') return; // in-flight — can't remove
+
+    if (row.locked) {
+      stopRowPolling(row);
+      batchRows.splice(idx, 1);
+      renderBatchTable();
+      return;
+    }
+
+    batchFiles = batchFiles.filter(f => f.fid !== row.audioFid && f.fid !== row.tgFid);
+    batchRows.splice(idx, 1);
+    runMatchingPass();
+  }
+
+  function clearBatchAddState() {
+    batchRows.forEach(r => stopRowPolling(r));
+    batchFiles = [];
+    batchRows  = [];
+    document.getElementById('batch-cap-banner').style.display = 'none';
+    renderBatchTable();
+  }
+
+  // ─── Submission driver (paced uploads) ────────────────────────────────────────
+  function collectSharedSettingsFromForm() {
+    const form = document.getElementById('vxh-form');
+    return {
+      whisper_model:              form.whisper_model.value,
+      language:                   form.language.value,
+      initial_prompt:             form.initial_prompt.value,
+      condition_on_previous_text: form.condition_on_previous_text.checked,
+      acoustic_model:             form.acoustic_model.value,
+      fine_tune:                  form.fine_tune.checked,
+      dictionary:                 form.dictionary.value,
+      formant_ceiling:            form.formant_ceiling.value,
+      num_formants:               form.num_formants.value,
+      include_overlaps:           form.include_overlaps.checked,
+      combine_preliquid:          form.combine_preliquid.checked,
+      include_intervocalic:       form.include_intervocalic.checked,
+      run_transcription:          stepActive.transcription,
+      run_alignment:              stepActive.alignment,
+      run_formants:               stepActive.formants,
+    };
+  }
+
+  function buildJobFormData(settings) {
+    const data = new FormData();
+    Object.entries(settings).forEach(([k, v]) => data.append(k, v));
+    return data;
+  }
+
+  function enqueueSubmission(rowId) {
+    uploadQueue.push(rowId);
+    pumpUploadQueue();
+  }
+
+  function pumpUploadQueue() {
+    while (activeUploadCount < MAX_CONCURRENT_UPLOADS && uploadQueue.length) {
+      const rowId = uploadQueue.shift();
+      activeUploadCount++;
+      // submitRow() already catches everything itself and never rejects,
+      // but .catch() here is a last-resort backstop: whatever happens with
+      // this row, the upload slot must free up so the rest of the queue
+      // keeps moving.
+      submitRow(rowId).catch(() => {}).finally(() => {
+        activeUploadCount--;
+        pumpUploadQueue();
+      });
+    }
+  }
+
+  async function submitRow(rowId) {
+    const row = batchRows.find(r => r.rowId === rowId);
+    if (!row) return;
+    setRowStatus(row, 'uploading');
+    renderConfirmedJobsPanel();
+    renderSummaryBar();
+
+    // Everything here — including building the form data — is inside the
+    // try block: one row's data being unexpectedly missing/malformed should
+    // only ever fail that row, never throw out of submitRow() itself (which
+    // would leave it stuck instead of reporting an error, without touching
+    // any other row's turn in the queue).
+    try {
+      const audioEntry = batchFiles.find(f => f.fid === row.audioFid);
+      if (!audioEntry) throw new Error('This row lost track of its audio file — remove it and re-add the file.');
+      const tgEntry  = row.tgFid ? batchFiles.find(f => f.fid === row.tgFid) : null;
+      const tierMode = rowNeedsTierPicker(row);
+
+      const data = buildJobFormData(collectSharedSettingsFromForm());
+      data.append('audio', audioEntry.file);
+      if (tgEntry) data.append('textgrid', tgEntry.file);
+      if (tierMode === 'wordphone') {
+        data.append('phone_tier_index', String(row.phoneIdx));
+        data.append('word_tier_index',  String(row.wordIdx));
+      } else if (tierMode === 'utterance') {
+        data.append('utterance_tier_index', String(row.uttIdx));
+      }
+
+      const res  = await fetch(`${ROOT_PATH}/api/jobs`, { method: 'POST', body: data });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.detail || 'Submission failed');
+      row.jobId = body.job_id;
+      row.downloadToken = body.download_token;
+      setRowStatus(row, 'queued');
+      vxhSaveJob({ job_id: row.jobId, download_token: row.downloadToken, filename: row.audioName, submitted_at: new Date().toISOString() });
+      startRowPolling(rowId);
+    } catch (err) {
+      setRowStatus(row, 'error');
+      row.errorMessage = err.message;
+    }
+    renderConfirmedJobsPanel();
+    renderSummaryBar();
+  }
+
+  function startRowPolling(rowId) {
+    const row = batchRows.find(r => r.rowId === rowId);
+    if (!row || row.pollTimer) return;
+    row.pollTimer = setInterval(() => pollRow(rowId), 3000);
+    pollRow(rowId);
+  }
+
+  function stopRowPolling(row) {
+    if (row.pollTimer) { clearInterval(row.pollTimer); row.pollTimer = null; }
+  }
+
+  async function pollRow(rowId) {
+    const row = batchRows.find(r => r.rowId === rowId);
+    if (!row || !row.jobId) return;
+    try {
+      const res = await fetch(`${ROOT_PATH}/api/jobs/${row.jobId}`);
+      const job = await res.json();
+      setRowStatus(row, job.status);
+      row.stepName  = job.step_name;
+      if (job.status === 'done' || job.status === 'error') {
+        stopRowPolling(row);
+        if (job.status === 'error') row.errorMessage = job.error || 'An unknown error occurred.';
+        else if (row.soundEnabled) playCompletionSound();
+      }
+      renderConfirmedJobsPanel();
+      renderSummaryBar();
+    } catch (err) {
+      // Network hiccup — keep polling
+    }
+  }
+
+  function downloadRowResults(rowId) {
+    const row = batchRows.find(r => r.rowId === rowId);
+    if (!row || !row.jobId) return;
+    vxhRemoveJob(row.jobId);
+    window.location.href = `${ROOT_PATH}/api/jobs/${row.jobId}/download?token=${row.downloadToken}`;
+  }
+
+  // ─── Table rendering ──────────────────────────────────────────────────────────
+  function tierOptionsHtml(tiers, selectedIdx) {
+    return tiers.map((n, i) => `<option value="${i}" ${i === selectedIdx ? 'selected' : ''}>${i + 1}. ${escapeHtml(n)}</option>`).join('');
+  }
+
+  // Renders a file's slot: the filename if this row has one, or — when
+  // empty — a dropdown of other unmatched files of that kind so a name
+  // mismatch can be fixed with a couple of clicks instead of dragging.
+  function fileCellHtml(row, side) {
+    const nameKey = side === 'audio' ? 'audioName' : 'tgName';
+    const name = row[nameKey];
+    if (name) {
+      return `<div class="batch-cell-file" draggable="${!row.locked}" ondragstart="onFileCellDragStart(event,'${row.rowId}','${side}')" ondragover="event.preventDefault()" ondrop="onFileCellDrop(event,'${row.rowId}','${side}')">${escapeHtml(name)}</div>`;
+    }
+    const candidates = candidateRowsFor(row.rowId, side);
+    const label = side === 'audio' ? 'audio' : 'a TextGrid';
+    if (!candidates.length) {
+      return `<div class="batch-cell-file batch-cell-empty" ondragover="event.preventDefault()" ondrop="onFileCellDrop(event,'${row.rowId}','${side}')">— needs ${label}</div>`;
+    }
+    const opts = candidates.map(c => `<option value="${c.rowId}">${escapeHtml(c[nameKey])}</option>`).join('');
+    return `<select class="batch-pair-select" ondragover="event.preventDefault()" ondrop="onFileCellDrop(event,'${row.rowId}','${side}')" onchange="pairFromDropdown('${row.rowId}','${side}',this.value)">
+      <option value="">— pick ${label} —</option>
+      ${opts}
+    </select>`;
+  }
+
+  // Renders one row of the pairing table — only ever called for unconfirmed
+  // rows; the moment a row is confirmed it moves into the confirmed-jobs
+  // panel below instead (see renderConfirmedJobsPanel).
+  function renderBatchRowHtml(row) {
+    const tgMode = !stepActive.transcription;
+    const errored = isRowError(row);
+
+    const cls = ['batch-row'];
+    if (row.matchType === 'exact' || row.matchType === 'manual') cls.push('exact-match');
+    else if (row.matchType === 'fuzzy') cls.push('fuzzy-match');
+    else if (row.matchType === 'ambiguous') cls.push('ambiguous');
+    else if (errored) cls.push('error-singleton');
+
+    let noteText = '';
+    if (row.matchType === 'ambiguous') noteText = '⚠ multiple files share this name — pick the right one below, or drag to pair';
+    else if (errored) {
+      if (tgMode && !row.tgFid) noteText = '⚠ needs a TextGrid — pick one below, or drag to pair';
+      else if (tgMode && !row.audioFid) noteText = '⚠ needs matching audio — pick one below, or drag to pair';
+      else noteText = '⚠ needs attention';
+    } else if (row.matchType === 'fuzzy') noteText = '≈ fuzzy match — check before confirming';
+    else noteText = '✓ matched';
+
+    const audioCell = fileCellHtml(row, 'audio');
+    const tgCell = tgMode ? fileCellHtml(row, 'tg') : '';
+
+    let tiersHtml = '';
+    const tierMode = rowNeedsTierPicker(row);
+    if (tierMode === 'wordphone') {
+      if (row.tierFetchStatus === 'loading') tiersHtml = `<div class="batch-row-tiers">Reading tiers…</div>`;
+      else if (row.tierFetchStatus === 'error') tiersHtml = `<div class="batch-row-tiers">${escapeHtml(row.errorMessage || 'Could not read tiers')}</div>`;
+      else if (row.tierInfo) {
+        tiersHtml = `<div class="batch-row-tiers">
+          <span class="batch-tier-caption">Which tier is which? new-fave needs both a word tier and a phone tier.</span>
+          <span class="tier-label">Phone</span>
+          <select class="batch-tier-select" onchange="onRowTierChange('${row.rowId}','phone',this.value)">${tierOptionsHtml(row.tierInfo.tiers, row.phoneIdx)}</select>
+          <button type="button" class="batch-propagate-btn" title="Set every other row's phone tier to this same position" onclick="propagateTierIndex('${row.rowId}','phone')">Apply to all</button>
+          <span class="tier-label">Word</span>
+          <select class="batch-tier-select" onchange="onRowTierChange('${row.rowId}','word',this.value)">${tierOptionsHtml(row.tierInfo.tiers, row.wordIdx)}</select>
+          <button type="button" class="batch-propagate-btn" title="Set every other row's word tier to this same position" onclick="propagateTierIndex('${row.rowId}','word')">Apply to all</button>
+        </div>`;
+      }
+    } else if (tierMode === 'utterance') {
+      if (row.tierFetchStatus === 'loading') tiersHtml = `<div class="batch-row-tiers">Reading tiers…</div>`;
+      else if (row.tierFetchStatus === 'error') tiersHtml = `<div class="batch-row-tiers">${escapeHtml(row.errorMessage || 'Could not read tiers')}</div>`;
+      else if (row.tierInfo) {
+        tiersHtml = `<div class="batch-row-tiers">
+          <span class="batch-tier-caption">Which tier has the transcription? MFA reads every tier as a separate speaker's utterances.</span>
+          <span class="tier-label">Utterance</span>
+          <select class="batch-tier-select" onchange="onRowTierChange('${row.rowId}','utterance',this.value)">${tierOptionsHtml(row.tierInfo.tiers, row.uttIdx)}</select>
+          <button type="button" class="batch-propagate-btn" title="Set every other row's utterance tier to this same position" onclick="propagateTierIndex('${row.rowId}','utterance')">Apply to all</button>
+        </div>`;
+      }
+    }
+
+    const actionHtml = `<button type="button" class="btn" style="padding:6px 16px; font-size:10px;" ${isRowReadyToConfirm(row) ? '' : 'disabled'} onclick="onConfirmRow('${row.rowId}')">Begin processing</button>`;
+
+    return `<div class="${cls.join(' ')}" data-row-id="${row.rowId}">
+      <div class="batch-row-files">
+        ${noteText ? `<div class="batch-cell-note">${noteText}</div>` : ''}
+        ${audioCell}
+        ${tgCell}
+        <div class="batch-cell-remove"><button type="button" class="batch-remove-btn" title="Remove" onclick="onRemoveRow('${row.rowId}')">×</button></div>
+      </div>
+      ${tiersHtml}
+      <div class="batch-row-action">${actionHtml}</div>
+    </div>`;
+  }
+
+  // ─── Confirmed jobs (each rendered as a mini version of the classic
+  // processing screen, stacked below the primary job) ───────────────────────
+  function confirmedJobStatusLabel(row) {
+    switch (row.jobStatus) {
+      case 'queued_for_upload': return 'Waiting to upload…';
+      case 'uploading':         return 'Uploading…';
+      case 'queued':            return 'Queued';
+      case 'running':           return 'Running';
+      case 'done':               return 'Done';
+      case 'error':               return 'Error';
+      default: return '';
+    }
+  }
+
+  function confirmedJobPanelHtml(row) {
+    const settled = row.jobStatus === 'done' || row.jobStatus === 'error';
+    const spinnerHtml = settled ? '' : `
+      <div class="progress-spinner">
+        <div class="spinner-pipe"></div>
+        <div class="spinner-pipe active"></div>
+        <div class="spinner-pipe"></div>
+        <div class="spinner-pipe active"></div>
+        <div class="spinner-pipe"></div>
+      </div>`;
+    const stepLabel = settled
+      ? (row.jobStatus === 'done' ? 'Done' : 'Failed')
+      : (row.stepName || confirmedJobStatusLabel(row));
+
+    let settledHtml = '';
+    if (row.jobStatus === 'done') {
+      settledHtml = `<div class="primary-done-inline" style="display:flex;">
+        <span class="primary-inline-title">✓ Done</span>
+        <button type="button" class="btn" style="padding:6px 16px; font-size:10px;" onclick="downloadRowResults('${row.rowId}')">Download results</button>
+      </div>`;
+    } else if (row.jobStatus === 'error') {
+      settledHtml = `<div class="primary-error-inline" style="display:flex;">
+        <div class="primary-inline-title" style="color:#c4603a;">✕ Processing failed</div>
+        <div class="primary-inline-message">${escapeHtml(row.errorMessage || 'An unknown error occurred.')}</div>
+        <button type="button" class="btn-outline" style="padding:6px 14px; font-size:10px; margin-top:8px;" onclick="downloadRowResults('${row.rowId}')">Download partial results</button>
+      </div>`;
+    }
+
+    const dismissHtml = settled
+      ? `<button type="button" class="batch-remove-btn" title="Dismiss" onclick="event.stopPropagation(); onRemoveRow('${row.rowId}')">×</button>`
+      : '';
+
+    return `<div class="confirmed-job-panel" data-row-id="${row.rowId}">
+      <div class="confirmed-job-header${row.collapsed ? '' : ' open'}" onclick="toggleRowCollapse('${row.rowId}')">
+        <span class="confirmed-job-chevron">▸</span>
+        <span class="confirmed-job-filename-label">${escapeHtml(row.audioName || '')}</span>
+        <span class="confirmed-job-status-label">${confirmedJobStatusLabel(row)}</span>
+        ${dismissHtml}
+      </div>
+      <div class="confirmed-job-body" style="${row.collapsed ? 'display:none' : ''}">
+        <div class="progress-view" style="padding:16px 28px 28px;">
+          ${spinnerHtml}
+          <div class="progress-filename">${escapeHtml(row.audioName || '')}</div>
+          <div class="progress-step-label">${escapeHtml(stepLabel)}</div>
+          ${settledHtml}
+          <div class="progress-note" style="margin-top:6px">Job ID: <code>${escapeHtml(row.jobId || '(pending)')}</code></div>
+          <div class="field-check" style="margin-top:4px">
+            <input type="checkbox" id="sound-notify-${row.rowId}" ${row.soundEnabled ? 'checked' : ''} onchange="onRowSoundNotifyChange('${row.rowId}', this)">
+            <label for="sound-notify-${row.rowId}" style="font-size:11px; color:var(--pbl)">Play a sound when processing is complete</label>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function renderConfirmedJobsPanel() {
+    const container = document.getElementById('confirmed-jobs-container');
+    if (!container) return;
+    const confirmed = batchRows.filter(r => r.locked);
+    container.innerHTML = confirmed.map(row => `<hr class="confirmed-job-divider">` + confirmedJobPanelHtml(row)).join('');
+  }
+
+  function renderSummaryBar() {
+    const summary = document.getElementById('batch-summary-bar');
+    if (batchRows.length) {
+      const done    = batchRows.filter(r => r.jobStatus === 'done').length;
+      const errored = batchRows.filter(r => r.jobStatus === 'error').length;
+      summary.style.display = '';
+      summary.textContent = `${batchRows.length} file${batchRows.length === 1 ? '' : 's'} added — ${done} done, ${errored} error${errored === 1 ? '' : 's'}`;
+    } else {
+      summary.style.display = 'none';
+    }
+  }
+
+  // Rebuilds only the pairing table (unconfirmed rows) — used for anything
+  // that doesn't touch a confirmed job, so an open "pick a match" dropdown
+  // on one row never gets yanked out from under the user by an unrelated
+  // background poll of some other, already-confirmed job.
+  function renderPairingTable() {
+    const container = document.getElementById('batch-table');
+    if (container) {
+      const unconfirmed = batchRows.filter(r => !r.locked);
+      container.innerHTML = unconfirmed.map(renderBatchRowHtml).join('');
+    }
+    renderSummaryBar();
+  }
+
+  function renderBatchTable() {
+    renderPairingTable();
+    renderConfirmedJobsPanel();
+  }
+
+  // ─── localStorage persistence & crash recovery ───────────────────────────────
+  // Shared by the single-file flow and every batch row, per TODO.md's
+  // "Client-side job persistence" design — a job that's already been
+  // submitted can always be recovered after a tab crash/reload; a row still
+  // awaiting pairing/confirmation only exists as an in-memory File object
+  // and cannot survive a reload in any browser.
+  function vxhLoadJobs() {
+    try {
+      const raw = localStorage.getItem(VXH_JOBS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+
+  function vxhSaveJob(record) {
+    try {
+      const jobs = vxhLoadJobs();
+      jobs.push(record);
+      localStorage.setItem(VXH_JOBS_KEY, JSON.stringify(jobs));
+    } catch (e) {}
+  }
+
+  function vxhRemoveJob(jobId) {
+    try {
+      const jobs = vxhLoadJobs().filter(j => j.job_id !== jobId);
+      localStorage.setItem(VXH_JOBS_KEY, JSON.stringify(jobs));
+    } catch (e) {}
+  }
+
+  async function vxhRecoverOnLoad() {
+    const records = vxhLoadJobs();
+    if (!records.length) return;
+
+    const recovered = [];
+    for (const rec of records) {
+      try {
+        const res = await fetch(`${ROOT_PATH}/api/jobs/${rec.job_id}`);
+        if (res.status === 404) { vxhRemoveJob(rec.job_id); continue; }
+        const job = await res.json();
+        recovered.push({ rec, job });
+      } catch (e) { /* network hiccup — leave it for next load */ }
+    }
+    if (!recovered.length) return;
+
+    // The oldest recovered job restores as the primary running/done/error
+    // view; anything else recovers into the "process additional files"
+    // table below it (locked, read-only — just live status).
+    recovered.sort((a, b) => (a.rec.submitted_at || '').localeCompare(b.rec.submitted_at || ''));
+    const [primary, ...additional] = recovered;
+
+    currentJobId         = primary.rec.job_id;
+    currentDownloadToken = primary.rec.download_token;
+    buildPipelineTrack();
+    updateBatchAddZoneCopy();
+
+    if (!additional.length) {
+      if (primary.job.status === 'done') {
+        document.getElementById('done-job-id').textContent = currentJobId;
+        showState('done');
+      } else if (primary.job.status === 'error') {
+        showError(primary.job.error || 'An unknown error occurred.', primary.job.uploaded_files || []);
+      } else {
+        showState('running');
+        document.getElementById('progress-filename').textContent = primary.rec.filename || '';
+        document.getElementById('running-job-id').textContent = currentJobId;
+        startPolling();
+      }
+      return;
+    }
+
+    showState('running');
+    document.getElementById('progress-filename').textContent = primary.rec.filename || '';
+    document.getElementById('running-job-id').textContent = currentJobId;
+    if (primary.job.status === 'done') showPrimaryInlineDone();
+    else if (primary.job.status === 'error') showPrimaryInlineError(primary.job.error || 'An unknown error occurred.');
+    else startPolling();
+
+    additional.forEach(({ rec, job }) => {
+      const row = makeRow(null, null, 'exact');
+      row.audioName = rec.filename;
+      row.confirmed = true;
+      row.locked = true;
+      row.jobId = rec.job_id;
+      row.downloadToken = rec.download_token;
+      row.jobStatus = job.status;
+      row.errorMessage = job.error || null;
+      row.collapsed = job.status === 'queued'; // matches the normal default: only "upcoming" starts collapsed
+      batchRows.push(row);
+      if (job.status === 'queued' || job.status === 'running') startRowPolling(row.rowId);
+    });
+    renderBatchTable();
   }
 
   // ─── TextGrid upload hint ─────────────────────────────────────────────────────
@@ -1549,9 +2672,8 @@
     btn.disabled    = true;
     btn.textContent = 'Submitting…';
 
-    const form = document.getElementById('vxh-form');
-    const data = new FormData();
-    data.append('audio',                     selectedFile);
+    const data = buildJobFormData(collectSharedSettingsFromForm());
+    data.append('audio', selectedFile);
     if (selectedTextGrid) data.append('textgrid', selectedTextGrid);
     if (tierPickerVisible) {
       data.append('phone_tier_index', phoneTierSelect.value);
@@ -1560,21 +2682,6 @@
     if (utteranceTierVisible) {
       data.append('utterance_tier_index', utteranceTierSelect.value);
     }
-    data.append('whisper_model',             form.whisper_model.value);
-    data.append('language',                  form.language.value);
-    data.append('initial_prompt',            form.initial_prompt.value);
-    data.append('condition_on_previous_text', form.condition_on_previous_text.checked);
-    data.append('acoustic_model',            form.acoustic_model.value);
-    data.append('fine_tune',                 form.fine_tune.checked);
-    data.append('dictionary',                form.dictionary.value);
-    data.append('formant_ceiling',           form.formant_ceiling.value);
-    data.append('num_formants',              form.num_formants.value);
-    data.append('include_overlaps',          form.include_overlaps.checked);
-    data.append('combine_preliquid',         form.combine_preliquid.checked);
-    data.append('include_intervocalic',      form.include_intervocalic.checked);
-    data.append('run_transcription',         stepActive.transcription);
-    data.append('run_alignment',             stepActive.alignment);
-    data.append('run_formants',              stepActive.formants);
 
     try {
       const res  = await fetch(`${ROOT_PATH}/api/jobs`, { method: 'POST', body: data });
@@ -1582,6 +2689,9 @@
       if (!res.ok) throw new Error(body.detail || 'Submission failed');
       currentJobId         = body.job_id;
       currentDownloadToken = body.download_token;
+      vxhSaveJob({ job_id: currentJobId, download_token: currentDownloadToken, filename: selectedFile.name, submitted_at: new Date().toISOString() });
+      clearBatchAddState(); // in case a previous job's "process additional files" state is still around
+      updateBatchAddZoneCopy();
       buildPipelineTrack();
       showState('running');
       document.getElementById('progress-filename').textContent = selectedFile.name;
@@ -1611,15 +2721,41 @@
       if (job.status === 'done') {
         clearInterval(pollTimer);
         if (completionSoundEnabled) playCompletionSound();
-        document.getElementById('done-job-id').textContent = currentJobId || '(unavailable)';
-        showState('done');
+        if (batchRows.length) {
+          showPrimaryInlineDone();
+        } else {
+          document.getElementById('done-job-id').textContent = currentJobId || '(unavailable)';
+          showState('done');
+        }
       } else if (job.status === 'error') {
         clearInterval(pollTimer);
-        showError(job.error || 'An unknown error occurred.', job.uploaded_files || []);
+        if (batchRows.length) {
+          showPrimaryInlineError(job.error || 'An unknown error occurred.');
+        } else {
+          showError(job.error || 'An unknown error occurred.', job.uploaded_files || []);
+        }
       }
     } catch (err) {
       // Network hiccup — keep polling
     }
+  }
+
+  // Shown instead of navigating to the full-screen Done/Error state — used
+  // whenever additional files are also in flight, so their table stays
+  // visible instead of being replaced by a different page.
+  function showPrimaryInlineDone() {
+    updateTrack(5);
+    document.querySelector('#state-running .progress-spinner').style.display = 'none';
+    document.getElementById('progress-step-label').textContent = 'Done';
+    document.getElementById('primary-done-inline').style.display = '';
+  }
+
+  function showPrimaryInlineError(message) {
+    updateTrack(0);
+    document.querySelector('#state-running .progress-spinner').style.display = 'none';
+    document.getElementById('progress-step-label').textContent = 'Failed';
+    document.getElementById('primary-error-inline-message').textContent = message;
+    document.getElementById('primary-error-inline').style.display = '';
   }
 
   // ─── Pipeline track ───────────────────────────────────────────────────────────
@@ -1718,6 +2854,7 @@
 
   // ─── Download ─────────────────────────────────────────────────────────────────
   function downloadResults() {
+    vxhRemoveJob(currentJobId);
     window.location.href = `${ROOT_PATH}/api/jobs/${currentJobId}/download?token=${currentDownloadToken}`;
   }
 
@@ -1779,6 +2916,11 @@
     currentDownloadToken = null;
     selectedFile     = null;
     selectedTextGrid = null;
+
+    clearBatchAddState();
+    document.querySelector('#state-running .progress-spinner').style.display = '';
+    document.getElementById('primary-done-inline').style.display = 'none';
+    document.getElementById('primary-error-inline').style.display = 'none';
 
     dropZone.classList.remove('has-file');
     document.getElementById('drop-primary').textContent     = 'Drop audio here or click to browse';
@@ -1860,6 +3002,9 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeDrawer();
   });
+
+  // ─── Bootstrap ────────────────────────────────────────────────────────────────
+  vxhRecoverOnLoad();
 </script>
 </body>
 </html>
