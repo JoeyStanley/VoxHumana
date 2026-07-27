@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+
+## [0.14.1] - 2026-07-27
 ### Fixed
 - Some issues with batch file uploads not displaying information.
 - Cut down on processing time on batch file uploads.
