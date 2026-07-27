@@ -281,9 +281,19 @@ happen soon, I should fix that so that canceled jobs don't clog the queue.
 
 ---
 
-## Client-side job persistence & status recovery (not yet built)
+## Client-side job persistence & status recovery ✓ (implemented)
 
-**Discovered:** while stress-testing the queue locally by submitting several large
+Implemented as part of batch upload (see "Batch upload ✓ (implemented)" below) —
+`vxh_jobs` in `localStorage` holds `{job_id, download_token, filename,
+submitted_at}` per submitted job, written by both the single-file and batch
+submit paths. `vxhRecoverOnLoad()` runs at page bootstrap and restores the
+single-job view (1 recovered record) or the batch table (2+) from whatever's
+still queued/running/done/error server-side. As anticipated below, only
+already-submitted jobs are recoverable — a file still sitting unconfirmed in
+the batch table at crash time only ever existed as an in-memory `File` object
+and can't survive a reload in any browser.
+
+**Discovered (original problem writeup):** while stress-testing the queue locally by submitting several large
 real files back-to-back, the laptop went to sleep partway through and killed the
 dev server. That's a separate problem (see the "computer sleep kills the local dev
 server" note in Alpha/Beta testing below) — but investigating it surfaced a real gap
@@ -551,5 +561,27 @@ parse the prose logs by hand.
 
 
 ### In conversation with Lisa
-  Batch file upload
-  Add OOV words to MFA. 
+  Batch file upload — ✓ implemented, see "Batch upload ✓ (implemented)" below
+  Add OOV words to MFA.
+
+---
+
+## Batch upload ✓ (implemented)
+
+Drag-and-drop many audio/TextGrid files at once (up to 25 per batch) instead
+of one tab per file. Files are matched into audio/TextGrid pairs automatically
+by filename (exact stem, then a fuzzy pass stripping common suffixes like
+`_aligned`/`_corrected`), using the dropped folder structure
+(`webkitGetAsEntry`) so same-named files in different speaker subfolders never
+get cross-paired — a genuine collision is flagged for manual drag-to-repair
+rather than guessed. All files in a batch share one settings form (documented
+limitation: different settings per file means separate batches). Each row
+needs an explicit Confirm click before it submits — nothing starts silently,
+including tier-index guesses for user-supplied TextGrids. Confirmed rows
+upload with client-side pacing (`MAX_CONCURRENT_UPLOADS`, `web/static/index.html`)
+so 25 large files don't hit the server as simultaneous uploads, then process
+one at a time through the existing single-worker queue exactly like the
+single-file flow. No backend changes were needed — batch rows submit through
+the existing `/api/jobs` and `/api/textgrid-tiers` endpoints, one call per
+row. Individual downloads only for v1 (no combined batch-download endpoint).
+See `/Users/joeystan/.claude/plans/foamy-juggling-crane.md` for the full design. 
