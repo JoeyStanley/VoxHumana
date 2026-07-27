@@ -3,10 +3,14 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+### Fixed
+- Some issues with batch file uploads not displaying information.
+- Cut down on processing time on batch file uploads.
 
 ## [0.13.0] - 2026-07-24
 ### Added
 - When uploading a TextGrid to MFA, users can now specify which tier to use.
+- Upload files for multiple jobs at once.
 ### Fixed
 - Correct version number displayed at the bottom of the app. 
 

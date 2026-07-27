@@ -2316,6 +2316,18 @@
     }
   }
 
+  // A job reported "not_found" mid-poll (as opposed to at initial recovery,
+  // where vxhRecoverOnLoad already handles a 404 explicitly) means the
+  // server's in-memory record of it is gone — almost always because the
+  // server process itself restarted while this tab was open. Surface it as
+  // a normal error rather than silently polling forever with no feedback.
+  function notFoundAsError() {
+    return {
+      status: 'error',
+      error: 'Lost track of this job — the server may have restarted. It may still have finished; check the server\'s data/logs/ directory for this Job ID.',
+    };
+  }
+
   async function pollActiveJobs() {
     const ids = pollableJobIds();
     if (!ids.length) { stopGlobalPollingIfIdle(); return; }
@@ -2324,12 +2336,12 @@
       const results = await res.json();
       if (currentJobId && !primarySettled) {
         const job = results[currentJobId];
-        if (job && job.status !== 'not_found') handlePrimaryJobUpdate(job);
+        if (job) handlePrimaryJobUpdate(job.status === 'not_found' ? notFoundAsError() : job);
       }
       batchRows.forEach(row => {
         if (!row.jobId || (row.jobStatus !== 'queued' && row.jobStatus !== 'running')) return;
         const job = results[row.jobId];
-        if (job && job.status !== 'not_found') handleRowJobUpdate(row, job);
+        if (job) handleRowJobUpdate(row, job.status === 'not_found' ? notFoundAsError() : job);
       });
     } catch (err) {
       // Network hiccup — keep polling
