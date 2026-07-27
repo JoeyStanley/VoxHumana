@@ -575,6 +575,7 @@
     /* Primary job inline done/error (shown instead of navigating away, when
        additional files are also in flight) */
     .primary-done-inline, .primary-error-inline {
+      position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -597,7 +598,14 @@
     }
 
     /* Batch upload ("process additional files") */
-    .batch-drop-zone { margin-bottom: 14px; padding: 20px; }
+    .batch-drop-zone { margin-bottom: 10px; padding: 20px; }
+    .batch-capacity-status {
+      display: none;
+      margin-bottom: 12px;
+      font-size: 11px;
+      color: var(--pbm);
+      text-align: center;
+    }
     #batch-cap-banner {
       display: none;
       margin-bottom: 12px;
@@ -1212,7 +1220,7 @@
 
   <!-- ══════════════════════════════ RUNNING STATE ══════════════════════════════ -->
   <div id="state-running" class="body" style="display:none">
-    <div class="progress-view">
+    <div class="progress-view" id="primary-progress-view">
       <div class="progress-spinner">
         <div class="spinner-pipe"></div>
         <div class="spinner-pipe active"></div>
@@ -1236,10 +1244,12 @@
            additional files (below) are also in flight — otherwise the app
            navigates to the full-screen Done/Error state as usual. -->
       <div class="primary-done-inline" id="primary-done-inline" style="display:none">
+        <button type="button" class="batch-remove-btn" style="position:absolute; top:8px; right:8px;" title="Dismiss" onclick="dismissPrimaryJob()">×</button>
         <span class="primary-inline-title">✓ Done</span>
         <button type="button" class="btn" style="padding:6px 16px; font-size:10px;" onclick="downloadResults()">Download results</button>
       </div>
       <div class="primary-error-inline" id="primary-error-inline" style="display:none">
+        <button type="button" class="batch-remove-btn" style="position:absolute; top:8px; right:8px;" title="Dismiss" onclick="dismissPrimaryJob()">×</button>
         <div class="primary-inline-title" style="color:#c4603a;">✕ Processing failed</div>
         <div class="primary-inline-message" id="primary-error-inline-message"></div>
         <button type="button" class="btn-outline" style="padding:6px 14px; font-size:10px; margin-top:8px;" onclick="downloadResults()">Download partial results</button>
@@ -1265,8 +1275,9 @@
       <input type="file" id="batch-file-input" multiple>
       <div class="upload-zone batch-drop-zone" id="batch-drop-zone">
         <div class="upload-primary" id="batch-drop-primary">Drop audio/TextGrid files here, or click to browse</div>
-        <div class="upload-secondary" id="batch-drop-secondary">Up to 25 files — matched automatically by filename</div>
+        <div class="upload-secondary" id="batch-drop-secondary">Up to 8 hours of audio (200 files max) — matched automatically by filename</div>
       </div>
+      <div class="batch-capacity-status" id="batch-capacity-status"></div>
       <div id="batch-cap-banner"></div>
       <div class="batch-table" id="batch-table" style="margin-top:12px"></div>
       <div class="batch-summary-bar" id="batch-summary-bar"></div>
@@ -1395,7 +1406,8 @@
   let selectedTextGrid = null;
   let currentJobId        = null;
   let currentDownloadToken = null;
-  let pollTimer        = null;
+  let primarySettled   = true;  // false while the primary job still needs polling
+  let globalPollTimer  = null;  // single shared timer for the primary + every confirmed row
   let inDocs           = false;
   let appViewState     = 'form';
   let completionSoundEnabled = false;
@@ -1415,11 +1427,12 @@
   // There's no live settings form on the running page, so there's nothing to
   // lock — every row submits with whatever the (hidden, unreachable) form
   // fields already hold, which can't change once a job is in flight.
-  let batchFiles           = [];   // {fid, file, relDir, kind}
+  let batchFiles           = [];   // {fid, file, relDir, kind, duration}
   let batchRows            = [];   // see makeRow()
   let fidCounter            = 0;
   let rowIdCounter          = 0;
-  const MAX_BATCH_FILES        = 25;
+  const MAX_BATCH_FILE_COUNT   = 200;
+  const MAX_TOTAL_AUDIO_SECONDS = 8 * 3600;
   const MAX_CONCURRENT_UPLOADS = 2;
   let activeUploadCount    = 0;
   const uploadQueue         = [];
@@ -1653,8 +1666,9 @@
   }
 
   // ═══════════════════════════════ Batch upload ═══════════════════════════════
-  // Lets many audio/TextGrid files be dropped at once (up to MAX_BATCH_FILES),
-  // paired automatically by filename, reviewed in a table, and submitted one
+  // Lets many audio/TextGrid files be dropped at once (up to MAX_TOTAL_AUDIO_SECONDS
+  // of audio, or MAX_BATCH_FILE_COUNT files, whichever comes first), paired
+  // automatically by filename, reviewed in a table, and submitted one
   // row at a time through the exact same /api/jobs endpoint the single-file
   // form uses — every row shares the settings currently in the form.
 
@@ -1681,6 +1695,61 @@
     if (ext === '.textgrid') return 'textgrid';
     if (BATCH_AUDIO_EXTENSIONS.has(ext)) return 'audio';
     return 'unknown';
+  }
+
+  // ─── Duration probing (for the 8-hour cap) ───────────────────────────────────
+  // A File object doesn't expose duration on its own — the browser has to
+  // actually read the file. An <audio> element's loadedmetadata event only
+  // needs the header, not a full decode, so this is cheap even for large
+  // files. Falls back to 0 (doesn't count against the cap) if a file is
+  // unreadable or a browser quirk reports a non-finite duration, rather than
+  // blocking the whole drop on one bad file.
+  function probeAudioDuration(file) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const audioEl = new Audio();
+      let settled = false;
+      const finish = (duration) => {
+        if (settled) return;
+        settled = true;
+        URL.revokeObjectURL(url);
+        resolve(Number.isFinite(duration) && duration > 0 ? duration : 0);
+      };
+      audioEl.addEventListener('loadedmetadata', () => {
+        if (Number.isFinite(audioEl.duration)) { finish(audioEl.duration); return; }
+        // Some encodings (certain VBR MP3s especially) don't report a real
+        // duration until you seek near the end — a well-known browser quirk,
+        // not a broken file. Force it, then read the corrected duration.
+        const onTimeUpdate = () => {
+          audioEl.removeEventListener('timeupdate', onTimeUpdate);
+          finish(audioEl.duration);
+        };
+        audioEl.addEventListener('timeupdate', onTimeUpdate);
+        audioEl.currentTime = 1e101;
+      });
+      audioEl.addEventListener('error', () => finish(0));
+      setTimeout(() => finish(0), 8000);
+      audioEl.src = url;
+    });
+  }
+
+  function totalQueuedSeconds() {
+    return batchFiles.filter(f => f.kind === 'audio').reduce((sum, f) => sum + (f.duration || 0), 0);
+  }
+
+  function formatDuration(seconds) {
+    const totalMinutes = Math.round(seconds / 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return h === 0 ? `${m}m` : `${h}h ${m}m`;
+  }
+
+  function renderCapacityStatus() {
+    const el = document.getElementById('batch-capacity-status');
+    if (!el) return;
+    if (!batchFiles.length) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    el.textContent = `${formatDuration(totalQueuedSeconds())} of ${formatDuration(MAX_TOTAL_AUDIO_SECONDS)} queued · ${batchFiles.length} of ${MAX_BATCH_FILE_COUNT} files`;
   }
 
   // ─── Folder-aware drop collection ────────────────────────────────────────────
@@ -1743,7 +1812,6 @@
       tierFetchStatus: 'idle', // idle | loading | loaded | error
       phoneIdx: null, wordIdx: null, uttIdx: null,
       confirmed: false, locked: false,
-      pollTimer: null,
       jobId: null, downloadToken: null,
       jobStatus: 'unsubmitted', stepName: null, errorMessage: null,
       collapsed: false, soundEnabled: false,
@@ -1917,8 +1985,8 @@
   function updateBatchAddZoneCopy() {
     const tgMode = !stepActive.transcription;
     document.getElementById('batch-drop-secondary').textContent = tgMode
-      ? 'Up to 25 files — audio and TextGrids are paired automatically by filename'
-      : 'Up to 25 audio files — each runs through the queue on its own';
+      ? `Up to ${formatDuration(MAX_TOTAL_AUDIO_SECONDS)} of audio (${MAX_BATCH_FILE_COUNT} files max) — audio and TextGrids are paired automatically by filename`
+      : `Up to ${formatDuration(MAX_TOTAL_AUDIO_SECONDS)} of audio (${MAX_BATCH_FILE_COUNT} files max) — each runs through the queue on its own`;
     document.getElementById('batch-add-hint').textContent = tgMode
       ? 'Uses the same settings as the job above. Drop audio and TextGrids here — matching pairs are found automatically, and you can fix or reassign any that don\'t match by picking from the dropdown next to a file.'
       : 'Uses the same settings as the job above. Drop more audio files here — each one runs through the queue on its own, so you don\'t have to wait for this job to finish.';
@@ -1929,10 +1997,10 @@
     if (!el) return;
     if (!rejected.length) { el.style.display = 'none'; return; }
     el.innerHTML = 'Some files weren\'t added: ' + rejected.map(escapeHtml).join('; ');
-    el.style.display = '';
+    el.style.display = 'block';
   }
 
-  function mergeIntoBatch(fileEntries) {
+  async function mergeIntoBatch(fileEntries) {
     const tgMode = !stepActive.transcription;
     const rejected = [];
     const accepted = [];
@@ -1944,13 +2012,34 @@
       accepted.push({ file, relDir, kind });
     });
 
-    const capacity = Math.max(0, MAX_BATCH_FILES - batchFiles.length);
-    const toAdd    = accepted.slice(0, capacity);
-    accepted.slice(toAdd.length).forEach(f => rejected.push(`${f.file.name} (batch is full — ${MAX_BATCH_FILES} file max)`));
+    // File-count cap first (cheap, synchronous) — no point probing the
+    // duration of a file that won't fit regardless.
+    const countCapacity = Math.max(0, MAX_BATCH_FILE_COUNT - batchFiles.length);
+    const withinCount   = accepted.slice(0, countCapacity);
+    accepted.slice(withinCount.length).forEach(f => rejected.push(`${f.file.name} (session is full — ${MAX_BATCH_FILE_COUNT} file max)`));
 
-    toAdd.forEach(f => batchFiles.push({ fid: 'f' + (++fidCounter), file: f.file, relDir: f.relDir, kind: f.kind }));
+    // Audio duration has to be read from the file itself (probeAudioDuration);
+    // TextGrids have no duration of their own and ride along with whatever
+    // audio they end up paired with.
+    const withDurations = await Promise.all(withinCount.map(async f => (
+      f.kind === 'audio' ? { ...f, duration: await probeAudioDuration(f.file) } : { ...f, duration: 0 }
+    )));
+
+    let runningTotal = totalQueuedSeconds();
+    const toAdd = [];
+    withDurations.forEach(f => {
+      if (f.kind === 'audio' && runningTotal + f.duration > MAX_TOTAL_AUDIO_SECONDS) {
+        rejected.push(`${f.file.name} (would exceed the ${formatDuration(MAX_TOTAL_AUDIO_SECONDS)} audio limit)`);
+        return;
+      }
+      if (f.kind === 'audio') runningTotal += f.duration;
+      toAdd.push(f);
+    });
+
+    toAdd.forEach(f => batchFiles.push({ fid: 'f' + (++fidCounter), file: f.file, relDir: f.relDir, kind: f.kind, duration: f.duration }));
 
     showBatchRejectBanner(rejected);
+    renderCapacityStatus();
     runMatchingPass();
   }
 
@@ -2060,7 +2149,7 @@
     const row = batchRows.find(r => r.rowId === rowId);
     if (!row) return;
     row.collapsed = !row.collapsed;
-    renderConfirmedJobsPanel();
+    updateConfirmedJobPanel(rowId);
   }
 
   function onRowSoundNotifyChange(rowId, checkbox) {
@@ -2081,24 +2170,29 @@
     const row = batchRows[idx];
     if (row.locked && row.jobStatus !== 'done' && row.jobStatus !== 'error') return; // in-flight — can't remove
 
+    // Removing (or dismissing a finished) row always releases its file(s)
+    // from the counted pool — the file-count and audio-duration caps reflect
+    // what's actually still in this session, not everything ever added to it.
+    batchFiles = batchFiles.filter(f => f.fid !== row.audioFid && f.fid !== row.tgFid);
+
     if (row.locked) {
-      stopRowPolling(row);
       batchRows.splice(idx, 1);
       renderBatchTable();
+      renderCapacityStatus();
       return;
     }
 
-    batchFiles = batchFiles.filter(f => f.fid !== row.audioFid && f.fid !== row.tgFid);
     batchRows.splice(idx, 1);
     runMatchingPass();
+    renderCapacityStatus();
   }
 
   function clearBatchAddState() {
-    batchRows.forEach(r => stopRowPolling(r));
     batchFiles = [];
     batchRows  = [];
     document.getElementById('batch-cap-banner').style.display = 'none';
     renderBatchTable();
+    renderCapacityStatus();
   }
 
   // ─── Submission driver (paced uploads) ────────────────────────────────────────
@@ -2153,7 +2247,7 @@
     const row = batchRows.find(r => r.rowId === rowId);
     if (!row) return;
     setRowStatus(row, 'uploading');
-    renderConfirmedJobsPanel();
+    updateConfirmedJobPanel(rowId);
     renderSummaryBar();
 
     // Everything here — including building the form data — is inside the
@@ -2184,44 +2278,74 @@
       row.downloadToken = body.download_token;
       setRowStatus(row, 'queued');
       vxhSaveJob({ job_id: row.jobId, download_token: row.downloadToken, filename: row.audioName, submitted_at: new Date().toISOString() });
-      startRowPolling(rowId);
+      ensureGlobalPolling();
     } catch (err) {
       setRowStatus(row, 'error');
       row.errorMessage = err.message;
     }
-    renderConfirmedJobsPanel();
+    updateConfirmedJobPanel(rowId);
     renderSummaryBar();
   }
 
-  function startRowPolling(rowId) {
-    const row = batchRows.find(r => r.rowId === rowId);
-    if (!row || row.pollTimer) return;
-    row.pollTimer = setInterval(() => pollRow(rowId), 3000);
-    pollRow(rowId);
+  // ─── Unified polling ──────────────────────────────────────────────────────────
+  // Every in-flight job (the primary job, plus every confirmed row) used to
+  // poll independently on its own 3-second timer — with several files queued
+  // at once, that meant that many separate GET requests hitting the server
+  // every few seconds. Instead, one shared timer collects every job that
+  // still needs checking and asks for all of their statuses in a single
+  // request per tick, regardless of how many jobs are in flight.
+  function pollableJobIds() {
+    const ids = [];
+    if (currentJobId && !primarySettled) ids.push(currentJobId);
+    batchRows.forEach(r => {
+      if (r.jobId && (r.jobStatus === 'queued' || r.jobStatus === 'running')) ids.push(r.jobId);
+    });
+    return ids;
   }
 
-  function stopRowPolling(row) {
-    if (row.pollTimer) { clearInterval(row.pollTimer); row.pollTimer = null; }
+  function ensureGlobalPolling() {
+    if (globalPollTimer) return;
+    globalPollTimer = setInterval(pollActiveJobs, 3000);
+    pollActiveJobs();
   }
 
-  async function pollRow(rowId) {
-    const row = batchRows.find(r => r.rowId === rowId);
-    if (!row || !row.jobId) return;
+  function stopGlobalPollingIfIdle() {
+    if (globalPollTimer && !pollableJobIds().length) {
+      clearInterval(globalPollTimer);
+      globalPollTimer = null;
+    }
+  }
+
+  async function pollActiveJobs() {
+    const ids = pollableJobIds();
+    if (!ids.length) { stopGlobalPollingIfIdle(); return; }
     try {
-      const res = await fetch(`${ROOT_PATH}/api/jobs/${row.jobId}`);
-      const job = await res.json();
-      setRowStatus(row, job.status);
-      row.stepName  = job.step_name;
-      if (job.status === 'done' || job.status === 'error') {
-        stopRowPolling(row);
-        if (job.status === 'error') row.errorMessage = job.error || 'An unknown error occurred.';
-        else if (row.soundEnabled) playCompletionSound();
+      const res = await fetch(`${ROOT_PATH}/api/jobs?ids=${encodeURIComponent(ids.join(','))}`);
+      const results = await res.json();
+      if (currentJobId && !primarySettled) {
+        const job = results[currentJobId];
+        if (job && job.status !== 'not_found') handlePrimaryJobUpdate(job);
       }
-      renderConfirmedJobsPanel();
-      renderSummaryBar();
+      batchRows.forEach(row => {
+        if (!row.jobId || (row.jobStatus !== 'queued' && row.jobStatus !== 'running')) return;
+        const job = results[row.jobId];
+        if (job && job.status !== 'not_found') handleRowJobUpdate(row, job);
+      });
     } catch (err) {
       // Network hiccup — keep polling
     }
+    stopGlobalPollingIfIdle();
+  }
+
+  function handleRowJobUpdate(row, job) {
+    setRowStatus(row, job.status);
+    row.stepName = job.step_name;
+    if (job.status === 'done' || job.status === 'error') {
+      if (job.status === 'error') row.errorMessage = job.error || 'An unknown error occurred.';
+      else if (row.soundEnabled) playCompletionSound();
+    }
+    updateConfirmedJobPanel(row.rowId);
+    renderSummaryBar();
   }
 
   function downloadRowResults(rowId) {
@@ -2394,6 +2518,10 @@
     </div>`;
   }
 
+  // Full rebuild — only for when the SET of confirmed rows actually changes
+  // (one gets confirmed or dismissed). Never call this from a status poll:
+  // it replaces every row's DOM, including whatever row the user might be
+  // about to click a Download button on.
   function renderConfirmedJobsPanel() {
     const container = document.getElementById('confirmed-jobs-container');
     if (!container) return;
@@ -2401,12 +2529,26 @@
     container.innerHTML = confirmed.map(row => `<hr class="confirmed-job-divider">` + confirmedJobPanelHtml(row)).join('');
   }
 
+  // Updates exactly one row's panel in place — used by anything that fires
+  // on a timer (poll, submit) or affects only one row (collapse toggle), so
+  // a background status change on one job can never disturb a button the
+  // user is interacting with on a different row's panel.
+  function updateConfirmedJobPanel(rowId) {
+    const row = batchRows.find(r => r.rowId === rowId);
+    if (!row) return;
+    const wrapper = document.querySelector(`.confirmed-job-panel[data-row-id="${rowId}"]`);
+    if (!wrapper) { renderConfirmedJobsPanel(); return; } // not in the DOM yet — fall back to a full rebuild
+    const temp = document.createElement('div');
+    temp.innerHTML = confirmedJobPanelHtml(row);
+    wrapper.replaceWith(temp.firstElementChild);
+  }
+
   function renderSummaryBar() {
     const summary = document.getElementById('batch-summary-bar');
     if (batchRows.length) {
       const done    = batchRows.filter(r => r.jobStatus === 'done').length;
       const errored = batchRows.filter(r => r.jobStatus === 'error').length;
-      summary.style.display = '';
+      summary.style.display = 'block';
       summary.textContent = `${batchRows.length} file${batchRows.length === 1 ? '' : 's'} added — ${done} done, ${errored} error${errored === 1 ? '' : 's'}`;
     } else {
       summary.style.display = 'none';
@@ -2495,7 +2637,8 @@
         showState('running');
         document.getElementById('progress-filename').textContent = primary.rec.filename || '';
         document.getElementById('running-job-id').textContent = currentJobId;
-        startPolling();
+        primarySettled = false;
+        ensureGlobalPolling();
       }
       return;
     }
@@ -2505,7 +2648,7 @@
     document.getElementById('running-job-id').textContent = currentJobId;
     if (primary.job.status === 'done') showPrimaryInlineDone();
     else if (primary.job.status === 'error') showPrimaryInlineError(primary.job.error || 'An unknown error occurred.');
-    else startPolling();
+    else primarySettled = false;
 
     additional.forEach(({ rec, job }) => {
       const row = makeRow(null, null, 'exact');
@@ -2518,9 +2661,9 @@
       row.errorMessage = job.error || null;
       row.collapsed = job.status === 'queued'; // matches the normal default: only "upcoming" starts collapsed
       batchRows.push(row);
-      if (job.status === 'queued' || job.status === 'running') startRowPolling(row.rowId);
     });
     renderBatchTable();
+    ensureGlobalPolling();
   }
 
   // ─── TextGrid upload hint ─────────────────────────────────────────────────────
@@ -2696,7 +2839,8 @@
       showState('running');
       document.getElementById('progress-filename').textContent = selectedFile.name;
       document.getElementById('running-job-id').textContent = currentJobId;
-      startPolling();
+      primarySettled = false;
+      ensureGlobalPolling();
     } catch (err) {
       btn.disabled    = false;
       btn.textContent = 'Submit';
@@ -2705,38 +2849,26 @@
   }
 
   // ─── Polling ──────────────────────────────────────────────────────────────────
-  function startPolling() {
-    pollTimer = setInterval(pollJob, 3000);
-    pollJob();
-  }
+  function handlePrimaryJobUpdate(job) {
+    updateTrack(job.step);
+    document.getElementById('progress-step-label').textContent = job.step_name || 'Processing…';
 
-  async function pollJob() {
-    try {
-      const res = await fetch(`${ROOT_PATH}/api/jobs/${currentJobId}`);
-      const job = await res.json();
-
-      updateTrack(job.step);
-      document.getElementById('progress-step-label').textContent = job.step_name || 'Processing…';
-
-      if (job.status === 'done') {
-        clearInterval(pollTimer);
-        if (completionSoundEnabled) playCompletionSound();
-        if (batchRows.length) {
-          showPrimaryInlineDone();
-        } else {
-          document.getElementById('done-job-id').textContent = currentJobId || '(unavailable)';
-          showState('done');
-        }
-      } else if (job.status === 'error') {
-        clearInterval(pollTimer);
-        if (batchRows.length) {
-          showPrimaryInlineError(job.error || 'An unknown error occurred.');
-        } else {
-          showError(job.error || 'An unknown error occurred.', job.uploaded_files || []);
-        }
+    if (job.status === 'done') {
+      primarySettled = true;
+      if (completionSoundEnabled) playCompletionSound();
+      if (batchRows.length) {
+        showPrimaryInlineDone();
+      } else {
+        document.getElementById('done-job-id').textContent = currentJobId || '(unavailable)';
+        showState('done');
       }
-    } catch (err) {
-      // Network hiccup — keep polling
+    } else if (job.status === 'error') {
+      primarySettled = true;
+      if (batchRows.length) {
+        showPrimaryInlineError(job.error || 'An unknown error occurred.');
+      } else {
+        showError(job.error || 'An unknown error occurred.', job.uploaded_files || []);
+      }
     }
   }
 
@@ -2756,6 +2888,14 @@
     document.getElementById('progress-step-label').textContent = 'Failed';
     document.getElementById('primary-error-inline-message').textContent = message;
     document.getElementById('primary-error-inline').style.display = '';
+  }
+
+  // Dismisses the primary job's panel entirely (only reachable once it's
+  // settled — same rule as every other row's "×"). Doesn't touch
+  // localStorage, matching onRemoveRow: dismissing hides it from this
+  // session's view, it doesn't forget the job.
+  function dismissPrimaryJob() {
+    document.getElementById('primary-progress-view').style.display = 'none';
   }
 
   // ─── Pipeline track ───────────────────────────────────────────────────────────
@@ -2911,13 +3051,15 @@
   }
 
   function resetForm() {
-    clearInterval(pollTimer);
+    primarySettled       = true;
     currentJobId         = null;
     currentDownloadToken = null;
     selectedFile     = null;
     selectedTextGrid = null;
 
     clearBatchAddState();
+    stopGlobalPollingIfIdle();
+    document.getElementById('primary-progress-view').style.display = '';
     document.querySelector('#state-running .progress-spinner').style.display = '';
     document.getElementById('primary-done-inline').style.display = 'none';
     document.getElementById('primary-error-inline').style.display = 'none';
