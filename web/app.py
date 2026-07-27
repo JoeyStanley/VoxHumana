@@ -345,13 +345,28 @@ def _write_processing_log(
         ln("STEP 1 — TRANSCRIPTION: skipped (user-supplied TextGrid)")
         ln(BAR)
         ln("")
+        tier_sel = config.get("tier_selection")
+        tier_sel_names = (tier_sel or {}).get("tier_names") or []
+
+        def _tier_label(idx) -> str:
+            if idx is None or idx >= len(tier_sel_names):
+                return "(unknown)"
+            return f"\"{tier_sel_names[idx]}\" (tier {idx + 1} of {len(tier_sel_names)})"
+
         if ran_alignment:
             ln("Whisper transcription was not run. A Praat utterance TextGrid was")
             ln("uploaded by the user and used as the transcript input to MFA.")
+            if tier_sel:
+                ln("")
+                ln(f"Utterance tier selected: {_tier_label(tier_sel.get('utterance_idx'))}")
         else:
             ln("Whisper transcription was not run. A Praat MFA-format TextGrid")
             ln("(Word and Phone tiers) was uploaded by the user and used directly")
             ln("as the input to new-fave formant extraction.")
+            if tier_sel:
+                ln("")
+                ln(f"Phone tier selected: {_tier_label(tier_sel.get('phone_idx'))}")
+                ln(f"Word tier selected:  {_tier_label(tier_sel.get('word_idx'))}")
 
     # ── MFA ──────────────────────────────────────────────────────────────────
     ln("")
@@ -375,9 +390,7 @@ def _write_processing_log(
         ln("If any words in the transcript were not found in the pronunciation dictionary,")
         ln("MFA guessed their pronunciations. Those words are listed in oovs_found.txt")
         ln("(included in your download if any were found). Poor guesses can degrade")
-        ln("alignment quality around those words. To improve results, paste the OOV words")
-        ln("into the Transcription Hint box and rerun — Whisper will have more context and")
-        ln("is less likely to misspell or misrecognize them.")
+        ln("alignment quality around those words.")
         if ran_transcription:
             ln("")
             if ran_formants:
@@ -980,6 +993,7 @@ async def create_job(
     #   - Align is running  → whisper_output/ (utterance TextGrid for MFA)
     #   - Align is skipped  → mfa_output/     (MFA-format TextGrid for new-fave)
     uploaded_files = [original_name]
+    tier_selection: Optional[dict] = None
     if textgrid is not None and not run_transcription:
         tg_original = textgrid.filename or "transcript.TextGrid"
         if run_alignment:
@@ -1022,6 +1036,11 @@ async def create_job(
                            "Please select the word and phone tiers explicitly.",
                 )
             extract_word_phone_tiers(tg_path, word_idx=word_idx, phone_idx=phone_idx)
+            tier_selection = {
+                "tier_names": tier_names,
+                "phone_idx": phone_idx,
+                "word_idx": word_idx,
+            }
         else:
             # Align running: this TextGrid feeds MFA directly as its transcript
             # input. MFA treats every tier in the file as a separate speaker's
@@ -1049,6 +1068,10 @@ async def create_job(
                            "Please select the utterance tier explicitly.",
                 )
             extract_utterance_tier(tg_path, utterance_idx=utterance_idx)
+            tier_selection = {
+                "tier_names": tier_names,
+                "utterance_idx": utterance_idx,
+            }
 
     config = {
         "whisper": {
@@ -1075,6 +1098,7 @@ async def create_job(
             "alignment":     run_alignment,
             "formants":      run_formants,
         },
+        "tier_selection": tier_selection,
     }
 
     download_token = uuid.uuid4().hex
@@ -1099,10 +1123,10 @@ async def create_job(
     return JSONResponse({"job_id": job_id, "download_token": download_token})
 
 
-@app.get("/api/jobs/{job_id}")
-async def get_job(job_id: str):
+def _job_status_payload(job_id: str) -> Optional[dict]:
+    """Return a job's status dict (with queue position filled in), or None if unknown."""
     if job_id not in jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
+        return None
     job = dict(jobs[job_id])
     if job["status"] == "queued" and job_id in active_jobs:
         position = active_jobs.index(job_id) + 1  # 1 = up next / currently starting
@@ -1113,7 +1137,33 @@ async def get_job(job_id: str):
             "Starting…" if position == 1
             else f"Waiting in queue (position {position} of {total})"
         )
+    return job
+
+
+@app.get("/api/jobs/{job_id}")
+async def get_job(job_id: str):
+    job = _job_status_payload(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
     return JSONResponse(job)
+
+
+@app.get("/api/jobs")
+async def get_jobs_status(ids: str):
+    """Batch status check for several jobs in one request.
+
+    The batch-upload UI can have many jobs in flight at once (the primary
+    submission plus every additional confirmed file); polling each one on
+    its own timer meant a separate request per job every few seconds. The
+    client instead collects every job it still needs to check and calls this
+    once per tick, regardless of how many jobs that covers.
+    """
+    job_ids = [j for j in ids.split(",") if j]
+    result = {}
+    for job_id in job_ids:
+        payload = _job_status_payload(job_id)
+        result[job_id] = payload if payload is not None else {"status": "not_found"}
+    return JSONResponse(result)
 
 
 @app.get("/api/jobs/{job_id}/download")
