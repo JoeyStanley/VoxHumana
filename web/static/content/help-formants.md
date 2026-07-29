@@ -59,13 +59,20 @@ tier and the new `phones - combined - liquids` tier side by side, so you can alw
 what was merged and compare it against the original. It's kept separate from the `mfa_output`
 TextGrid, which stays exactly as MFA (or your own upload) produced it.
 
-**Label recoding is also switched off for this run.** new-fave's normal English behavior recodes
-CMU ARPABET labels into Labov-style shorthand (e.g. "IY1" → "iy"), but there's no Labov category
-for a combined label like "IYL1" — recoding just the combined ones would leave you with a file
-that mixes two different transcription systems (Labov shorthand for plain vowels, raw ARPABET
-for preliquid ones). To keep the whole file in one consistent system, `recode_rules` is set to
-`norecode` whenever this option is checked, so *every* label — combined or not — stays in its
-original raw ARPABET form (e.g. "IY1" stays "IY1", not "iy").
+**Combined labels get their own Labov-style codes**, so the output stays in the same notation
+system either way — checking this box doesn't switch the whole file to raw ARPABET. new-fave's
+normal English recoding (`cmu2labov`) has no category for a combined label like "IYL1", so this
+option uses a variant (`pipeline/resources/en_preliquid_recode.yml`) that extends it:
+
+- For vowel+R combinations, `cmu2labov` already has a handful of dedicated tautosyllabic-r-colored
+  categories — those are reused as-is, so a combined label gets exactly the code it would have
+  gotten if new-fave had recoded the original separate vowel and "R" phones the old way:
+  "IHR"/"IYR" → `iyr`, "EYR" → `eyr`, "AAR" → `ahr`, "AOR"/"OWR" → `owr`, "UHR"/"UWR" → `uwr`.
+- Every other combination — every vowel+L combination (which `cmu2labov` has no L-context category
+  for at all), plus the remaining vowel+R combinations — gets a new code built the same way
+  `cmu2labov` builds its own r-colored codes: the vowel's normal Labov code with "l" or "r"
+  appended, e.g. "UHL1" → `ul`, "AEL1" → `ael`, "ERL1" → `*hrl`, "EHR1" → `er`, "AHL0" (schwa+L)
+  → `@l`, "AHR1" (wedge+R) → `ʌr`.
 
 #### Include intervocalic liquids
 

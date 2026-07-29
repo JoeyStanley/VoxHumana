@@ -30,7 +30,7 @@ from pipeline.transcribe_with_whisper import transcribe
 from pipeline.convert_whisper_to_textgrid import convert_whisper_to_textgrid
 from pipeline.generate_transcript import generate_transcript
 from pipeline.align_with_mfa import align_with_mfa
-from pipeline.extract_with_newfave import extract_with_newfave, LANGUAGE_DEFAULTS
+from pipeline.extract_with_newfave import extract_with_newfave, LANGUAGE_DEFAULTS, PRELIQUID_RECODE_RULES
 from pipeline.combine_textgrids import combine_textgrids
 from pipeline.tier_selection import (
     list_tier_names,
@@ -448,7 +448,7 @@ def _write_processing_log(
         # otherwise.
         combine_preliquid = bool(nf_cfg.get("combine_preliquid", False)) and nf_language == "en"
         include_intervocalic = nf_cfg.get("include_intervocalic", True)
-        recode_rules_default = "norecode" if combine_preliquid else lang_defaults["recode_rules"]
+        recode_rules_default = PRELIQUID_RECODE_RULES if combine_preliquid else lang_defaults["recode_rules"]
 
         speakers = nf_cfg.get("speakers", "all")
         recode_rules = nf_cfg.get("recode_rules", recode_rules_default)
@@ -474,21 +474,23 @@ def _write_processing_log(
             ln("vowel immediately followed by an \"L\" or \"R\" merged into a single combined interval,")
             ln("e.g. \"UH1\"+\"L\" -> \"UHL1\" (the stress marker moves to the end). The original phone")
             ln("tier is left untouched, so both are in *_preliquid.TextGrid side by side. new-fave")
-            ln("extracted formants from the new combined tier, not the original phone tier. Because")
-            ln("new-fave's Labov-style English recoding has no equivalent category for a combined")
-            ln("vowel+liquid label like \"UHL1\", recode_rules was set to \"norecode\" for this run --")
-            ln("every label (combined or not) is left as raw CMU ARPABET rather than mixing Labov")
-            ln("shorthand and ARPABET in the same file.")
+            ln("extracted formants from the new combined tier, not the original phone tier. recode_rules")
+            ln("was set to a variant of cmu2labov (see pipeline/resources/en_preliquid_recode.yml) that")
+            ln("gives combined vowel+liquid labels their own Labov-style codes -- reusing cmu2labov's")
+            ln("existing r-colored categories (e.g. \"AOR1\" -> \"owr\") where one already exists, and")
+            ln("following the same \"vowel code + r\" convention for every other combination, including")
+            ln("all vowel+L ones (e.g. \"UHL1\" -> \"ul\", \"AEL1\" -> \"ael\"). This keeps the whole file in")
+            ln("one consistent notation system rather than mixing Labov shorthand and raw ARPABET.")
             ln("")
         ln("new-fave locates vowel tokens in the MFA-aligned TextGrid, estimates")
         ln("formant trajectories across each vowel using FastTrack, and applies a")
         ln("point-measurement heuristic to pick a single representative F1/F2")
-        if nf_language == "en" and not combine_preliquid:
+        if nf_language == "en":
             ln("value per token. Phonetic labels are recoded from CMU ARPABET to Labov")
-            ln("vowel-class notation. Five output files are written:")
-        elif combine_preliquid:
-            ln("value per token. Phonetic labels are left as raw CMU ARPABET (recode_rules")
-            ln("\"norecode\" -- see above). Six output files are written:")
+            if combine_preliquid:
+                ln("vowel-class notation. Six output files are written:")
+            else:
+                ln("vowel-class notation. Five output files are written:")
         else:
             ln("value per token. Vowels are identified with a labelset parser matching")
             ln(f"the '{nf_language}' phone set. Five output files are written:")
@@ -663,7 +665,7 @@ def _write_server_log(
     nf_lang_defaults = LANGUAGE_DEFAULTS.get(nf_language, LANGUAGE_DEFAULTS["en"])
     nf_point_heuristic = nf_cfg.get("point_heuristic", nf_lang_defaults["point_heuristic"])
     nf_combine_preliquid = bool(nf_cfg.get("combine_preliquid", False)) and nf_language == "en"
-    nf_recode_rules_default = "norecode" if nf_combine_preliquid else nf_lang_defaults["recode_rules"]
+    nf_recode_rules_default = PRELIQUID_RECODE_RULES if nf_combine_preliquid else nf_lang_defaults["recode_rules"]
     ln(f"  [new-fave]")
     ln(f"  language:                 {nf_language}")
     ln(f"  speakers:                 {nf_cfg.get('speakers', 'all')}")

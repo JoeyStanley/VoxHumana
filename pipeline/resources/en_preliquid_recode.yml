@@ -1,0 +1,503 @@
+# Recode rules for English when the "combine pre-liquid vowel sequences"
+# option is on (see pipeline.combine_preliquid_sequences).
+#
+# That step relabels vowel+liquid TextGrid intervals like "UH1"+"L" into a
+# single combined interval "UHL1" before new-fave runs. new-fave's built-in
+# cmu2labov ruleset has no category for a combined label like this -- and
+# recoding only the combined ones while leaving everything else in Labov
+# shorthand would produce a file that mixes two transcription systems.
+#
+# The rules below give every combined vowel+liquid label its own proper
+# Labov-style code, following cmu2labov's own conventions exactly:
+#
+#   - Where cmu2labov already has a dedicated tautosyllabic-r-colored
+#     category (iyr, eyr, ahr, owr, uwr), a vowel+R combined label reuses
+#     that same code -- e.g. "AOR1" gets the same "owr" code cmu2labov would
+#     have produced for a plain "AO1" followed by a separate "R" phone.
+#   - Every other vowel+liquid combination (including all vowel+L
+#     combinations, which cmu2labov has no equivalent for at all) gets a new
+#     code built the same way cmu2labov builds its own r-colored codes: the
+#     vowel's normal ("elsewhere") Labov code, with "l" or "r" appended --
+#     e.g. "AEL1" -> "ael", "EHR1" -> "er", "ERL1" -> "*hrl".
+#
+# Recode rules apply in order and stop at the first match (see
+# https://forced-alignment-and-vowel-extraction.github.io/fave-recode/getting-started/rule-application.html),
+# so these need to come before cmu2labov's own rules below: several of them
+# (e.g. `contains: "UH"` -> `u`) would otherwise match a combined label like
+# "UHL1" too, silently collapsing it back into the plain vowel class.
+#
+# Below that, the rest of this file is an unmodified copy of new-fave's
+# built-in cmu2labov.yml, so every other (non-combined) label is recoded
+# exactly as it would be without this feature enabled.
+
+# --- vowel+R combos that reuse an existing cmu2labov r-colored category ---
+- rule: preliquid-ihr-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^(IH|IY)R\\d$"
+  return: iyr
+- rule: preliquid-eyr-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^EYR\\d$"
+  return: eyr
+- rule: preliquid-ahr-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AAR\\d$"
+  return: ahr
+- rule: preliquid-owr-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^(AO|OW)R\\d$"
+  return: owr
+- rule: preliquid-uwr-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^(UH|UW)R\\d$"
+  return: uwr
+
+# --- AH (schwa/wedge) + liquid, split by stress like cmu2labov itself ---
+- rule: preliquid-schwa-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AHL0$"
+  return: "@l"
+- rule: preliquid-schwa-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AHR0$"
+  return: "@r"
+- rule: preliquid-wedge-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AHL[12]$"
+  return: "ʌl"
+- rule: preliquid-wedge-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AHR[12]$"
+  return: "ʌr"
+
+# --- remaining vowel+R combos: no existing r-colored category, so bare code + "r" ---
+- rule: preliquid-aer-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AER\\d$"
+  return: aer
+- rule: preliquid-awr-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AWR\\d$"
+  return: awr
+- rule: preliquid-ayr-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AYR\\d$"
+  return: ayr
+- rule: preliquid-er-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^EHR\\d$"
+  return: er
+- rule: preliquid-oyr-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^OYR\\d$"
+  return: oyr
+
+# --- vowel+L combos: cmu2labov has no L-context category at all, so every
+#     one is new: bare code + "l" ---
+- rule: preliquid-ol-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AAL\\d$"
+  return: ol
+- rule: preliquid-ael-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AEL\\d$"
+  return: ael
+- rule: preliquid-ohl-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AOL\\d$"
+  return: ohl
+- rule: preliquid-awl-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AWL\\d$"
+  return: awl
+- rule: preliquid-ayl-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AYL\\d$"
+  return: ayl
+- rule: preliquid-el-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^EHL\\d$"
+  return: el
+- rule: preliquid-hr-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^ERL\\d$"
+  return: "*hrl"
+- rule: preliquid-eyl-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^EYL\\d$"
+  return: eyl
+- rule: preliquid-il-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^IHL\\d$"
+  return: il
+- rule: preliquid-iyl-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^IYL\\d$"
+  return: iyl
+- rule: preliquid-owl-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^OWL\\d$"
+  return: owl
+- rule: preliquid-oyl-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^OYL\\d$"
+  return: oyl
+- rule: preliquid-ul-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^UHL\\d$"
+  return: ul
+- rule: preliquid-uwl-l
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^UWL\\d$"
+  return: uwl
+
+- rule: sp-ns-to-blank
+  conditions:
+    - attribute: label
+      relation: in
+      set:
+        - sp
+        - "{NS}"
+  return: ""
+
+- rule: schwa
+  conditions:
+    - attribute: label
+      relation: ==
+      set: AH0
+  return: "@"
+- rule: eyf
+  conditions:
+    - attribute: label
+      relation: contains
+      set: EY
+    - attribute: fol.label
+      relation: ==
+      set: "#"
+  return: eyF
+- rule: iyF
+  conditions:
+    - attribute: label
+      relation: contains
+      set: IY
+    - attribute: fol.label
+      relation: ==
+      set: "#"
+  return: iyF
+- rule: owF
+  conditions:
+    - attribute: label
+      relation: contains
+      set: OW
+    - attribute: fol.label
+      relation: ==
+      set: "#"
+  return: owF
+- rule: ay0
+  conditions:
+    - attribute: label
+      relation: contains
+      set: AY
+    - attribute: fol.label
+      relation: in
+      set:
+        - CH
+        - F
+        - HH
+        - K
+        - P
+        - S
+        - SH
+        - T
+        - TH
+  return: ay0
+- rule: ah
+  conditions:
+    - attribute: label
+      relation: contains
+      set: AA
+    - attribute: inword.label
+      relation: in
+      set:
+        - FATHER
+        - FATHER
+        - FATHER'S
+        - MA
+        - MA'S
+        - PA
+        - PA'S
+        - SPA
+        - SPAS
+        - SPA'S
+        - CHICAGO
+        - CHICAGO'S
+        - PASTA
+        - BRA
+        - BRAS
+        - BRA'S
+        - UTAH
+        - TACO
+        - TACOS
+        - TACO'S
+        - GRANDFATHER
+        - GRANDFATHERS
+        - GRANDFATHER'S
+        - CALM
+        - CALMER
+        - CALMEST
+        - CALMING
+        - CALMED
+        - CALMS
+        - PALM
+        - PALMS
+        - BALM
+        - BALMS
+        - ALMOND
+        - ALMONDS
+        - LAGER
+        - SALAMI
+        - NIRVANA
+        - KARATE
+        - AH
+  return: ah
+- rule: Tuw
+  conditions:
+    - attribute: label
+      relation: contains
+      set: UW
+    - attribute: prev.label
+      relation: in
+      set:
+        - AXR
+        - D
+        - DX
+        - EL
+        - EN
+        - L
+        - N
+        - R
+        - S
+        - T
+        - Z
+  return: Tuw
+- rule: iyr
+  conditions:
+    - attribute: label
+      relation: in
+      set:
+        - IH0
+        - IH1
+        - IH2
+        - IY0
+        - IY1
+        - IY2
+    - attribute: fol.label
+      relation: in
+      set:
+        - AXR
+        - R
+  return: iyr
+- rule: eyr
+  conditions:
+    - attribute: label
+      relation: contains
+      set: EY
+    - attribute: fol.label
+      relation: in
+      set:
+        - AXR
+        - R
+  return: eyr
+- rule: ahr
+  conditions:
+    - attribute: label
+      relation: contains
+      set: AA
+    - attribute: fol.label
+      relation: in
+      set:
+        - AXR
+        - R
+  return: ahr
+- rule: owr
+  conditions:
+    - attribute: label
+      relation: in
+      set:
+        - AO0
+        - AO1
+        - AO2
+        - OW0
+        - OW1
+        - OW2
+    - attribute: fol.label
+      relation: in
+      set:
+        - AXR
+        - R
+  return: owr
+- rule: uwr
+  conditions:
+    - attribute: label
+      relation: in
+      set:
+        - UH0
+        - UH1
+        - UH2
+        - UW0
+        - UW1
+        - UW2
+    - attribute: fol.label
+      relation: in
+      set:
+        - AXR
+        - R
+  return: uwr
+- rule: o
+  conditions:
+    - attribute: label
+      relation: contains
+      set: AA
+  return: o
+- rule: ae
+  conditions:
+    - attribute: label
+      relation: contains
+      set: AE
+  return: ae
+- rule: wedge
+  conditions:
+    - attribute: label
+      relation: in
+      set:
+        - AH1
+        - AH2
+  return: ʌ
+- rule: oh
+  conditions:
+    - attribute: label
+      relation: contains
+      set: AO
+  return: oh
+- rule: aw
+  conditions:
+    - attribute: label
+      relation: contains
+      set: AW
+  return: aw
+- rule: ay
+  conditions:
+    - attribute: label
+      relation: contains
+      set: AY
+  return: ay
+- rule: e
+  conditions:
+    - attribute: label
+      relation: contains
+      set: "EH"
+  return: e
+- rule: "*hr"
+  conditions:
+    - attribute: label
+      relation: contains
+      set: ER
+  return: "*hr"
+- rule: ey
+  conditions:
+    - attribute: label
+      relation: contains
+      set: EY
+  return: ey
+- rule: i
+  conditions:
+    - attribute: label
+      relation: contains
+      set: IH
+  return: i
+- rule: iy
+  conditions:
+    - attribute: label
+      relation: contains
+      set: IY
+  return: iy
+- rule: ow
+  conditions:
+    - attribute: label
+      relation: contains
+      set: OW
+  return: ow
+- rule: oy
+  conditions:
+    - attribute: label
+      relation: contains
+      set: OY
+  return: oy
+- rule: u
+  conditions:
+    - attribute: label
+      relation: contains
+      set: UH
+  return: u
+- rule: uw
+  conditions:
+    - attribute: label
+      relation: contains
+      set: UW
+  return: uw

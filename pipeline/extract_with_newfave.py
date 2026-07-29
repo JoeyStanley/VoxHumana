@@ -9,6 +9,7 @@ from pipeline.combine_preliquid_sequences import combine_preliquid_sequences
 from pipeline.tier_selection import extract_word_phone_tiers
 
 RESOURCES_DIR = Path(__file__).parent / "resources"
+PRELIQUID_RECODE_RULES = str(RESOURCES_DIR / "en_preliquid_recode.yml")
 
 # Per-language defaults for new-fave's vowel-identification and recoding
 # settings. English uses new-fave's built-in CMU/Labov resources, which
@@ -71,13 +72,18 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
                                  unit. Only applies when language == "en" (it's
                                  silently ignored otherwise, since it depends
                                  on CMU ARPABET stress-digit labels); default
-                                 False. Forces recode_rules to "norecode" (raw
-                                 CMU ARPABET labels for everything, not just
-                                 the combined ones) unless recode_rules is
-                                 explicitly set, since new-fave's Labov-style
-                                 English recoding has no equivalent category
-                                 for combined vowel+liquid labels. See
-                                 pipeline.combine_preliquid_sequences.
+                                 False. Changes the default recode_rules to a
+                                 variant of cmu2labov that gives combined
+                                 vowel+liquid labels their own Labov-style
+                                 codes (reusing cmu2labov's existing r-colored
+                                 categories like "owr"/"ahr" where one already
+                                 exists, e.g. "AOR1" -> "owr"; inventing new
+                                 ones like "ael"/"iyl" otherwise), so the
+                                 output stays in one consistent notation
+                                 whether or not this option is on. An explicit
+                                 recode_rules still takes precedence. See
+                                 pipeline.combine_preliquid_sequences and
+                                 pipeline/resources/en_preliquid_recode.yml.
         include_intervocalic (bool): When combine_preliquid is on, whether to
                                  also merge a liquid followed by another vowel
                                  in the same word (e.g. "yellow", "fuller").
@@ -191,15 +197,18 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
         ft_config = str(ft_config_path)
 
     # When combine_preliquid is active, the default recode scheme switches to
-    # "norecode" (raw CMU ARPABET labels, left alone) for every token, not
-    # just the combined ones. new-fave's Labov-style English recoding
-    # (cmu2labov) has no equivalent category for a combined vowel+liquid
-    # label like "UHL1" -- and there's no way to recode just the combined
-    # ones without producing a file that mixes two different transcription
-    # conventions (Labov shorthand for plain vowels, raw ARPABET for
-    # preliquid ones). An explicit recode_rules override in config still
-    # takes precedence.
-    recode_rules_default = "norecode" if combine_preliquid else lang_defaults["recode_rules"]
+    # a variant of cmu2labov (see pipeline/resources/en_preliquid_recode.yml)
+    # that gives every combined vowel+liquid label its own proper Labov-style
+    # code -- reusing cmu2labov's existing r-colored categories (iyr, eyr,
+    # ahr, owr, uwr) where one already exists, and following the same
+    # "vowel code + r" convention for every other vowel+liquid combination,
+    # including all vowel+L ones (which cmu2labov has no category for at
+    # all). This keeps the output in one consistent notation system whether
+    # or not this option is on, rather than switching to raw ARPABET. An
+    # explicit recode_rules override in config still takes precedence.
+    recode_rules_default = (
+        PRELIQUID_RECODE_RULES if combine_preliquid else lang_defaults["recode_rules"]
+    )
 
     # fave_audio_textgrid() catches its own exceptions and returns None on
     # failure (e.g. a corrupt or mislabeled audio file), warning instead of

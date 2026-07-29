@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+### Fixed
+- Preliquids now return results in Trager & Bloch rather than ARPABET to make it more consistent with the nonpreliquid option. 
 
 ## [0.14.1] - 2026-07-27
 ### Fixed
