@@ -8,17 +8,28 @@
 # shorthand would produce a file that mixes two transcription systems.
 #
 # The rules below give every combined vowel+liquid label its own proper
-# Labov-style code, following cmu2labov's own conventions exactly:
+# Labov-style code, deliberately not reusing any existing cmu2labov code --
+# not even cmu2labov's own tautosyllabic-r-colored categories (iyr, eyr,
+# ahr, owr, uwr), which mean something specific: a vowel phone that stayed a
+# separate interval from the following R, recoded only to flag the context,
+# with formants measured over the vowel alone. A combined "AOR1" token has
+# its formants measured over the vowel AND the liquid together -- a
+# different span, often a different duration and trajectory shape -- so
+# giving it the identical code "owr" would make two tokens with different
+# underlying measurement procedures indistinguishable by label alone,
+# contaminating any comparison or pooling across combine_preliquid runs.
 #
-#   - Where cmu2labov already has a dedicated tautosyllabic-r-colored
-#     category (iyr, eyr, ahr, owr, uwr), a vowel+R combined label reuses
-#     that same code -- e.g. "AOR1" gets the same "owr" code cmu2labov would
-#     have produced for a plain "AO1" followed by a separate "R" phone.
-#   - Every other vowel+liquid combination (including all vowel+L
-#     combinations, which cmu2labov has no equivalent for at all) gets a new
-#     code built the same way cmu2labov builds its own r-colored codes: the
-#     vowel's normal ("elsewhere") Labov code, with "l" or "r" appended --
-#     e.g. "AEL1" -> "ael", "EHR1" -> "er", "ERL1" -> "*hrl".
+# Every combined code is built the same way: the vowel's normal
+# ("elsewhere") Labov code, with a capitalized liquid letter appended -- "L"
+# for vowel+L (cmu2labov has no L-context category at all, so these are all
+# new regardless), "R" for vowel+R, e.g. "AEL1" -> "aeL", "AOR1" -> "owR".
+# The capitalization mirrors cmu2labov's own use of a capital suffix -- "F"
+# -- to mark a different special context (e.g. "eyF" for word-final EY), and
+# guarantees no collision with any cmu2labov code: none of them end in a
+# capital letter. This also means IH/IY and UH/UW are no longer merged the
+# way cmu2labov merges them before an unmerged R (iyr covers both) -- that
+# neutralization was specific to the unmerged context and there's no reason
+# it should carry over to a combined token measured a different way.
 #
 # Recode rules apply in order and stop at the first match (see
 # https://forced-alignment-and-vowel-extraction.github.io/fave-recode/getting-started/rule-application.html),
@@ -30,37 +41,55 @@
 # built-in cmu2labov.yml, so every other (non-combined) label is recoded
 # exactly as it would be without this feature enabled.
 
-# --- vowel+R combos that reuse an existing cmu2labov r-colored category ---
-- rule: preliquid-ihr-r
+# --- vowel+R combos: every one gets its own new code (bare code + "R") ---
+- rule: preliquid-ir-r
   conditions:
     - attribute: label
       relation: rematches
-      set: "^(IH|IY)R\\d$"
-  return: iyr
+      set: "^IHR\\d$"
+  return: iR
+- rule: preliquid-iyr-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^IYR\\d$"
+  return: iyR
 - rule: preliquid-eyr-r
   conditions:
     - attribute: label
       relation: rematches
       set: "^EYR\\d$"
-  return: eyr
-- rule: preliquid-ahr-r
+  return: eyR
+- rule: preliquid-or-r
   conditions:
     - attribute: label
       relation: rematches
       set: "^AAR\\d$"
-  return: ahr
+  return: oR
+- rule: preliquid-ohr-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^AOR\\d$"
+  return: ohR
 - rule: preliquid-owr-r
   conditions:
     - attribute: label
       relation: rematches
-      set: "^(AO|OW)R\\d$"
-  return: owr
+      set: "^OWR\\d$"
+  return: owR
+- rule: preliquid-ur-r
+  conditions:
+    - attribute: label
+      relation: rematches
+      set: "^UHR\\d$"
+  return: uR
 - rule: preliquid-uwr-r
   conditions:
     - attribute: label
       relation: rematches
-      set: "^(UH|UW)R\\d$"
-  return: uwr
+      set: "^UWR\\d$"
+  return: uwR
 
 # --- AH (schwa/wedge) + liquid, split by stress like cmu2labov itself ---
 - rule: preliquid-schwa-l
@@ -68,144 +97,144 @@
     - attribute: label
       relation: rematches
       set: "^AHL0$"
-  return: "@l"
+  return: "@L"
 - rule: preliquid-schwa-r
   conditions:
     - attribute: label
       relation: rematches
       set: "^AHR0$"
-  return: "@r"
+  return: "@R"
 - rule: preliquid-wedge-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^AHL[12]$"
-  return: "ʌl"
+  return: "ʌL"
 - rule: preliquid-wedge-r
   conditions:
     - attribute: label
       relation: rematches
       set: "^AHR[12]$"
-  return: "ʌr"
+  return: "ʌR"
 
-# --- remaining vowel+R combos: no existing r-colored category, so bare code + "r" ---
+# --- remaining vowel+R combos: bare code + "R" ---
 - rule: preliquid-aer-r
   conditions:
     - attribute: label
       relation: rematches
       set: "^AER\\d$"
-  return: aer
+  return: aeR
 - rule: preliquid-awr-r
   conditions:
     - attribute: label
       relation: rematches
       set: "^AWR\\d$"
-  return: awr
+  return: awR
 - rule: preliquid-ayr-r
   conditions:
     - attribute: label
       relation: rematches
       set: "^AYR\\d$"
-  return: ayr
+  return: ayR
 - rule: preliquid-er-r
   conditions:
     - attribute: label
       relation: rematches
       set: "^EHR\\d$"
-  return: er
+  return: eR
 - rule: preliquid-oyr-r
   conditions:
     - attribute: label
       relation: rematches
       set: "^OYR\\d$"
-  return: oyr
+  return: oyR
 
 # --- vowel+L combos: cmu2labov has no L-context category at all, so every
-#     one is new: bare code + "l" ---
+#     one is new: bare code + "L" ---
 - rule: preliquid-ol-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^AAL\\d$"
-  return: ol
+  return: oL
 - rule: preliquid-ael-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^AEL\\d$"
-  return: ael
+  return: aeL
 - rule: preliquid-ohl-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^AOL\\d$"
-  return: ohl
+  return: ohL
 - rule: preliquid-awl-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^AWL\\d$"
-  return: awl
+  return: awL
 - rule: preliquid-ayl-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^AYL\\d$"
-  return: ayl
+  return: ayL
 - rule: preliquid-el-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^EHL\\d$"
-  return: el
+  return: eL
 - rule: preliquid-hr-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^ERL\\d$"
-  return: "*hrl"
+  return: "*hrL"
 - rule: preliquid-eyl-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^EYL\\d$"
-  return: eyl
+  return: eyL
 - rule: preliquid-il-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^IHL\\d$"
-  return: il
+  return: iL
 - rule: preliquid-iyl-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^IYL\\d$"
-  return: iyl
+  return: iyL
 - rule: preliquid-owl-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^OWL\\d$"
-  return: owl
+  return: owL
 - rule: preliquid-oyl-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^OYL\\d$"
-  return: oyl
+  return: oyL
 - rule: preliquid-ul-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^UHL\\d$"
-  return: ul
+  return: uL
 - rule: preliquid-uwl-l
   conditions:
     - attribute: label
       relation: rematches
       set: "^UWL\\d$"
-  return: uwl
+  return: uwL
 
 - rule: sp-ns-to-blank
   conditions:

@@ -62,17 +62,27 @@ TextGrid, which stays exactly as MFA (or your own upload) produced it.
 **Combined labels get their own Labov-style codes**, so the output stays in the same notation
 system either way — checking this box doesn't switch the whole file to raw ARPABET. new-fave's
 normal English recoding (`cmu2labov`) has no category for a combined label like "IYL1", so this
-option uses a variant (`pipeline/resources/en_preliquid_recode.yml`) that extends it:
+option uses a variant (`pipeline/resources/en_preliquid_recode.yml`) that extends it. Every
+combined vowel+liquid label gets a *new* code, built the same way: the vowel's normal Labov code
+with a **capitalized** liquid letter appended — "UHL1" → `uL`, "AOR1" → `owR`, "AHL0" (schwa+L)
+→ `@L`, "AHR1" (wedge+R) → `ʌR`. None of these reuse an existing `cmu2labov` code, even where
+`cmu2labov` already has a similar-looking one:
 
-- For vowel+R combinations, `cmu2labov` already has a handful of dedicated tautosyllabic-r-colored
-  categories — those are reused as-is, so a combined label gets exactly the code it would have
-  gotten if new-fave had recoded the original separate vowel and "R" phones the old way:
-  "IHR"/"IYR" → `iyr`, "EYR" → `eyr`, "AAR" → `ahr`, "AOR"/"OWR" → `owr`, "UHR"/"UWR" → `uwr`.
-- Every other combination — every vowel+L combination (which `cmu2labov` has no L-context category
-  for at all), plus the remaining vowel+R combinations — gets a new code built the same way
-  `cmu2labov` builds its own r-colored codes: the vowel's normal Labov code with "l" or "r"
-  appended, e.g. "UHL1" → `ul`, "AEL1" → `ael`, "ERL1" → `*hrl`, "EHR1" → `er`, "AHL0" (schwa+L)
-  → `@l`, "AHR1" (wedge+R) → `ʌr`.
+- `cmu2labov` has no L-context category at all, so every vowel+L combination is necessarily new.
+- `cmu2labov` *does* have lowercase codes like `owr`/`ahr`/`iyr` for a vowel that stayed a
+  *separate* interval from a following R, recoded only to flag the context — formants measured
+  over the vowel alone. A combined "AOR1" token has formants measured over the vowel **and** the
+  liquid together, a different span with a different typical duration and trajectory. Reusing the
+  exact same code for both would make two tokens measured by different procedures indistinguishable
+  by label alone — a real problem if you ever pool results across a checkbox-off run and a
+  checkbox-on run. So every vowel+R combination gets a new code too, never reusing `owr`/`ahr`/`iyr`
+  etc. This also means IH/IY and UH/UW are no longer collapsed into one code the way `cmu2labov`
+  collapses them before an unmerged R (`iyr` covers both) — that neutralization was specific to
+  the unmerged context.
+
+The capitalization (mirroring how `cmu2labov` itself uses a capital "F" for a different special
+context — "eyF" for word-final EY) keeps every combined code visibly distinct from anything
+`cmu2labov` could ever produce on its own, whether the liquid is L or R.
 
 #### Include intervocalic liquids
 

@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+### Fixed
+- Trager & Bloch codes for preliquids now use capitals (e.g. "iyL", "iyR") instead of lowercase to avoid clash with existing codes like "iyr".
 
 ## [0.14.2] - 2026-07-29
 ### Fixed

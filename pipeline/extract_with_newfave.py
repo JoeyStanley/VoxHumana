@@ -73,15 +73,21 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
                                  silently ignored otherwise, since it depends
                                  on CMU ARPABET stress-digit labels); default
                                  False. Changes the default recode_rules to a
-                                 variant of cmu2labov that gives combined
-                                 vowel+liquid labels their own Labov-style
-                                 codes (reusing cmu2labov's existing r-colored
-                                 categories like "owr"/"ahr" where one already
-                                 exists, e.g. "AOR1" -> "owr"; inventing new
-                                 ones like "ael"/"iyl" otherwise), so the
-                                 output stays in one consistent notation
-                                 whether or not this option is on. An explicit
-                                 recode_rules still takes precedence. See
+                                 variant of cmu2labov that gives every combined
+                                 vowel+liquid label its own new Labov-style
+                                 code, e.g. "UHL1" -> "uL", "AOR1" -> "owR"
+                                 (capitalized L/R). None of these reuse an
+                                 existing cmu2labov code, even where one looks
+                                 similar (cmu2labov's own lowercase "owr" means
+                                 a vowel measured alone but recoded for a
+                                 separate, following R -- a different span
+                                 than a merged token, so reusing it would make
+                                 two differently-measured token types
+                                 indistinguishable by label). Output stays in
+                                 one consistent notation system whether or not
+                                 this option is on, rather than switching to
+                                 raw ARPABET. An explicit recode_rules still
+                                 takes precedence. See
                                  pipeline.combine_preliquid_sequences and
                                  pipeline/resources/en_preliquid_recode.yml.
         include_intervocalic (bool): When combine_preliquid is on, whether to
@@ -198,14 +204,17 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
 
     # When combine_preliquid is active, the default recode scheme switches to
     # a variant of cmu2labov (see pipeline/resources/en_preliquid_recode.yml)
-    # that gives every combined vowel+liquid label its own proper Labov-style
-    # code -- reusing cmu2labov's existing r-colored categories (iyr, eyr,
-    # ahr, owr, uwr) where one already exists, and following the same
-    # "vowel code + r" convention for every other vowel+liquid combination,
-    # including all vowel+L ones (which cmu2labov has no category for at
-    # all). This keeps the output in one consistent notation system whether
-    # or not this option is on, rather than switching to raw ARPABET. An
-    # explicit recode_rules override in config still takes precedence.
+    # that gives every combined vowel+liquid label its own new Labov-style
+    # code: vowel code + capitalized liquid letter -- "L" for vowel+L
+    # (cmu2labov has no category for these at all), "R" for vowel+R. None of
+    # these reuse an existing cmu2labov code -- cmu2labov's own lowercase r-colored codes
+    # (iyr, eyr, ahr, owr, uwr) mean a vowel measured alone but recoded for a
+    # separate, following R, a different span than a merged token, so
+    # reusing them would make two differently-measured token types
+    # indistinguishable by label alone. This keeps the output in one
+    # consistent notation system whether or not this option is on, rather
+    # than switching to raw ARPABET. An explicit recode_rules override in
+    # config still takes precedence.
     recode_rules_default = (
         PRELIQUID_RECODE_RULES if combine_preliquid else lang_defaults["recode_rules"]
     )
