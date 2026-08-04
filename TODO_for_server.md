@@ -105,8 +105,9 @@ uv run python -c "import whisper; whisper.load_model('turbo'); print('Whisper mo
 The turbo model is ~1.6 GB. Other models users may select (small, medium, large)
 should also be pre-downloaded if you expect them to be used:
 ```bash
-uv run python -c "import whisper; [whisper.load_model(m) for m in ['small','medium']]"
+uv run python -c "import whisper; [whisper.load_model(m) for m in ['small','medium','large']]"
 ```
+(`large` is ~3 GB — the biggest of the four.)
 
 ---
 
@@ -144,6 +145,25 @@ IMPORTANT: Always use `--workers 1`. The pipeline uses an in-memory job store an
 a single-threaded executor — multiple workers would have separate job stores and
 break job status polling.
 
+**If VoxHumana is deployed under a sub-path** (e.g. `https://your-domain.byu.edu/VoxHumana/`
+instead of owning the whole domain), you MUST also set `VXH_ROOT_PATH` in the
+environment before starting uvicorn:
+
+```bash
+export VXH_ROOT_PATH=/VoxHumana
+uv run uvicorn web.app:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+The frontend bakes this path into every API/content URL it fetches. If it's left
+unset on a sub-path deployment, the app *looks* like it's running (the page loads,
+`/api/jobs` responds to direct requests) but every in-browser action silently
+breaks: the About/Guide/Cite/FAQ tabs show "Could not load content", and
+submitting a job fails immediately with no Job ID and a garbled error like "The
+string did not match the expected pattern" (the browser trying to parse an HTML
+404 page as JSON). This is easy to get wrong because nothing in local dev or a
+root-domain deployment exercises this path — see the verification step in
+§11 to catch it before handing the URL to users.
+
 ---
 
 ## 7. Systemd service (keep server running) [ONE-TIME]
@@ -159,6 +179,9 @@ After=network.target
 Type=simple
 User=vxhuser
 WorkingDirectory=/path/to/VoxHumana
+# Only needed for a sub-path deployment (see §6) — omit entirely for a
+# dedicated domain deployed at the root.
+Environment=VXH_ROOT_PATH=/VoxHumana
 ExecStart=/path/to/VoxHumana/.venv/bin/uvicorn web.app:app --host 127.0.0.1 --port 8000 --workers 1
 Restart=on-failure
 RestartSec=5
@@ -221,6 +244,36 @@ sudo ln -s /etc/nginx/sites-available/voxhumana /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx
 ```
+
+### 8a. Sub-path deployment (app doesn't own the whole domain)
+
+If VoxHumana is being added under an existing site — e.g. `your-domain.byu.edu/VoxHumana/`
+rather than a dedicated `your-domain.byu.edu` — the config above needs two changes
+working together, or the app will half-work: the page loads, but every button
+silently fails (see §6 for exactly what that looks like).
+
+1. **The reverse proxy must route the sub-path and strip the prefix** before
+   forwarding to uvicorn, since the Python app itself doesn't know about the
+   prefix and serves everything from its own root:
+   ```nginx
+   location /VoxHumana/ {
+       proxy_pass http://127.0.0.1:8000/;   # trailing slash strips /VoxHumana/
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   }
+   ```
+2. **`VXH_ROOT_PATH=/VoxHumana` must be set** in the environment that starts
+   uvicorn (see §6/§7), so the HTML the app serves points back at
+   `/VoxHumana/...` instead of `/...`. Skipping this is the mistake to watch
+   for — the proxy alone isn't enough.
+
+If the existing site isn't served by nginx at all (Apache, IIS, or a university
+CMS gateway are all common on BYU infrastructure), the same two requirements
+still apply — whoever owns that front-end config needs the equivalent of a
+prefix-stripping proxy rule for `/VoxHumana/`, `client_max_body_size`/upload-size
+limit raised to ≥1 GB, and generous read/send timeouts for large uploads. Ask
+BYU IT to confirm all three explicitly if you don't control that layer yourself.
 
 ---
 
@@ -293,6 +346,60 @@ Expected output (the CLI does not clean up intermediates, so all folders will be
 Note: `processing_log.txt` and server logs are only written by the web app, not the CLI.
 
 Then verify the web server is reachable and can accept a job via the browser.
+
+**If deployed under a sub-path (see §8a), also check this before handing the URL
+to anyone** — it catches a missing/wrong `VXH_ROOT_PATH` in seconds, without
+needing to run a full job:
+
+```bash
+# 1. The served page must show YOUR sub-path here, not an empty string:
+curl -s https://your-domain.byu.edu/VoxHumana/ | grep 'const ROOT_PATH'
+#   expect: const ROOT_PATH = "/VoxHumana";
+
+# 2. A content file must load through the PUBLIC url (this is what the
+#    About/Guide/Cite/FAQ tabs actually fetch):
+curl -s -o /dev/null -w "%{http_code}\n" https://your-domain.byu.edu/VoxHumana/content/about.md
+#   expect: 200
+
+# 3. The API must be reachable through the PUBLIC url too:
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://your-domain.byu.edu/VoxHumana/api/jobs
+#   expect: 422 (missing required fields is fine — this just confirms the route is hit)
+```
+
+If check 1 shows an empty string, or checks 2/3 return 404, `VXH_ROOT_PATH` is
+unset or doesn't match the public path — see §6.
+
+### Testing sub-path deployment fully offline (no live server needed)
+
+The curl checks above need a real deployed server. To test the full
+`ROOT_PATH` wiring — every content tab, every help drawer, the API routes —
+before ever deploying, run the app locally with `VXH_ROOT_PATH` set behind a
+small reverse proxy that mirrors the prefix-stripping described in §8a.
+Running uvicorn alone on `localhost` can't reproduce a URL like
+`localhost:8080/VoxHumana/` — uvicorn's own routes are always unprefixed
+(that's what production's real proxy expects too, since it strips the
+prefix before forwarding). `scripts/local_proxy.py` is that missing piece —
+stdlib only, no nginx install needed:
+
+```bash
+# Terminal 1: the app itself, believing it's deployed under /VoxHumana
+VXH_ROOT_PATH=/VoxHumana uv run uvicorn web.app:app --host 127.0.0.1 --port 8001
+
+# Terminal 2: a proxy on :8080 that strips /VoxHumana before forwarding to
+# :8001, exactly like the production reverse proxy in §8a
+VXH_ROOT_PATH=/VoxHumana uv run python scripts/local_proxy.py
+```
+
+Then browse to `http://localhost:8080/VoxHumana/` and click through every
+tab and every "?" help drawer, watching the Network tab for any request that
+goes out *without* the `/VoxHumana` prefix — that's always a sign some path
+in `web/static/index.html` was hardcoded instead of using `${ROOT_PATH}` /
+`__ROOT_PATH__`. This exact bug class (a new fetch or asset reference added
+later, forgetting the prefix) is easy to reintroduce — it happened once
+already with `DRAWER_META`'s help-drawer paths, which were fixed to match
+`TAB_PATHS`'s pattern. Grepping `web/static/index.html` for `fetch(`,
+`href=`, `src=`, and `window.location` and confirming every internal one
+uses `ROOT_PATH` is the fastest way to catch a repeat before it ships.
 
 ---
 
