@@ -953,7 +953,7 @@
     .content-error   { color: #c4603a   !important; }
   </style>
   <script>const ROOT_PATH = "__ROOT_PATH__";</script>
-  <script src="marked.min.js"></script>
+  <script src="__ROOT_PATH__/marked.min.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -1373,10 +1373,10 @@
 <script>
   // ─── Content paths (edit .md files in web/static/content/) ─────────────────────
   const DRAWER_META = {
-    audio:         { title: 'Audio file',                    path: '/content/help-audio.md' },
-    transcription: { title: 'Transcription · Whisper',       path: '/content/help-transcription.md' },
-    alignment:     { title: 'Forced alignment · MFA',        path: '/content/help-alignment.md' },
-    formants:      { title: 'Formant extraction · new-fave', path: '/content/help-formants.md' },
+    audio:         { title: 'Audio file',                    path: `${ROOT_PATH}/content/help-audio.md` },
+    transcription: { title: 'Transcription · Whisper',       path: `${ROOT_PATH}/content/help-transcription.md` },
+    alignment:     { title: 'Forced alignment · MFA',        path: `${ROOT_PATH}/content/help-alignment.md` },
+    formants:      { title: 'Formant extraction · new-fave', path: `${ROOT_PATH}/content/help-formants.md` },
   };
 
   const TAB_PATHS = {
