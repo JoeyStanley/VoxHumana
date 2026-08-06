@@ -2176,6 +2176,7 @@
     batchFiles = batchFiles.filter(f => f.fid !== row.audioFid && f.fid !== row.tgFid);
 
     if (row.locked) {
+      if (row.jobId) vxhRemoveJob(row.jobId); // settled (done/error) — don't resurrect it on a later reload
       batchRows.splice(idx, 1);
       renderBatchTable();
       renderCapacityStatus();
@@ -2903,10 +2904,11 @@
   }
 
   // Dismisses the primary job's panel entirely (only reachable once it's
-  // settled — same rule as every other row's "×"). Doesn't touch
-  // localStorage, matching onRemoveRow: dismissing hides it from this
-  // session's view, it doesn't forget the job.
+  // settled — same rule as every other row's "×"). Forgets the job in
+  // localStorage too, matching onRemoveRow, so a settled job dismissed here
+  // doesn't come back as the recovered view on a later reload.
   function dismissPrimaryJob() {
+    if (currentJobId) vxhRemoveJob(currentJobId);
     document.getElementById('primary-progress-view').style.display = 'none';
   }
 
@@ -3063,6 +3065,14 @@
   }
 
   function resetForm() {
+    // Only forget settled jobs — one still running/queued must stay in
+    // localStorage so it's still recoverable after this view goes away
+    // (that's the whole point of "Start over": leave without losing it).
+    if (currentJobId && primarySettled) vxhRemoveJob(currentJobId);
+    batchRows.forEach(row => {
+      if (row.jobId && (row.jobStatus === 'done' || row.jobStatus === 'error')) vxhRemoveJob(row.jobId);
+    });
+
     primarySettled       = true;
     currentJobId         = null;
     currentDownloadToken = null;
