@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+
+## [0.14.4] - 2026-08-06
 ### Fixed
 - Jobs that ended in errors and jobs that were otherwise Xed out do not continue to reload when a new tab/page is opened. Unfinished jobs and finished jobs that haven't been Xed out remain in case of accidental or premature closure.
 

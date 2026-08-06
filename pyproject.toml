@@ -1,6 +1,6 @@
 [project]
 name = "voxhumana"
-version = "0.14.3"
+version = "0.14.4"
 description = "Web-based pipeline for automated vowel formant extraction from sociolinguistic interviews"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -17,7 +17,7 @@ dependencies = [
 where = ["."]
 
 [tool.bumpversion]
-current_version = "0.14.3"
+current_version = "0.14.4"
 commit = true
 tag = true
 tag_name = "v{new_version}"
