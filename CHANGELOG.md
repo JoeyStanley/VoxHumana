@@ -9,6 +9,7 @@ All notable changes to VoxHumana will be documented here.
 - Jobs that ended in errors and jobs that were otherwise Xed out do not continue to reload when a new tab/page is opened. Unfinished jobs and finished jobs that haven't been Xed out remain in case of accidental or premature closure.
 
 ## [0.14.3] - 2026-07-30
+- This is the version of the first live test and what the first beta testers initially saw on August 5, 2026.
 ### Fixed
 - Trager & Bloch codes for preliquids now use capitals (e.g. "iyL", "iyR") instead of lowercase to avoid clash with existing codes like "iyr".
 
