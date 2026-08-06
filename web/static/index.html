@@ -1302,7 +1302,8 @@
   </div>
 
   <!-- ══════════════════════════════ ERROR STATE ════════════════════════════════ -->
-  <div id="state-error" class="body" style="display:none">
+  <div id="state-error" class="body" style="display:none; position:relative">
+    <button type="button" class="batch-remove-btn" style="position:absolute; top:8px; right:8px;" title="Dismiss" onclick="resetForm()">×</button>
     <div class="error-view">
       <div class="error-icon">✕</div>
       <div class="error-title">Processing failed</div>
