@@ -111,7 +111,7 @@ _ORGAN_STOPS = [
     "Chromorne", "Clarinet", "Clarion", "CorAnglais", "ContraBourdon", "ContreTrompette", 
     "ContraGamba", "Cornopean", "Diaphone", "Diapason", "Doppelflote", "Dulciana", "Fifteenth", 
     "Flugelhorn", "Flute", "FluteCeleste", "Fourniture", "FrenchHorn", "Fugara", "Gamba", 
-    "Gedeckt", "GeigenPrincipal","Gemshorn", "Harp", "HarmonicFlute", "LieblichBourdon", 
+    "Gedeckt", "GeigenPrincipal", "Gemshorn", "Harp", "HarmonicFlute", "LieblichBourdon", 
     "Mixture", "MutedVioles", "Nachthorn", "Nazard","Oboe", "Octave", "Ophicleide", "OpenWood", 
     "Piccolo", "PleinJeu", "Prestant", "Principal", "Rauschquinte", "Rohrschalmi", "RoyalTrumpet", 
     "Salicional", "Spitzflote", "Subbass", "SuperOctave", "Tierce", "Trombone", "Trompette", 
