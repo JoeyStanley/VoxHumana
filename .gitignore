@@ -16,6 +16,7 @@ check_output.Rmd
 VoxHumana.Rproj
 .Rhistory
 scripts/audit.Rmd
+scripts/process_JSON.Rmd
 
 
 # Byte-compiled / optimized / DLL files
