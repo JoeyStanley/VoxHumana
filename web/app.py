@@ -99,14 +99,16 @@ active_jobs: list[str] = []
 # Organ stops drawn from the Salt Lake Tabernacle organ — used to generate
 # memorable job IDs in the form YYMMDD_Stop1_Stop2.
 _ORGAN_STOPS = [
-    "Bombarde", "Bourdon", "BourdonDoux", "Celeste", "ChimneyFlute", "ChoralBass", "Chromorne", 
-    "Clarinet", "Clarion", "CorAnglais", "ContreBourdon", "ContreTrompette", "Cornopean", 
-    "Cymbelstern", "Diaphone", "Diapason", "Doppelflote", "Dulciana", "Flugelhorn", "Flute", 
-    "FluteCeleste", "Fourniture", "FrenchHorn", "Fugara", "Gamba", "Gedeckt", "GeigenPrincipal"
-    "Gemshorn", "Harp", "HarmonicFlute", "LieblichBourdon", "Mixture", "Nachthorn", "Nazard",
-    "Oboe", "Octave", "Piccolo", "PleinJeu", "Prestant", "Principal", "Rauschquinte", "Spitzflote", 
-    "SuperOctave", "Tierce", "Trombone", "Trompette", "Tremulant", "Trumpet", "Tuba", "Tutti", 
-    "Viole", "VioleCeleste"
+    "Bombarde", "Bourdon", "BourdonDoux", "Celeste", "Chimes", "ChimneyFlute", "ChoralBass", 
+    "Chromorne", "Clarinet", "Clarion", "CorAnglais", "ContraBourdon", "ContreTrompette", 
+    "ContraGamba", "Cornopean", "Diaphone", "Diapason", "Doppelflote", "Dulciana", "Fifteenth", 
+    "Flugelhorn", "Flute", "FluteCeleste", "Fourniture", "FrenchHorn", "Fugara", "Gamba", 
+    "Gedeckt", "GeigenPrincipal","Gemshorn", "Harp", "HarmonicFlute", "LieblichBourdon", 
+    "Mixture", "MutedVioles", "Nachthorn", "Nazard","Oboe", "Octave", "Ophicleide", "OpenWood", 
+    "Piccolo", "PleinJeu", "Prestant", "Principal", "Rauschquinte", "Rohrschalmi", "RoyalTrumpet", 
+    "Salicional", "Spitzflote", "Subbass", "SuperOctave", "Tierce", "Trombone", "Trompette", 
+    "Tremulant", "Trumpet", "Tuba", "Tutti", "UndaMaris", "Viole", "VioleCeleste", "Waldflote",
+    "Zymbelstern",
 ]
 
 
