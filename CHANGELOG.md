@@ -8,6 +8,7 @@ All notable changes to VoxHumana will be documented here.
 ### Added
 - File size and file duration information to internal logs so I can get a better idea of how long jobs take as a function of their duration. (This will eventually feed into a guess for how long the queue will be.)
 - IP addresses and how users access VoxHumana now stored in internal logs so that I can spot potential bots or malicious users.
+- VoxHumana version number now expoted as well.
 
 ## [0.14.4] - 2026-08-06
 ### Fixed

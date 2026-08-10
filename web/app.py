@@ -299,6 +299,7 @@ def _write_processing_log(
     ln("reproduce or extend the analysis.")
     ln("")
     ln(f"Job ID:    {job_id}")
+    ln(f"VoxHumana: v{APP_VERSION}")
     ln(f"Submitted: {submitted_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Completed: {completed_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Duration:  {duration_str}")
@@ -697,6 +698,7 @@ def _write_server_log(
         ln(f"  {name:<38} {_fmt_duration(secs)}")
     ln("")
     ln("Tool versions:")
+    ln(f"  VoxHumana:       {APP_VERSION}")
     ln(f"  openai-whisper:  {whisper_ver}")
     ln(f"  MFA:             {mfa_ver}")
     ln(f"  new-fave:        {newfave_ver}")
@@ -797,6 +799,7 @@ def _write_server_log(
         "include_intervocalic":      nf_cfg.get("include_intervocalic", True) if nf_combine_preliquid else None,
         "step_seconds":              step_seconds,
         "versions": {
+            "voxhumana":      APP_VERSION,
             "openai-whisper": whisper_ver,
             "mfa":            mfa_ver,
             "new-fave":       newfave_ver,
