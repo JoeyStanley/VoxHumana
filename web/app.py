@@ -17,11 +17,14 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import uuid
+
+import librosa
+import tgt
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -86,6 +89,11 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 # In-memory job store. Fine for a single-server deployment.
 jobs: dict[str, dict] = {}
 
+# Client IP/User-Agent per job, for abuse/bot detection in server logs only.
+# Kept separate from `jobs` so it never round-trips through the public
+# /api/jobs status endpoint, which returns `jobs[job_id]` verbatim.
+job_client_info: dict[str, dict] = {}
+
 # One job at a time — the pipeline is compute-heavy.
 executor = ThreadPoolExecutor(max_workers=1)
 
@@ -122,6 +130,22 @@ def _generate_job_id() -> str:
     datestamp = date.today().strftime("%y%m%d")
     stop1, stop2 = random.sample(_ORGAN_STOPS, 2)
     return f"{datestamp}_{stop1}_{stop2}"
+
+
+def _get_client_ip(request: Request) -> str:
+    """Return the real client IP, accounting for the nginx reverse proxy.
+
+    Behind nginx (see TODO_for_server.md §8), request.client.host is always
+    127.0.0.1 — the actual client address is forwarded in X-Forwarded-For
+    (may list multiple hops; the client is the first one) or X-Real-IP.
+    """
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    return request.client.host if request.client else "unknown"
 
 
 def _sanitize_stem(filename: str) -> str:
@@ -162,6 +186,7 @@ def _expire_old_jobs() -> None:
         if job_dir.stat().st_mtime < cutoff:
             shutil.rmtree(job_dir, ignore_errors=True)
             jobs.pop(job_dir.name, None)
+            job_client_info.pop(job_dir.name, None)
 
 
 def _cleanup_orphaned_audio() -> None:
@@ -591,7 +616,8 @@ def _fmt_duration(seconds: float) -> str:
 
 def _write_server_log(
     job_id: str,
-    audio_filename: str,
+    job_dir: Path,
+    audio_path: Path,
     submitted_at: datetime,
     completed_at: datetime,
     step_times: list,
@@ -619,10 +645,33 @@ def _write_server_log(
         newfave_ver = "unknown"
     mfa_ver = _get_mfa_version(m_cfg.get("conda_env", "aligner"))
 
+    # Audio/TextGrid stats — best effort, don't let failures break logging.
+    try:
+        audio_size_bytes = audio_path.stat().st_size
+    except OSError:
+        audio_size_bytes = None
+    try:
+        audio_duration_seconds = round(librosa.get_duration(path=str(audio_path)), 3)
+    except Exception:
+        audio_duration_seconds = None
+    textgrid_duration_seconds = None
+    for _tg_path in (
+        job_dir / "mfa_output" / f"{audio_path.stem}.TextGrid",
+        job_dir / "whisper_output" / f"{audio_path.stem}.TextGrid",
+    ):
+        if _tg_path.exists():
+            try:
+                textgrid_duration_seconds = round(tgt.io.read_textgrid(str(_tg_path)).end_time, 3)
+            except Exception:
+                pass
+            break
+
     total_seconds = (completed_at - submitted_at).total_seconds()
     status_line = "SUCCESS" if failed_step is None else f"FAILED at \"{failed_step}\""
     queue_position = jobs.get(job_id, {}).get("queue_position_at_submission", 1)
     wait_seconds = jobs.get(job_id, {}).get("wait_seconds", 0.0)
+    client_ip = job_client_info.get(job_id, {}).get("client_ip", "unknown")
+    user_agent = job_client_info.get(job_id, {}).get("user_agent", "")
 
     BAR = "=" * 60
     lines = []
@@ -631,11 +680,16 @@ def _write_server_log(
     ln("VoxHumana Server Log")
     ln(BAR)
     ln(f"Job ID:       {job_id}")
-    ln(f"File:         {audio_filename}")
+    ln(f"File:         {audio_path.name}")
+    ln(f"File size:    {audio_size_bytes:,} bytes" if audio_size_bytes is not None else "File size:    unknown")
+    ln(f"Audio dur.:   {audio_duration_seconds}s" if audio_duration_seconds is not None else "Audio dur.:   unknown")
+    ln(f"TextGrid dur: {textgrid_duration_seconds}s" if textgrid_duration_seconds is not None else "TextGrid dur: unknown")
     ln(f"Submitted:    {submitted_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Completed:    {completed_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Total time:   {_fmt_duration(total_seconds)}")
     ln(f"Queue pos.:   {queue_position}  (wait: {_fmt_duration(wait_seconds)})")
+    ln(f"Client IP:    {client_ip}")
+    ln(f"User-Agent:   {user_agent or 'unknown'}")
     ln(f"Status:       {status_line}")
     ln("")
     ln("Step timings:")
@@ -719,8 +773,13 @@ def _write_server_log(
         "submitted_at":              submitted_at.isoformat(),
         "completed_at":              completed_at.isoformat(),
         "total_seconds":             round(total_seconds, 1),
+        "audio_size_bytes":          audio_size_bytes,
+        "audio_duration_seconds":    audio_duration_seconds,
+        "textgrid_duration_seconds": textgrid_duration_seconds,
         "queue_position_at_submission": queue_position,
         "wait_seconds":              round(wait_seconds, 1),
+        "client_ip":                 client_ip,
+        "user_agent":                user_agent,
         "status":                    "success" if failed_step is None else "failed",
         "failed_step":               failed_step,
         "error_type":                error_type,
@@ -859,7 +918,8 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         try:
             _write_server_log(
                 job_id=job_id,
-                audio_filename=audio_path.name,
+                job_dir=job_dir,
+                audio_path=audio_path,
                 submitted_at=submitted_at,
                 completed_at=completed_at,
                 step_times=step_times,
@@ -922,6 +982,7 @@ async def get_textgrid_tiers(textgrid: UploadFile = File(...)):
 
 @app.post("/api/jobs")
 async def create_job(
+    request: Request,
     audio: UploadFile = File(...),
     textgrid: Optional[UploadFile] = File(None),
     phone_tier_index: Optional[int] = Form(None),
@@ -1107,6 +1168,11 @@ async def create_job(
     }
 
     download_token = uuid.uuid4().hex
+
+    job_client_info[job_id] = {
+        "client_ip": _get_client_ip(request),
+        "user_agent": request.headers.get("user-agent", ""),
+    }
 
     jobs[job_id] = {
         "status": "queued",
