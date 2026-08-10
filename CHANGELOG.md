@@ -6,14 +6,14 @@ All notable changes to VoxHumana will be documented here.
 
 ## [0.14.5] - 2026-08-10
 ### Added
-- Added file size and file duration information to internal logs so I can get a better idea of how long jobs take as a function of their duration. (This will eventually feed into a guess for how long the queue will be.)
+- File size and file duration information to internal logs so I can get a better idea of how long jobs take as a function of their duration. (This will eventually feed into a guess for how long the queue will be.)
 - IP addresses and how users access VoxHumana now stored in internal logs so that I can spot potential bots or malicious users.
 
 ## [0.14.4] - 2026-08-06
 ### Fixed
 - Jobs that ended in errors and jobs that were otherwise Xed out do not continue to reload when a new tab/page is opened. Unfinished jobs and finished jobs that haven't been Xed out remain in case of accidental or premature closure.
 
-## [0.14.3] - 2026-07-30 **BETA 1**
+## [0.14.3] - 2026-07-30 (BETA)
 - This is the version of the first live test and what the first beta testers initially saw on August 5, 2026.
 ### Fixed
 - Trager & Bloch codes for preliquids now use capitals (e.g. "iyL", "iyR") instead of lowercase to avoid clash with existing codes like "iyr".
