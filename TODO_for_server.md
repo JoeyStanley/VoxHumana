@@ -93,6 +93,73 @@ conda run -n aligner mfa model list dictionary
 
 ---
 
+## 3a. FAVE-extract environment (optional, legacy formant extraction) [ONE-TIME]
+
+FAVE-extract (https://github.com/JoFrhwld/FAVE) is a legacy, English-only vowel-formant
+extractor kept alongside new-fave for users who want output comparable to the original
+FAVE/DARLA algorithm. It's optional — new-fave remains the default and only new-fave is
+required for the app to run. Skip this section if FAVE-extract support isn't needed yet.
+
+It needs its own venv, separate from both the main project venv and MFA's conda env: it
+pins `numpy <2.0`, which can't coexist with the `numpy >=2.0` that new-fave/librosa/
+openai-whisper resolve to under this project's Python >=3.13 requirement. Unlike MFA it
+has no compiled/non-Python dependency, so a plain venv is enough — no conda needed.
+
+It also needs **Python 3.10, not 3.11+**: FAVE-extract still opens some files with the
+Python 2-era `'rU'` mode, which was removed entirely in Python 3.11. And it needs
+**`setuptools<81`** pinned alongside it: it uses the now-deprecated `pkg_resources` API to
+locate its bundled Praat scripts, and setuptools 81+ dropped that API.
+
+FAVE-extract also requires a `praat` (or `praatcon`) binary — a separate, non-Python
+dependency, distinct from the venv above.
+
+### Recommended: run the setup script
+
+`scripts/setup_fave_extract.sh` does all of the above in one step and is safe to re-run
+(each part is skipped if already done):
+
+```bash
+bash scripts/setup_fave_extract.sh
+```
+
+It creates `.venv-fave` (Python 3.10, FAVE-extract, pinned `setuptools`), downloads
+Praat's headless "barren" Linux build for the server's architecture, and symlinks it into
+`/usr/local/bin/praat` — the one step that needs `sudo`, so the systemd-run app can find
+it on `PATH` too, not just an interactive login shell. Nothing else on the server is
+touched. On macOS (local dev), it skips the Praat download and just sets up the venv —
+install Praat normally there (https://www.praat.org) and either put its binary on `PATH`
+or pass `config["praat_path"]` explicitly (see `pipeline/extract_with_fave.py`) — e.g.
+`/Applications/Praat.app/Contents/MacOS/praat`.
+
+### Manual steps (what the script does, if you'd rather run it by hand)
+
+```bash
+cd /path/to/VoxHumana
+uv venv --python 3.10 .venv-fave
+uv pip install --python .venv-fave/bin/python \
+    "git+https://github.com/JoFrhwld/FAVE@v2.0.3" "setuptools<81"
+```
+
+(`v2.0.3` is the latest tagged commit on GitHub as of this writing but hasn't been
+published to PyPI yet, which only has `fave==2.0.2`; the git tag is used here to get any
+fixes since then. Re-check for a newer release before deploying.)
+
+Download Praat's Linux command-line ("barren") build from
+https://www.fon.hum.uva.nl/praat/download_linux.html, extract it somewhere (e.g.
+`~/praat-bin/`), and symlink it onto `PATH` so both your shell and the systemd service can
+find it:
+```bash
+sudo ln -sf ~/praat-bin/praat /usr/local/bin/praat
+```
+
+To verify the whole setup:
+```bash
+.venv-fave/bin/python -c "import fave; import importlib.metadata; print(importlib.metadata.version('fave'))"
+praat --version
+```
+
+---
+
 ## 4. Whisper model pre-download [ONE-TIME]
 
 Whisper downloads its model on first use to `~/.cache/whisper/`. Pre-download it

@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+### Added
+- FAVE-extract, the original FAVE/DARLA vowel-formant algorithm, as an optional legacy alternative to new-fave in the Extract step (English only). Requires a one-time server setup step before enabling this on the production server — run `bash scripts/setup_fave_extract.sh` (see `TODO_for_server.md` §3a).
 
 ## [0.14.5] - 2026-08-10
 ### Added
