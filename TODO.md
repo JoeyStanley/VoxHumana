@@ -20,7 +20,7 @@ with no inter-speaker variation).
 
 The Alignment section's acoustic model and dictionary dropdowns currently have only one
 option each (`english_us_arpa`) and are disabled in the UI with a "coming soon" note.
-Expanding them is blocked on the same multi-language MFA work described above.
+Expanding them is blocked on the same multi-language MFA work described below.
 
 When adding a new language:
 1. Install the MFA acoustic model and dictionary (`mfa model download acoustic <name>`,
@@ -53,78 +53,43 @@ detection logic before advertising this option to users.
 
 ---
 
-## "Trolley" mode: skip pipeline steps and supply your own files ✓ (implemented)
+## Trolley mode: remaining gaps
 
-Power users can now skip any combination of pipeline steps and supply their own
-intermediate files instead of paying for the earlier steps to run again:
-  - **Skip Transcription**: upload a corrected/manual transcript as a TextGrid;
-    VxH routes it to `whisper_output/` so MFA can pick it up from there.
-  - **Skip Alignment**: upload an MFA-format TextGrid directly; VxH routes it to
-    `mfa_output/` so new-fave can use it without running MFA at all.
-  - **Skip Formant extraction**: stop after alignment if you only need the TextGrid.
+Trolley mode (skip any pipeline step and supply your own intermediate files) is implemented
+end-to-end, including the UI step toggles, the upload zone, and backend routing/cleanup.
+What's still missing:
 
-This covers the original motivating use case — a user runs the full pipeline once,
-notices Whisper made errors (e.g. OOV words, proper nouns, dialect forms) via the
-OOV words file or by inspecting the TextGrid, corrects the transcript, and resubmits
-from MFA onward without re-transcribing.
-
-It's implemented end-to-end:
-  - The UI shows step toggles (Transcribe / Align / Extract formants) and a TextGrid
-    upload zone that appears when Transcribe is unchecked.
-  - The backend (`_run_pipeline` in `web/app.py`) reads `config["steps"]` and runs
-    only the requested steps, routes the uploaded TextGrid to the correct staging
-    folder depending on which steps are skipped, and cleans up the now-unused
-    staging folders afterward (e.g. removing `whisper_output/` if the user supplied
-    an MFA-ready TextGrid directly).
-  - The processing log documents exactly which steps ran, which were skipped, and
-    where the TextGrid came from (Whisper-generated vs. user-supplied).
-  - Orphaned-audio cleanup is Trolley-aware: it checks the in-memory `jobs` dict
-    rather than looking for specific output folders, so a Trolley job that
-    legitimately has no `whisper_output/` or `newfave_output/` isn't mistaken for
-    an orphaned/crashed job.
-
-### What's left
-- User-facing help documentation explaining what the uploaded TextGrid must look
-  like (tier names, format, common mistakes) — see the TextGrid upload help item
-  below; this is the main remaining gap.
-- Real-world testing with an actual corrected transcript containing a deliberate
-  OOV word — see the OOV words file testing note below; this is now possible.
+- User-facing help documentation explaining what an uploaded TextGrid must look like
+  (tier names, format, common mistakes) — see the TextGrid upload help item below.
+- Real-world testing with an actual corrected transcript containing a deliberate OOV word
+  (see OOV words testing note below — this is now possible with Trolley in place).
 
 ---
 
-## MFA: OOV words file and custom dictionaries
+## MFA: OOV words file testing, and custom dictionaries
 
-Two related features worth adding when there is demand:
+OOV word extraction to `mfa_output/oovs_found.txt` is implemented. Still needed:
 
-### OOV words file ✓ (implemented — needs real-world testing)
-MFA's OOV words are now extracted from its internal log and written to
-`mfa_output/oovs_found.txt`, included in the download zip when present.
+- **Real-world testing**: use Trolley mode's "skip Transcription" option to feed MFA a
+  transcript containing a made-up or highly unusual word, and confirm it appears in
+  `oovs_found.txt`. Previously hard to test because Whisper tends to recognize unfamiliar
+  words as phonetically similar dictionary words, so true OOVs rarely reached MFA.
 
-**Testing note**: Now that Trolley mode exists (see above), this can finally be
-tested end-to-end: use the "skip Transcription" option to feed MFA a transcript
-that contains a made-up or highly unusual word, and confirm it appears in
-`oovs_found.txt`. Previously this was hard to test because Whisper tends to
-recognize unfamiliar words as phonetically similar dictionary words, so true
-OOVs rarely made it through to MFA in normal use.
-
-### Custom dictionaries
-Power users (e.g., researchers working with a specific dialect community) may want to
-upload a custom pronunciation dictionary alongside their audio. MFA accepts a plain-text
-dictionary file as the `DICTIONARY_PATH` argument instead of a model name.
-
-To implement: add an optional file upload field in the Alignment section, validate that
-it's a `.txt` or `.dict` file, and pass its path to MFA instead of the default model name.
-Consider whether to allow this alongside or instead of the built-in dictionaries.
+- **Custom dictionaries** (not implemented): power users (e.g., researchers working with a
+  specific dialect community) may want to upload a custom pronunciation dictionary alongside
+  their audio. MFA accepts a plain-text dictionary file as the `DICTIONARY_PATH` argument
+  instead of a model name. To implement: add an optional file upload field in the Alignment
+  section, validate that it's a `.txt` or `.dict` file, and pass its path to MFA instead of
+  the default model name. Consider whether to allow this alongside or instead of the
+  built-in dictionaries.
 
 ---
 
-## TextGrid upload: help documentation (needed for Trolley mode)
+## TextGrid upload: help documentation
 
-The upload zone, file-type filtering, and backend routing are all implemented (see
-"Trolley" mode above — uploaded TextGrids are routed to `whisper_output/` or
-`mfa_output/` depending on which steps are being skipped). What's still missing is
-user-facing documentation explaining what the uploaded TextGrid must actually look
-like. Before writing it, nail down the details:
+The upload zone, file-type filtering, and backend routing are all implemented (see Trolley
+mode above). What's still missing is user-facing documentation explaining what the uploaded
+TextGrid must actually look like. Before writing it, nail down the details:
 
 - What tier name does MFA expect for an utterance-level TextGrid? (Currently
   `convert_whisper_to_textgrid` creates an `utterances` tier — does MFA require
@@ -147,11 +112,11 @@ upload zone) that explains:
 
 ---
 
-## Multi-language support ✓ (Spanish implemented — more languages planned)
+## Multi-language support: next languages
 
-Whisper, MFA, and the UI language selector are all now wired up for multiple languages.
-Spanish (`spanish_mfa`) is the first non-English language supported: Transcription + Alignment
-work end-to-end; Formant extraction is disabled for non-English for now (see below).
+Whisper, MFA, and the UI language selector are wired up for multiple languages; Spanish
+(`spanish_mfa`) is live end-to-end for Transcription + Alignment (Formant extraction is
+disabled for non-English — see below).
 
 ### Adding a new language (checklist)
 1. Download MFA models on the server:
@@ -255,21 +220,9 @@ The full intended workflow, when built:
 - Wire up an email library (e.g. `smtplib` with BYU SMTP, or SendGrid)
 - Store email in the job record for logging; do not persist it after the email is sent
 - After job completion in close-tab mode: zip results and send/link via email
-- Queue system ✓ (implemented) — the single-threaded executor already serialises
-  jobs; `GET /api/jobs/{job_id}` now reports `queue_position` / `queue_length` and
-  a `step_name` like "Waiting in queue (position 2 of 3)" while a job is queued
-  behind another. Tracked via a module-level `active_jobs` list in `web/app.py`
-  (FIFO, matches the executor's own processing order). Tested locally by
-  submitting three jobs concurrently and confirming positions were reported
-  and decremented correctly as earlier jobs finished.
-- Queue wait reporting ✓ (implemented) — every job now records
-  `queue_position_at_submission` (1 = started immediately) and `wait_seconds`
-  (time between submission and actually starting) in the jobs dict. This shows
-  up in three places: the user-facing `processing_log.txt` ("Queue: started at
-  position 2 in line — waited 0m 8s..."), the internal per-job server log in
-  `data/logs/YYYY-MM/<job_id>.txt` ("Queue pos.: 2 (wait: 0m 8s)"), and as
-  `queue_position_at_submission` / `wait_seconds` fields in `data/logs/summary.jsonl`
-  for aggregate analysis of typical wait times once real usage data accumulates.
+
+(The queue system and per-job wait-time reporting this depends on — queue position,
+`wait_seconds`, etc. — are already implemented, so this item is just the email/UI layer.)
 
 ### Privacy wording (for the UI)
 "Your email is used to deliver your results and is recorded in our job log alongside
@@ -281,88 +234,20 @@ happen soon, I should fix that so that canceled jobs don't clog the queue.
 
 ---
 
-## Client-side job persistence & status recovery ✓ (implemented)
+## Client-side job persistence: cross-machine recovery (optional)
 
-Implemented as part of batch upload (see "Batch upload ✓ (implemented)" below) —
-`vxh_jobs` in `localStorage` holds `{job_id, download_token, filename,
-submitted_at}` per submitted job, written by both the single-file and batch
-submit paths. `vxhRecoverOnLoad()` runs at page bootstrap and restores the
-single-job view (1 recovered record) or the batch table (2+) from whatever's
-still queued/running/done/error server-side. As anticipated below, only
-already-submitted jobs are recoverable — a file still sitting unconfirmed in
-the batch table at crash time only ever existed as an in-memory `File` object
-and can't survive a reload in any browser.
+`localStorage`-based job recovery (restoring the progress/done view after a tab reload,
+and a "recent jobs" list for multiple submissions) is already implemented. The one piece
+left, and it's optional:
 
-**Discovered (original problem writeup):** while stress-testing the queue locally by submitting several large
-real files back-to-back, the laptop went to sleep partway through and killed the
-dev server. That's a separate problem (see the "computer sleep kills the local dev
-server" note in Alpha/Beta testing below) — but investigating it surfaced a real gap
-that matters independent of the email/close-tab feature above: **if the browser tab
-is closed, reloaded, or crashes while a job is running, there is currently no way to
-get back to it.**
-
-### The gap
-`currentJobId` and `currentDownloadToken` (`web/static/index.html` — the two
-module-level `let`s near the top of the polling script) exist only in that tab's
-JS memory. Nothing is written to `localStorage` or anywhere else. So even though:
-- job results sit server-side for `JOB_RETENTION_HOURS` (72h,
-  see `_expire_old_jobs` in `web/app.py`), and
-- server-side processing is unaffected by the client disconnecting
-  (`_run_pipeline` runs in the background executor regardless of the tab),
-
-...losing that JS state means losing the only record of the download token, which
-is never displayed to the user as text — only the job ID is shown on screen
-(`running-job-id` / `done-job-id` elements). Without the token, `GET
-/api/jobs/{job_id}/download` returns 403.
-
-This is exactly the scenario the user is likely to hit in real use: submitting a
-large file, walking away, and coming back later on the same machine (not
-necessarily wanting full email delivery, just wanting the tab to still work).
-
-### Proposed fix — two layers, can ship independently
-
-**1. `localStorage` persistence (small, no backend changes)**
-- On successful submit, write `{job_id, download_token, filename, submitted_at}`
-  to `localStorage` (key e.g. `vxh_jobs`, structured as an array — see "handle
-  multiple jobs per browser" below, since one user submitting several files in a
-  row is the actual use case that surfaced this).
-- On page load, before showing the empty upload form: check `localStorage` for
-  any job(s) not already known to be finished/downloaded. For each, call
-  `GET /api/jobs/{job_id}`:
-  - 404 (job expired past 72h, or server restarted and lost its in-memory
-    `jobs` dict — see the orphaned-job scenario from the sleep incident) →
-    drop it from `localStorage`, nothing to recover.
-  - still queued/running → restore `currentJobId`/`currentDownloadToken` and
-    resume the progress view / polling exactly where it would have been.
-  - done/error → show the done/error screen directly, skip polling.
-- Clear a job's `localStorage` entry once the user downloads results or
-  dismisses an error, so the list doesn't grow unbounded.
-
-**2. Handle multiple jobs per browser (natural extension, not a separate feature)**
-Since the motivating case is someone submitting several files in sequence (the
-whole point of the queue system above), a single `currentJobId` doesn't fit —
-`localStorage` should hold a small list. Add a lightweight "your recent jobs"
-view (job ID, filename, status, queue position if waiting, download link if
-done) instead of just the current single-job progress screen. This also gives
-users visibility into concurrent submissions without needing the email feature.
-
-**3. Cross-machine / cross-browser recovery (optional, security tradeoff)**
-`localStorage` only helps if it's the same browser profile on the same machine.
-For "I want to check a job from my phone" or "I cleared my browser data,"
-recovery requires a job-ID-only lookup form. Whether that should expose only
-status (queued/running/done/error — safe, no data leak) or also the download
-link is an open question tied to the existing "Job ID guessability" item under
-Security audit below (job IDs are only ~1,190 combinations/day and are not
-secret). Recommendation: status-only for a bare job ID; still require the
-token for downloads. This keeps the download token as the actual bearer
-credential and avoids weakening the existing security posture.
-
-### Relationship to the email/close-tab feature above
-This is a much smaller, backend-change-free version of the same underlying
-problem ("I walked away, how do I get back to my results?"). It's worth doing
-on its own regardless of whether/when SMTP email delivery gets built — once
-email exists, this becomes a nice-to-have fallback rather than the primary
-recovery path.
+**Cross-machine / cross-browser recovery** — `localStorage` only helps on the same browser
+profile and machine. For "I want to check a job from my phone" or "I cleared my browser
+data," recovery would require a job-ID-only lookup form. Open question: should it expose
+only status (queued/running/done/error — safe, no data leak) or also the download link?
+This ties to the "Job ID guessability" item under Security audit below (job IDs are only
+~1,190 combinations/day and are not secret). Recommendation: status-only for a bare job ID;
+still require the token for downloads, so the download token stays the actual bearer
+credential.
 
 ---
 
@@ -463,12 +348,12 @@ before the tool is opened to broad public use. Key areas to audit:
   URL — only through the API endpoints. Check this holds after any nginx/proxy config
   changes. (Currently confirmed safe — only `web/static/` is mounted as static.)
 - **Audio deletion**: confirm the audio file is always deleted after processing,
-  including on pipeline failure. Orphan cleanup (end-of-job sweep) is now implemented
-  but should be verified under crash conditions.
+  including on pipeline failure. Orphan cleanup (end-of-job sweep) exists but should
+  be verified under crash conditions.
 - **On-server processing**: all three tools (Whisper, MFA, new-fave) run entirely
   locally — audio never leaves the server. This should be stated explicitly in the
   User Guide and privacy notice.
-- **Job ID guessability**: job IDs are now YYMMDD_Stop1_Stop2 (~1,190 combinations
+- **Job ID guessability**: job IDs are YYMMDD_Stop1_Stop2 (~1,190 combinations
   per day). A determined person could enumerate today's IDs. Consider whether result
   downloads need any additional authentication (e.g. a one-time token) if the tool
   is used for sensitive studies.
@@ -477,111 +362,17 @@ before the tool is opened to broad public use. Key areas to audit:
 
 ---
 
-## File management and security ✓ (implemented)
+## Add Nigerian English (priority)
 
-- **Large intermediates deleted after every job**: uploaded audio, `mfa_corpus/`,
-  `mfa_temp/`. This recovers 1–3 GB per job immediately.
-- **Orphaned audio cleanup**: at the end of each completed job, a sweep deletes
-  audio files left behind by jobs the running server doesn't know about (e.g. ones
-  that were mid-run when the server last crashed/restarted). The check is based on
-  in-memory job-dict membership rather than which output folders exist, so it
-  correctly leaves Trolley jobs alone (a Trolley job can legitimately lack
-  `whisper_output/` or `newfave_output/` and still be a normal, healthy job).
-- **No world-readable job directories**: confirmed — only `web/static/` is served
-  statically; `data/jobs/` is reachable only through the API endpoints.
-- **Logs live separately**: job logs (`data/logs/`) are written outside
-  `data/jobs/` and are never touched by the result-cleanup sweep — they remain
-  the permanent audit trail even after a job's files have expired.
-- **Result files expire**: job directories are deleted 72 hours after completion
-  by `_expire_old_jobs()`, called at the end of every job. The retention window is
-  controlled by the `JOB_RETENTION_HOURS` constant in `web/app.py`.
+Check to see if there is a Nigerian English model for Whisper. There apparently is one
+for MFA. See about incorporating that. (Might as well do British, Australian, etc as well if they're there.)
 
----
+## Previous versions of software (High priority)
 
-## Job logging system ✓ (implemented)
-Every job (success or failure) now writes a server-side log to:
+Add (old) FAVE and add MFA 1.0. These together would (I believe) reproduce DARLA output.
 
-  data/logs/YYYY-MM/<job_id>.txt
+While we're at it, add other versions of MFA.
 
-Each file contains: job ID, filename, submitted/completed timestamps, total
-duration, per-step timings, all settings used, tool versions, final status,
-and full error traceback on failure. Logs are stored outside job directories
-and are never deleted by the result cleanup sweep.
+## Multiple jobs at once
 
-### Human-readable job codes ✓ (implemented)
-Job IDs are now in the format YYMMDD_Stop1_Stop2, e.g. 260601_Bourdon_Flute.
-Two distinct organ stops are drawn at random; a collision check retries if the
-same pair was already used today (extremely rare at expected job volumes).
-
-Organ stops pool (35), drawn from the Salt Lake Tabernacle organ:
-  Bombarde, Bourdon, Celeste, Clarinet, Clarion, CorAnglais, Cornopean,
-  Cymbelstern, Diaphone, Diapason, Doppelflote, Dulciana, Flugelhorn, Flute,
-  FrenchHorn, Fugara, Gamba, Gemshorn, Harp, LieblichBourdon, Mixture,
-  Nachthorn, Nazard, Oboe, Octave, Piccolo, Principal, Rauschquinte, Trombone,
-  Trompette, Tremulant, Trumpet, Tuba, Tutti, Viole
-
-35 × 34 = 1,190 combinations per day — sufficient for expected usage.
-
-The job ID is used as the job directory name and shown to the user on both the
-error screen and the success/download screen so they can reference it when
-contacting the lab.
-
-### Analytics summary log ✓ (implemented)
-Alongside the human-readable per-job logs, every job also appends a structured
-JSON record to `data/logs/summary.jsonl` — one line per job — covering things
-like Whisper model/language used, step durations, audio duration, final status,
-and error type on failure. This is meant to make it possible, after a few months
-of real usage, to answer questions like which features people actually use, how
-long jobs typically take, and where crashes tend to occur — without having to
-parse the prose logs by hand.
-
-## Alpha/Beta testing
-
-* Valerie Freeman
-* Peggy Renwick
-* Dan Villarreal
-
-### Local testing notes
-- **Computer sleep kills the local dev server.** While stress-testing the queue
-  by submitting several large real files back-to-back locally, the laptop went
-  to sleep partway through and the `uvicorn` process died outright — not
-  suspended/resumed, just gone (no error.log, no crash trace, nothing left
-  running afterward). Everything queued behind the in-flight job at that point
-  was silently orphaned (audio left on disk, never processed — see
-  `_cleanup_orphaned_audio`, which only cleans up on the *next* server start,
-  not proactively). Not a VoxHumana bug — a local-only concern from running the
-  server and doing the submitting on the same machine. Once deployed on the
-  real (always-on) server this won't apply, since the client sleeping doesn't
-  touch the server process. For further local multi-job testing in the
-  meantime: keep the machine awake (e.g. `caffeinate` on macOS) for the
-  duration of the batch. This also motivated the
-  "[Client-side job persistence & status recovery](#client-side-job-persistence--status-recovery-not-yet-built)"
-  item above.
-
-
-
-### In conversation with Lisa
-  Batch file upload — ✓ implemented, see "Batch upload ✓ (implemented)" below
-  Add OOV words to MFA.
-
----
-
-## Batch upload ✓ (implemented)
-
-Drag-and-drop many audio/TextGrid files at once (up to 25 per batch) instead
-of one tab per file. Files are matched into audio/TextGrid pairs automatically
-by filename (exact stem, then a fuzzy pass stripping common suffixes like
-`_aligned`/`_corrected`), using the dropped folder structure
-(`webkitGetAsEntry`) so same-named files in different speaker subfolders never
-get cross-paired — a genuine collision is flagged for manual drag-to-repair
-rather than guessed. All files in a batch share one settings form (documented
-limitation: different settings per file means separate batches). Each row
-needs an explicit Confirm click before it submits — nothing starts silently,
-including tier-index guesses for user-supplied TextGrids. Confirmed rows
-upload with client-side pacing (`MAX_CONCURRENT_UPLOADS`, `web/static/index.html`)
-so 25 large files don't hit the server as simultaneous uploads, then process
-one at a time through the existing single-worker queue exactly like the
-single-file flow. No backend changes were needed — batch rows submit through
-the existing `/api/jobs` and `/api/textgrid-tiers` endpoints, one call per
-row. Individual downloads only for v1 (no combined batch-download endpoint).
-See `/Users/joeystan/.claude/plans/foamy-juggling-crane.md` for the full design. 
+This might be a server permissions thing, but I'd like to make it faster on the server. I'd also like to intelligently manage a queue of jobs: prioritize shorter ones and only tap into some of the threads/cores for the long queues when they're not otherwise being used by shorter jobs. 
