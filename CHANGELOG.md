@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+
+## [0.15.0] - 2026-08-29
 ### Added
 - The ability to run FAVE-extract, which is what DARLA used, as an optional legacy alternative to new-fave in the Extract step. This is only available for English. 
 
