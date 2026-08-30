@@ -1167,39 +1167,74 @@
         </div>
         <p id="formants-lang-note" style="display:none; margin:4px 0 0; padding:8px 12px; background:#fff5f0; border:1px solid #d4856a; border-radius:4px; font-size:12px; color:#7a3a20; line-height:1.5;">Formant extraction (new-fave) currently works with English, Spanish, French, German, and Portuguese only. Switch to one of these languages to re-enable this step.</p>
         <div class="step-body" id="body-formants">
-          <div class="grid-2">
-            <div class="field">
-              <label for="formant-ceiling">Formant ceiling (Hz) <span style="font-weight:normal">(optional)</span></label>
-              <input type="text" id="formant-ceiling" name="formant_ceiling" placeholder="Default: 10000">
+          <div class="field-check" style="margin-bottom:12px">
+            <label style="display:block; margin-bottom:6px; font-weight:600;">Extraction method</label>
+            <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
+              <label style="display:flex; align-items:center; gap:6px; font-weight:normal; cursor:pointer;">
+                <input type="radio" name="formants_engine" value="newfave" id="engine-newfave" checked onchange="onFormantsEngineChange()">
+                new-fave (default)
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; font-weight:normal; cursor:pointer;" id="engine-fave-extract-label">
+                <input type="radio" name="formants_engine" value="fave_extract" id="engine-fave-extract" onchange="onFormantsEngineChange()">
+                FAVE-extract (legacy, DARLA-style)
+              </label>
             </div>
-            <div class="field">
-              <label for="num-formants">Number of formants <span style="font-weight:normal">(optional)</span></label>
-              <input type="text" id="num-formants" name="num_formants" placeholder="Default: 3">
-            </div>
+            <p class="adv-coming-soon" id="fave-extract-lang-note" style="display:none; margin:4px 0 0;">FAVE-extract is English only — not available for the selected language.</p>
           </div>
-          <div class="adv-toggle" id="adv-toggle-formants" onclick="toggleAdvanced('formants')" style="margin-top:12px">
-            <span class="chevron">▸</span> Advanced options
-          </div>
-          <div class="adv-panel" id="adv-panel-formants">
-            <div class="field-check">
-              <input type="checkbox" id="include-overlaps" name="include_overlaps" checked>
-              <label for="include-overlaps">Include vowels during overlapping speech</label>
-            </div>
-            <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When unchecked, vowels that occur while another speaker is talking are excluded from measurement.</p>
 
-            <div class="field-check" style="margin-top:10px">
-              <input type="checkbox" id="combine-preliquid" name="combine_preliquid" onchange="onCombinePreliquidChange()">
-              <label for="combine-preliquid">Treat vowels and following liquids as single units</label>
-            </div>
-            <p class="adv-coming-soon" style="margin: 2px 0 0 22px">If a vowel is followed by an &quot;L&quot; or &quot;R&quot; within the same word, the two intervals are combined. This, in the case of the word <em>pull</em>, &quot;P + UH1 + L&quot; becomes &quot;P + UHL1&quot;.</p>
-            <p class="adv-coming-soon" id="combine-preliquid-lang-note" style="display:none; margin: 4px 0 0 22px; color:#7a3a20;">English only — requires CMU ARPABET stress-marked phone labels.</p>
-
-            <div id="combine-preliquid-sub" style="display:none; margin-top:8px; margin-left:22px">
-              <div class="field-check">
-                <input type="checkbox" id="include-intervocalic" name="include_intervocalic" checked>
-                <label for="include-intervocalic">Include intervocalic liquids</label>
+          <div id="newfave-fields">
+            <div class="grid-2">
+              <div class="field">
+                <label for="formant-ceiling">Formant ceiling (Hz) <span style="font-weight:normal">(optional)</span></label>
+                <input type="text" id="formant-ceiling" name="formant_ceiling" placeholder="Default: 10000">
               </div>
-              <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When checked (default), a liquid is combined with the previous vowel even if it's followed by another vowel in the same word — e.g. the "L" in <em>yellow</em>, or in <em>fuller</em>/<em>pooling</em> where a vowel-initial suffix follows what's really a coda liquid. When unchecked, only word-final or preconsonantal liquids are combined (as in <em>pull</em> or <em>world</em>) — but this also excludes cases like <em>fuller</em>/<em>pooling</em> that arguably should still count, since there's no way to tell those apart from true onset liquids like the one in <em>yellow</em> using phone adjacency alone.</p>
+              <div class="field">
+                <label for="num-formants">Number of formants <span style="font-weight:normal">(optional)</span></label>
+                <input type="text" id="num-formants" name="num_formants" placeholder="Default: 3">
+              </div>
+            </div>
+            <div class="adv-toggle" id="adv-toggle-formants" onclick="toggleAdvanced('formants')" style="margin-top:12px">
+              <span class="chevron">▸</span> Advanced options
+            </div>
+            <div class="adv-panel" id="adv-panel-formants">
+              <div class="field-check">
+                <input type="checkbox" id="include-overlaps" name="include_overlaps" checked>
+                <label for="include-overlaps">Include vowels during overlapping speech</label>
+              </div>
+              <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When unchecked, vowels that occur while another speaker is talking are excluded from measurement.</p>
+
+              <div class="field-check" style="margin-top:10px">
+                <input type="checkbox" id="combine-preliquid" name="combine_preliquid" onchange="onCombinePreliquidChange()">
+                <label for="combine-preliquid">Treat vowels and following liquids as single units</label>
+              </div>
+              <p class="adv-coming-soon" style="margin: 2px 0 0 22px">If a vowel is followed by an &quot;L&quot; or &quot;R&quot; within the same word, the two intervals are combined. This, in the case of the word <em>pull</em>, &quot;P + UH1 + L&quot; becomes &quot;P + UHL1&quot;.</p>
+              <p class="adv-coming-soon" id="combine-preliquid-lang-note" style="display:none; margin: 4px 0 0 22px; color:#7a3a20;">English only — requires CMU ARPABET stress-marked phone labels.</p>
+
+              <div id="combine-preliquid-sub" style="display:none; margin-top:8px; margin-left:22px">
+                <div class="field-check">
+                  <input type="checkbox" id="include-intervocalic" name="include_intervocalic" checked>
+                  <label for="include-intervocalic">Include intervocalic liquids</label>
+                </div>
+                <p class="adv-coming-soon" style="margin: 2px 0 0 22px">When checked (default), a liquid is combined with the previous vowel even if it's followed by another vowel in the same word — e.g. the "L" in <em>yellow</em>, or in <em>fuller</em>/<em>pooling</em> where a vowel-initial suffix follows what's really a coda liquid. When unchecked, only word-final or preconsonantal liquids are combined (as in <em>pull</em> or <em>world</em>) — but this also excludes cases like <em>fuller</em>/<em>pooling</em> that arguably should still count, since there's no way to tell those apart from true onset liquids like the one in <em>yellow</em> using phone adjacency alone.</p>
+              </div>
+            </div>
+          </div>
+
+          <div id="fave-extract-fields" style="display:none; margin-top:4px; padding:12px; background:#f7f5f0; border:1px solid #ddd; border-radius:4px;">
+            <p style="margin:0 0 10px; font-size:12px; color:#555; line-height:1.5;">FAVE-extract is the original FAVE/DARLA vowel-formant algorithm, kept for comparison and reproducibility with older FAVE- or DARLA-based work. English only.</p>
+            <div class="grid-2">
+              <div class="field">
+                <label for="fave-sex">Voice type <span style="font-weight:normal">(required)</span></label>
+                <select id="fave-sex" name="fave_sex">
+                  <option value="">Select…</option>
+                  <option value="f">High</option>
+                  <option value="m">Low</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="fave-name">Speaker name <span style="font-weight:normal">(optional)</span></label>
+                <input type="text" id="fave-name" name="fave_name">
+              </div>
             </div>
           </div>
         </div>
@@ -2213,6 +2248,9 @@
       include_overlaps:           form.include_overlaps.checked,
       combine_preliquid:          form.combine_preliquid.checked,
       include_intervocalic:       form.include_intervocalic.checked,
+      formants_engine:            form.formants_engine.value,
+      fave_sex:                   form.fave_sex.value,
+      fave_name:                  form.fave_name.value,
       run_transcription:          stepActive.transcription,
       run_alignment:              stepActive.alignment,
       run_formants:               stepActive.formants,
@@ -2746,6 +2784,30 @@
       onCombinePreliquidChange();
     }
     preliquidNote.style.display = englishOnly ? 'none' : '';
+
+    // FAVE-extract is English-only (built entirely around CMU ARPABET /
+    // English dialectology) -- unlike new-fave, there's no multi-language
+    // support to speak of. Force back to new-fave if the language changes
+    // out from under a selected FAVE-extract choice.
+    const faveRadio = document.getElementById('engine-fave-extract');
+    const faveLabel = document.getElementById('engine-fave-extract-label');
+    const faveNote  = document.getElementById('fave-extract-lang-note');
+    faveRadio.disabled = !englishOnly;
+    faveLabel.style.opacity = englishOnly ? '' : '0.5';
+    faveNote.style.display = englishOnly ? 'none' : '';
+    if (!englishOnly && faveRadio.checked) {
+      document.getElementById('engine-newfave').checked = true;
+      onFormantsEngineChange();
+    }
+  }
+
+  // ─── Formant extraction engine (new-fave vs. FAVE-extract) ───────────────────
+  function onFormantsEngineChange() {
+    const usingFave = document.getElementById('engine-fave-extract').checked;
+    document.getElementById('newfave-fields').style.display     = usingFave ? 'none' : '';
+    document.getElementById('fave-extract-fields').style.display = usingFave ? '' : 'none';
+    document.querySelector('#toggle-formants .step-label-tool').textContent =
+      usingFave ? 'FAVE-extract' : 'new-fave';
   }
 
   // ─── Combine pre-liquid vowel sequences ──────────────────────────────────────
@@ -2822,6 +2884,15 @@
       const statusEl = document.getElementById('utterance-tier-picker-status');
       statusEl.textContent   = 'Pick the tier that holds the utterance transcription before submitting.';
       statusEl.style.display = '';
+      return;
+    }
+
+    if (stepActive.formants && document.getElementById('engine-fave-extract').checked
+        && !document.getElementById('fave-sex').value) {
+      const sexField = document.getElementById('fave-sex');
+      sexField.focus();
+      sexField.style.borderColor = '#d4856a';
+      setTimeout(() => { sexField.style.borderColor = ''; }, 1500);
       return;
     }
 

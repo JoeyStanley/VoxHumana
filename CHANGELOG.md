@@ -4,6 +4,10 @@ All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-08-29
+### Added
+- The ability to run FAVE-extract, which is what DARLA used, as an optional legacy alternative to new-fave in the Extract step. This is only available for English. 
+
 ## [0.14.5] - 2026-08-10
 ### Added
 - File size and file duration information to internal logs so I can get a better idea of how long jobs take as a function of their duration. (This will eventually feed into a guess for how long the queue will be.)

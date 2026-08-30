@@ -34,6 +34,7 @@ from pipeline.convert_whisper_to_textgrid import convert_whisper_to_textgrid
 from pipeline.generate_transcript import generate_transcript
 from pipeline.align_with_mfa import align_with_mfa
 from pipeline.extract_with_newfave import extract_with_newfave, LANGUAGE_DEFAULTS, PRELIQUID_RECODE_RULES
+from pipeline.extract_with_fave import extract_with_fave, get_fave_version
 from pipeline.combine_textgrids import combine_textgrids
 from pipeline.tier_selection import (
     list_tier_names,
@@ -256,6 +257,7 @@ def _write_processing_log(
         newfave_ver = importlib.metadata.version("new-fave")
     except Exception:
         newfave_ver = "unknown"
+    fave_ver = get_fave_version(config.get("fave_extract"))
     conda_env = config.get("mfa", {}).get("conda_env", "aligner")
     mfa_ver = _get_mfa_version(conda_env)
 
@@ -274,6 +276,8 @@ def _write_processing_log(
     w_cfg  = config.get("whisper", {})
     m_cfg  = config.get("mfa", {})
     nf_cfg = config.get("newfave", {})
+    formants_engine = config.get("formants_engine", "newfave")
+    formants_engine_label = "FAVE-extract" if formants_engine == "fave_extract" else "new-fave"
     steps  = config.get("steps", {})
     ran_transcription = steps.get("transcription", True)
     ran_alignment     = steps.get("alignment", True)
@@ -390,7 +394,7 @@ def _write_processing_log(
         else:
             ln("Whisper transcription was not run. A Praat MFA-format TextGrid")
             ln("(Word and Phone tiers) was uploaded by the user and used directly")
-            ln("as the input to new-fave formant extraction.")
+            ln(f"as the input to {formants_engine_label} formant extraction.")
             if tier_sel:
                 ln("")
                 ln(f"Phone tier selected: {_tier_label(tier_sel.get('phone_idx'))}")
@@ -459,15 +463,62 @@ def _write_processing_log(
         ln("")
         if ran_formants:
             ln("MFA alignment was not run. A user-supplied MFA TextGrid was used")
-            ln("directly as the input to new-fave formant extraction.")
+            ln(f"directly as the input to {formants_engine_label} formant extraction.")
         else:
             ln("MFA alignment was not run for this job.")
 
-    # ── new-fave ──────────────────────────────────────────────────────────────
+    # ── FORMANT EXTRACTION (new-fave or FAVE-extract) ───────────────────────────
     ln("")
     ln("")
     ln(BAR)
-    if ran_formants:
+    fv_cfg = config.get("fave_extract", {}) or {}
+    if ran_formants and formants_engine == "fave_extract":
+        sex = fv_cfg.get("sex")
+        speaker_name = fv_cfg.get("name")
+        fpm = fv_cfg.get("formant_prediction_method", "mahalanobis")
+        vowel_system = fv_cfg.get("vowel_system", "NorthAmerican")
+        remeasurement = bool(fv_cfg.get("remeasurement", False))
+        min_vowel_duration = fv_cfg.get("min_vowel_duration")
+        n_formants_fave = fv_cfg.get("n_formants")
+
+        ln(f"STEP 3 — VOWEL FORMANT EXTRACTION: FAVE-extract (legacy)  v{fave_ver}")
+        ln(BAR)
+        ln("")
+        ln("FAVE-extract is the original FAVE/DARLA vowel-formant algorithm (Rosenfelder,")
+        ln("Fruehwald, Evanini, and Yuan), kept in VoxHumana as a legacy, English-only")
+        ln("alternative to new-fave for comparison/reproducibility with older FAVE- or")
+        ln("DARLA-based work. It locates vowel tokens in the MFA-aligned TextGrid and,")
+        ln("by default, uses a Mahalanobis-distance method to pick the best-fitting LPC")
+        ln("analysis order for each vowel. One output file is written:")
+        ln("")
+        ln("  *.txt              — one row per vowel token (tab-delimited)")
+        ln("")
+        ln("Parameters:")
+        ln(f"  - speaker sex:              {sex}")
+        ln(f"  - speaker name:             {speaker_name or '(not given)'}")
+        ln(f"  - formantPredictionMethod:  {fpm}{dflt(fpm, 'mahalanobis')}")
+        ln(f"  - vowelSystem:              {vowel_system}{dflt(vowel_system, 'NorthAmerican')}")
+        ln(f"  - remeasurement:            {remeasurement}{dflt(remeasurement, False)}")
+        ln(f"  - minVowelDuration:         {min_vowel_duration if min_vowel_duration is not None else '(FAVE-extract default)'}")
+        ln(f"  - nFormants:                {n_formants_fave if n_formants_fave is not None else '(FAVE-extract default)'}")
+        ln("")
+        ln("To replicate what VoxHumana did offline on the command line (requires a")
+        ln("separate Python 3.10 environment with FAVE-extract installed — see")
+        ln("pipeline/extract_with_fave.py for setup):")
+        ln("")
+        ln("    # speaker.speaker should contain:")
+        ln(f"    #   --sex\n    #   {sex}")
+        ln("    python -m fave.extractFormants \\")
+        ln("        --mfa \\")
+        ln("        --speaker speaker.speaker \\")
+        ln(f"        --formantPredictionMethod {fpm} \\")
+        ln(f"        --vowelSystem {vowel_system} \\")
+        if remeasurement:
+            ln("        --remeasurement \\")
+        ln(f"        {audio_filename} \\")
+        ln(f"        mfa_output/{stem}.TextGrid \\")
+        ln(f"        {stem}")
+    elif ran_formants:
         nf_language = nf_cfg.get("language", "en")
         lang_defaults = LANGUAGE_DEFAULTS.get(nf_language, LANGUAGE_DEFAULTS["en"])
 
@@ -644,6 +695,7 @@ def _write_server_log(
         newfave_ver = importlib.metadata.version("new-fave")
     except Exception:
         newfave_ver = "unknown"
+    fave_ver = get_fave_version(config.get("fave_extract"))
     mfa_ver = _get_mfa_version(m_cfg.get("conda_env", "aligner"))
 
     # Audio/TextGrid stats — best effort, don't let failures break logging.
@@ -702,6 +754,7 @@ def _write_server_log(
     ln(f"  openai-whisper:  {whisper_ver}")
     ln(f"  MFA:             {mfa_ver}")
     ln(f"  new-fave:        {newfave_ver}")
+    ln(f"  FAVE-extract:    {fave_ver}")
     ln("")
     s_cfg = config.get("steps", {})
     ln("Steps run:")
@@ -737,6 +790,15 @@ def _write_server_log(
     ln(f"  combine_preliquid:        {nf_combine_preliquid}")
     if nf_combine_preliquid:
         ln(f"  include_intervocalic:     {nf_cfg.get('include_intervocalic', True)}")
+    formants_engine = config.get("formants_engine", "newfave")
+    ln(f"  formants_engine:          {formants_engine}")
+    if formants_engine == "fave_extract":
+        fv_cfg = config.get("fave_extract", {}) or {}
+        ln(f"  [FAVE-extract]")
+        ln(f"  sex:                      {fv_cfg.get('sex')}")
+        ln(f"  formantPredictionMethod:  {fv_cfg.get('formant_prediction_method', 'mahalanobis')}")
+        ln(f"  vowelSystem:              {fv_cfg.get('vowel_system', 'NorthAmerican')}")
+        ln(f"  remeasurement:            {bool(fv_cfg.get('remeasurement', False))}")
 
     if error_tb:
         ln("")
@@ -755,6 +817,7 @@ def _write_server_log(
         "Step 2 – Converting transcript to TextGrid":    "textgrid",
         "Step 3 – Aligning with MFA":                    "mfa",
         "Step 4 – Extracting vowel formants with new-fave": "newfave",
+        "Step 4 – Extracting formants with FAVE-extract":  "fave_extract",
     }
     step_seconds = {
         _step_name_to_key[name]: round(secs, 1)
@@ -797,12 +860,14 @@ def _write_server_log(
         "include_overlaps":          nf_cfg.get("include_overlaps", True),
         "combine_preliquid":         nf_combine_preliquid,
         "include_intervocalic":      nf_cfg.get("include_intervocalic", True) if nf_combine_preliquid else None,
+        "formants_engine":           formants_engine,
         "step_seconds":              step_seconds,
         "versions": {
             "voxhumana":      APP_VERSION,
             "openai-whisper": whisper_ver,
             "mfa":            mfa_ver,
             "new-fave":       newfave_ver,
+            "fave-extract":   fave_ver,
         },
     }
     with open(LOGS_DIR / "summary.jsonl", "a") as f:
@@ -866,11 +931,19 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
                 shutil.rmtree(job_dir / "whisper_output", ignore_errors=True)
 
         if run_formants:
-            current_step = "Step 4 – Extracting vowel formants with new-fave"
-            jobs[job_id].update(step=4, step_name="Extracting vowel formants with new-fave")
-            _t = datetime.now(timezone.utc)
-            extract_with_newfave(str(audio_path), mfa_output_dir, str(job_dir), config.get("newfave"))
-            step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
+            formants_engine = config.get("formants_engine", "newfave")
+            if formants_engine == "fave_extract":
+                current_step = "Step 4 – Extracting formants with FAVE-extract"
+                jobs[job_id].update(step=4, step_name="Extracting formants with FAVE-extract")
+                _t = datetime.now(timezone.utc)
+                extract_with_fave(str(audio_path), mfa_output_dir, str(job_dir), config.get("fave_extract"))
+                step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
+            else:
+                current_step = "Step 4 – Extracting vowel formants with new-fave"
+                jobs[job_id].update(step=4, step_name="Extracting vowel formants with new-fave")
+                _t = datetime.now(timezone.utc)
+                extract_with_newfave(str(audio_path), mfa_output_dir, str(job_dir), config.get("newfave"))
+                step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
             # If the user supplied their own MFA TextGrid (Align skipped), remove the
             # mfa_output/ staging folder — it only contained their uploaded file.
             if not run_alignment:
@@ -1003,6 +1076,9 @@ async def create_job(
     include_overlaps: bool = Form(True),
     combine_preliquid: bool = Form(False),
     include_intervocalic: bool = Form(True),
+    formants_engine: str = Form("newfave"),
+    fave_sex: Optional[str] = Form(None),
+    fave_name: Optional[str] = Form(None),
     run_transcription: bool = Form(True),
     run_alignment: bool = Form(True),
     run_formants: bool = Form(True),
@@ -1031,6 +1107,28 @@ async def create_job(
     newfave_language = NEWFAVE_LANGUAGE_PRESETS.get(acoustic_model)
     if newfave_language is None and run_formants:
         run_formants = False
+
+    # FAVE-extract is a legacy, English-only alternative to new-fave (it's
+    # built entirely around CMU ARPABET / English dialectology -- there's no
+    # multi-language support to speak of). Reject a request for it against a
+    # non-English acoustic model rather than silently falling back to
+    # new-fave, and require speaker sex up front: FAVE-extract's default
+    # 'mahalanobis' formant-prediction method hard-fails without it.
+    if formants_engine not in ("newfave", "fave_extract"):
+        raise HTTPException(status_code=400, detail=f"Unsupported formants_engine '{formants_engine}'.")
+    if formants_engine == "fave_extract" and run_formants:
+        if newfave_language != "en":
+            raise HTTPException(
+                status_code=400,
+                detail="FAVE-extract only supports English. Choose the English acoustic "
+                       "model, or use new-fave for other languages.",
+            )
+        if not fave_sex or fave_sex.lower() not in ("m", "male", "f", "female"):
+            raise HTTPException(
+                status_code=400,
+                detail="FAVE-extract requires speaker sex ('m' or 'f') to run its default "
+                       "formant-prediction method.",
+            )
 
     job_id = _generate_job_id()
     while job_id in jobs:
@@ -1161,6 +1259,11 @@ async def create_job(
             "include_overlaps": include_overlaps,
             "combine_preliquid": combine_preliquid,
             "include_intervocalic": include_intervocalic,
+        },
+        "formants_engine": formants_engine,
+        "fave_extract": {
+            "sex": fave_sex.lower() if fave_sex else None,
+            "name": fave_name or None,
         },
         "steps": {
             "transcription": run_transcription,
