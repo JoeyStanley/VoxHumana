@@ -452,6 +452,13 @@
       color: var(--pb);
       letter-spacing: 0.03em;
     }
+    .progress-fun-label {
+      font-size: 11px;
+      font-style: italic;
+      color: var(--pbl);
+      margin-top: 2px;
+      min-height: 14px;
+    }
     .progress-note {
       font-size: 11px;
       color: var(--pbl);
@@ -1012,6 +1019,11 @@
 
         <!-- TextGrid upload — shown when Transcribe is unchecked -->
         <div id="textgrid-upload-section" style="display:none; margin-top:14px">
+          <div class="section-head" style="font-size:11px; margin-bottom:8px">
+            Uploaded TextGrid
+            <div class="section-rule"></div>
+            <button type="button" class="help-btn" onclick="openDrawer('textgrid')" title="Help">?</button>
+          </div>
           <input type="file" id="textgrid-input" accept=".TextGrid">
           <div class="upload-zone" id="textgrid-drop-zone" style="padding:20px">
             <div class="upload-primary" id="textgrid-drop-primary" style="font-size:12px">Drop TextGrid here or click to browse</div>
@@ -1265,6 +1277,7 @@
       </div>
       <div class="progress-filename" id="progress-filename"></div>
       <div class="progress-step-label" id="progress-step-label">Starting…</div>
+      <div class="progress-fun-label" id="progress-fun-label"></div>
       <div class="progress-note">
         Processing time scales with recording length — a 1-hour interview may take up to an hour.
         Keep this tab open; the page will update automatically when results are ready.
@@ -1413,6 +1426,7 @@
     transcription: { title: 'Transcription · Whisper',       path: `${ROOT_PATH}/content/help-transcription.md` },
     alignment:     { title: 'Forced alignment · MFA',        path: `${ROOT_PATH}/content/help-alignment.md` },
     formants:      { title: 'Formant extraction · new-fave', path: `${ROOT_PATH}/content/help-formants.md` },
+    textgrid:      { title: 'Uploading your own TextGrid',    path: `${ROOT_PATH}/content/help-textgrid.md` },
   };
 
   const TAB_PATHS = {
@@ -1447,6 +1461,48 @@
   let inDocs           = false;
   let appViewState     = 'form';
   let completionSoundEnabled = false;
+
+  // Fun rotating status messages shown under the real step label while a job
+  // is running — purely decorative, doesn't reflect actual pipeline state.
+  // Loaded from content/loading-messages.txt so new ones can be added without
+  // touching this file; this fallback only covers a fetch failure.
+  let FUN_LOADING_MESSAGES = ['Warming up the pipes…'];
+  let funMessageTimer = null;
+
+  const funMessagesPromise = (async () => {
+    try {
+      const res = await fetch(`${ROOT_PATH}/content/loading-messages.txt`);
+      if (res.ok) {
+        const lines = (await res.text()).split('\n')
+          .map(l => l.trim())
+          .filter(l => l && !l.startsWith('#'));
+        if (lines.length) FUN_LOADING_MESSAGES = lines;
+      }
+    } catch (err) { /* keep the fallback message */ }
+  })();
+
+  async function startFunMessages() {
+    if (funMessageTimer) return;
+    await funMessagesPromise;
+    if (appViewState !== 'running') return; // state moved on while messages were loading
+    const el = document.getElementById('progress-fun-label');
+    if (!el) return;
+    let i = Math.floor(Math.random() * FUN_LOADING_MESSAGES.length);
+    el.textContent = FUN_LOADING_MESSAGES[i];
+    funMessageTimer = setInterval(() => {
+      i = (i + 1) % FUN_LOADING_MESSAGES.length;
+      el.textContent = FUN_LOADING_MESSAGES[i];
+    }, 4000);
+  }
+
+  function stopFunMessages() {
+    if (funMessageTimer) {
+      clearInterval(funMessageTimer);
+      funMessageTimer = null;
+    }
+    const el = document.getElementById('progress-fun-label');
+    if (el) el.textContent = '';
+  }
 
   // Which steps are active (all on by default)
   const stepActive = { transcription: true, alignment: true, formants: true };
@@ -2964,6 +3020,7 @@
     updateTrack(5);
     document.querySelector('#state-running .progress-spinner').style.display = 'none';
     document.getElementById('progress-step-label').textContent = 'Done';
+    stopFunMessages();
     document.getElementById('primary-done-inline').style.display = '';
   }
 
@@ -2971,6 +3028,7 @@
     updateTrack(0);
     document.querySelector('#state-running .progress-spinner').style.display = 'none';
     document.getElementById('progress-step-label').textContent = 'Failed';
+    stopFunMessages();
     document.getElementById('primary-error-inline-message').textContent = message;
     document.getElementById('primary-error-inline').style.display = '';
   }
@@ -3093,6 +3151,7 @@
     document.getElementById('state-done').style.display    = (!d && state === 'done')    ? '' : 'none';
     document.getElementById('state-error').style.display   = (!d && state === 'error')   ? '' : 'none';
     document.getElementById('state-docs').style.display    = d ? '' : 'none';
+    if (!d && state === 'running') startFunMessages(); else stopFunMessages();
     // Show track only during processing/results, never on the form or docs
     const showTrack = !d && state !== 'form';
     document.getElementById('pipeline-track').style.display = showTrack ? '' : 'none';
