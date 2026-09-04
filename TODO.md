@@ -53,62 +53,20 @@ detection logic before advertising this option to users.
 
 ---
 
-## Trolley mode: remaining gaps
+## MFA: custom dictionaries
 
-Trolley mode (skip any pipeline step and supply your own intermediate files) is implemented
-end-to-end, including the UI step toggles, the upload zone, and backend routing/cleanup.
-What's still missing:
+OOV word extraction to `mfa_output/oovs_found.txt` is implemented and confirmed working
+end-to-end on 2026-09-04: a real recording containing the coined word "mormonese" correctly
+surfaced it in `oovs_found.txt`, both on a fresh Whisper transcription and via Trolley mode's
+"skip Transcription" path re-running just MFA on the same audio.
 
-- User-facing help documentation explaining what an uploaded TextGrid must look like
-  (tier names, format, common mistakes) — see the TextGrid upload help item below.
-- Real-world testing with an actual corrected transcript containing a deliberate OOV word
-  (see OOV words testing note below — this is now possible with Trolley in place).
-
----
-
-## MFA: OOV words file testing, and custom dictionaries
-
-OOV word extraction to `mfa_output/oovs_found.txt` is implemented. Still needed:
-
-- **Real-world testing**: use Trolley mode's "skip Transcription" option to feed MFA a
-  transcript containing a made-up or highly unusual word, and confirm it appears in
-  `oovs_found.txt`. Previously hard to test because Whisper tends to recognize unfamiliar
-  words as phonetically similar dictionary words, so true OOVs rarely reached MFA.
-
-- **Custom dictionaries** (not implemented): power users (e.g., researchers working with a
-  specific dialect community) may want to upload a custom pronunciation dictionary alongside
-  their audio. MFA accepts a plain-text dictionary file as the `DICTIONARY_PATH` argument
-  instead of a model name. To implement: add an optional file upload field in the Alignment
-  section, validate that it's a `.txt` or `.dict` file, and pass its path to MFA instead of
-  the default model name. Consider whether to allow this alongside or instead of the
-  built-in dictionaries.
-
----
-
-## TextGrid upload: help documentation
-
-The upload zone, file-type filtering, and backend routing are all implemented (see Trolley
-mode above). What's still missing is user-facing documentation explaining what the uploaded
-TextGrid must actually look like. Before writing it, nail down the details:
-
-- What tier name does MFA expect for an utterance-level TextGrid? (Currently
-  `convert_whisper_to_textgrid` creates an `utterances` tier — does MFA require
-  that exact name, or does it accept any single-tier TextGrid?)
-- For the "skip Alignment" path, what tier structure does new-fave expect from a
-  user-supplied MFA-format TextGrid (Word tier, Phone tier, naming conventions)?
-- Does MFA/new-fave require non-empty intervals only, or do they handle
-  empty/silence intervals gracefully?
-- What happens if the TextGrid duration doesn't match the audio duration?
-- Should the UI validate the uploaded file's internal structure beyond checking
-  the `.TextGrid` extension (e.g. parse it and check tier names before submitting)?
-
-Then write a clear help drawer entry (a new help-textgrid.md, linked from the
-upload zone) that explains:
-  - The expected format for each scenario (Praat long TextGrid; a single utterance
-    tier when skipping Transcription only, full Word/Phone tiers when also/instead
-    skipping Alignment)
-  - How to prepare/export one from Praat
-  - Common mistakes (wrong tier name, mismatched duration, overlapping intervals)
+Still to build: **custom dictionaries**. Power users (e.g., researchers working with a
+specific dialect community) may want to upload a custom pronunciation dictionary alongside
+their audio. MFA accepts a plain-text dictionary file as the `DICTIONARY_PATH` argument
+instead of a model name. To implement: add an optional file upload field in the Alignment
+section, validate that it's a `.txt` or `.dict` file, and pass its path to MFA instead of
+the default model name. Consider whether to allow this alongside or instead of the
+built-in dictionaries.
 
 ---
 
@@ -376,3 +334,11 @@ While we're at it, add other versions of MFA.
 ## Multiple jobs at once
 
 This might be a server permissions thing, but I'd like to make it faster on the server. I'd also like to intelligently manage a queue of jobs: prioritize shorter ones and only tap into some of the threads/cores for the long queues when they're not otherwise being used by shorter jobs. 
+
+## Support for .txt transcriptions
+
+DARLA could process tranascriptions as plain .txt files. Monica has requested I add that feature.
+
+## Flexibility in tier order
+
+Instead of imposing a tier order, let the user pick. This would be an "advanced option" for MFA.
