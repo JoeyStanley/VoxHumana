@@ -5,6 +5,7 @@ All notable changes to VoxHumana will be documented here.
 ## [Unreleased]
 
 ## [0.16.0] - 2026-09-04
+- Added fun pipe-organ--themed loading messages
 
 ## [0.15.0] - 2026-08-29
 ### Added
