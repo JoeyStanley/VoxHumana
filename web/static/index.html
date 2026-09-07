@@ -202,11 +202,16 @@
               </select>
             </div>
           </div>
-          <div class="field-check" style="margin-top:14px">
-            <input type="checkbox" id="fine-tune" name="fine_tune">
-            <label for="fine-tune">Fine tune</label>
+          <div class="adv-toggle" id="adv-toggle-alignment" onclick="toggleAdvanced('alignment')" style="margin-top:12px">
+            <span class="chevron">▸</span> Advanced options
           </div>
-          <p class="adv-coming-soon" style="margin: 2px 0 0 22px">Runs an extra MFA refinement pass after the initial alignment. This improves accuracy, but is slower.</p>
+          <div class="adv-panel" id="adv-panel-alignment">
+            <div class="field-check">
+              <input type="checkbox" id="fine-tune" name="fine_tune">
+              <label for="fine-tune">Fine tune</label>
+            </div>
+            <p class="adv-coming-soon" style="margin: 2px 0 0 22px">Runs an extra MFA refinement pass after the initial alignment. This improves accuracy, but is slower.</p>
+          </div>
         </div>
       </div>
 
