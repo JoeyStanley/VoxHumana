@@ -342,3 +342,7 @@ DARLA could process tranascriptions as plain .txt files. Monica has requested I 
 ## Flexibility in tier order
 
 Instead of imposing a tier order, let the user pick. This would be an "advanced option" for MFA.
+
+## Stereo?
+
+Check to make sure that stereo audio files can indeed be processed. (Per Jen)
