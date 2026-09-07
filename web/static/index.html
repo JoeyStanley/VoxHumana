@@ -149,15 +149,15 @@
               </select>
             </div>
           </div>
-          <div class="field" style="margin-top:14px">
-            <label for="initial-prompt">Transcription hint <span style="font-weight:normal">(optional)</span></label>
-            <input type="text" id="initial-prompt" name="initial_prompt" placeholder="Put names, locations, topic keywords, or unusual vocabulary here to help guide the transcription.">
-          </div>
           <div class="adv-toggle" id="adv-toggle-transcription" onclick="toggleAdvanced('transcription')" style="margin-top:12px">
             <span class="chevron">▸</span> Advanced options
           </div>
           <div class="adv-panel" id="adv-panel-transcription">
-            <div class="field-check">
+            <div class="field">
+              <label for="initial-prompt">Transcription hint <span style="font-weight:normal">(optional)</span></label>
+              <input type="text" id="initial-prompt" name="initial_prompt" placeholder="Put names, locations, topic keywords, or unusual vocabulary here to help guide the transcription.">
+            </div>
+            <div class="field-check" style="margin-top:10px">
               <input type="checkbox" id="condition-on-prev" name="condition_on_previous_text" checked>
               <label for="condition-on-prev">Carry context across 30-second chunks</label>
             </div>
