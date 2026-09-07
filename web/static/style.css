@@ -209,7 +209,6 @@ html, body {
   font-size: 10px;
   color: var(--pbl);
   letter-spacing: 0.04em;
-  font-style: italic;
   line-height: 1;
 }
 .step-toggle:not(.checked) .step-label-name,
