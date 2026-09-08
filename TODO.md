@@ -233,9 +233,6 @@ may take up to an hour." Replace with a real estimate when enough data exists.
 
 ---
 
-## some fun names for loading messages
-coupling the manuals, laying out the console, registering the swell box, drawing console, warming up pipes, tuning the reeds, lacing up organ shoes, Adjusting the wind pressure, Opening the expression box, voicing the flue pipes, Warming up the pipes...
-
 ## CLI debugging tool (explore whether this is needed)
 
 The web UI already shows step-by-step progress and surfaces error messages with
