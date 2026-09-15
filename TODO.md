@@ -336,6 +336,122 @@ This might be a server permissions thing, but I'd like to make it faster on the 
 
 DARLA could process tranascriptions as plain .txt files. Monica has requested I add that feature.
 
+**Status (2026-09-15): built, tested, then reverted — not currently wired in.** A beta
+tester asked for this. A full implementation was built and tested end-to-end over
+2026-09-08–09-15, then pulled back out of the app because after seeing it work end to
+end, the plain-text option didn't feel like the right fit to ship. The working code is
+parked (not deleted) in case this gets revisited. Notes below are detailed enough to
+re-wire it without re-deriving the design.
+
+### Design
+
+A plain-text transcript has no timestamps, so it can't be split into per-utterance
+intervals the way Whisper's output is. The approach taken: wrap the *entire* transcript
+as a single interval, on a single "utterances" tier, spanning the full duration of the
+audio — a scratch TextGrid that stands in for what `convert_whisper_to_textgrid.py`
+normally produces at `whisper_output/{stem}.TextGrid`, so `align_with_mfa.py` needs no
+changes to consume it. This can only replace the Transcribe step (Whisper) — Align must
+still run, since MFA is what actually produces word/phone timing from the flat text.
+It can't be used for Extract-only jobs (new-fave needs real word/phone tiers, which a
+single untimed interval can't provide).
+
+### Parked files (present but not imported anywhere)
+
+- **[pipeline/praat/txt_to_TextGrid.praat](pipeline/praat/txt_to_TextGrid.praat)** — Joey's
+  original Praat script (credit: Monica), adapted into a proper `form` with three
+  parameters instead of hardcoded paths: `Duration` (real), `Text file` (sentence),
+  `Output TextGrid` (sentence). Reads the .txt file line by line, drops `#`-prefixed
+  comment lines and blank lines, joins the rest into one string (adding a trailing space
+  between lines where needed), and writes a single-tier, single-interval TextGrid named
+  `"utterances"` spanning `[0, Duration]`.
+  - **Praat gotcha worth remembering**: form variable names only lowercase the *first
+    character* of the label, not the whole thing — `"Output TextGrid"` becomes
+    `output_TextGrid$`, not `output_textgrid$`. Confirmed empirically against the real
+    Praat binary; got this wrong on the first pass and it silently failed with "Unknown
+    variable" until fixed.
+  - Duration is passed in as a number rather than having the script open the audio
+    itself (`Open long sound file` + `Get total duration`), since VoxHumana already
+    computes duration elsewhere (librosa) and re-reading a long audio file just for its
+    length is wasted work — this was the original ask that prompted the parameterization.
+- **[pipeline/txt_to_textgrid.py](pipeline/txt_to_textgrid.py)** — Python wrapper
+  following the same pattern as `combine_textgrids.py`/`generate_transcript.py`
+  (a thin `pipeline/*.py` ↔ `pipeline/praat/*.praat` pair calling
+  `praat_utils.run_praat_script`). `txt_to_textgrid(txt_path, audio_path, job_dir,
+  config=None)` computes duration via `librosa.get_duration()`, then writes to
+  `job_dir/whisper_output/{audio_stem}.TextGrid` — the exact path `align_with_mfa.py`
+  already reads its transcript input from.
+
+Both files have a header comment pointing back to this TODO entry.
+
+### How the rest was wired in (now reverted — this is how to redo it)
+
+**Frontend — `web/static/index.html`:**
+- `#textgrid-input`'s `accept` widened from `.TextGrid` to `.TextGrid,.txt`.
+- A warning banner (`#txt-transcript-warning`, styled like the existing
+  `#utterance-tier-picker-status` warning) shown whenever the selected file ends in
+  `.txt`: explains the single-utterance-spanning-the-recording tradeoff (slower/less
+  accurate alignment vs. a real timestamped TextGrid).
+- `isTxtTranscript(file)` helper; `setTextGrid()` toggles the banner via it.
+- `maybeLoadTierPicker()` short-circuits (hides both tier-picker sections, skips the
+  `/api/textgrid-tiers` fetch) when the selected file is `.txt`, since a plain-text file
+  has no tiers to read.
+- `updateTextGridHint()`'s secondary text mentions the `.txt` option, but only in the
+  Align-is-running branch (matches the design constraint above).
+- The post-job reset routine hides the warning banner along with the rest of the
+  TextGrid upload zone's reset.
+
+**Backend — `web/app.py`:**
+- `from pipeline.txt_to_textgrid import txt_to_textgrid` alongside the other pipeline
+  imports.
+- In `create_job()`, the "a TextGrid was uploaded, Transcribe was skipped" branch grew a
+  new fork: `is_txt_transcript = Path(tg_original).suffix.lower() == ".txt"`.
+  - If `.txt` and `not run_alignment` → 400 (`"A plain-text transcript has no word/phone
+    tiers, so it can only be used when Align is running..."`).
+  - If `.txt` (and Align is running) → the raw upload is written to
+    `whisper_output/{safe_stem}_transcript.txt`, `txt_to_textgrid()` is called to
+    produce `whisper_output/{safe_stem}.TextGrid`, and a new `plain_text_transcript =
+    True` local var is set (threaded into `config["plain_text_transcript"]`). No tier
+    picking happens — there are no tiers to pick.
+  - Otherwise, the existing `.TextGrid` tier-selection logic (word/phone or utterance
+    tier extraction) runs unchanged, just re-indented under an `else:`.
+- `config["mfa"]` gets `beam: 100, retry_beam: 400` added *only* when
+  `plain_text_transcript` is true (see "What broke" below for why) — every other job
+  path is untouched and still uses MFA's own defaults.
+- `_write_processing_log()`: the "STEP 1 — TRANSCRIPTION: skipped" branch distinguishes
+  `"plain-text transcript"` from `"user-supplied TextGrid"` in its header and body text;
+  the STEP 2 (MFA) `tg_source` description does the same; the MFA "Parameters:" block
+  prints `beam`/`retry_beam` (and a short explanation) whenever they're set.
+- `_write_server_log()`'s `summary.jsonl` line gets a `"plain_text_transcript": bool`
+  field alongside the other per-job settings, for later analytics.
+
+**`pipeline/align_with_mfa.py`:**
+- `config.get("beam")` / `config.get("retry_beam")` (both `None` by default, meaning "use
+  MFA's own defaults") get appended as `--beam <n>` / `--retry_beam <n>` to the `mfa
+  align` command, for both the conda and docker runners.
+
+### What was found while testing this (the real risk, if this comes back)
+
+Tested end-to-end against real audio (`data/sample_audio/1min/PhonicID002-Gavin_mormonese.wav`,
+~71.5s) via a real beta-tester transcript:
+
+- MFA's defaults (`beam=10`, `retry_beam=40` — tuned for short, Whisper-length
+  utterances) **completely failed** to align that one ~71-second utterance:
+  `NoAlignmentsError: There were no successful alignments for 1 utterances.` A short,
+  throwaway test sentence against the same audio happened to align fine at the
+  defaults, which is what made this easy to miss at first — it only surfaced with a
+  realistic, full-length transcript.
+- Widening to `--beam 100 --retry_beam 400` (MFA's own suggested fallback in that error
+  message) fixed it: produced a clean 868-interval word/phone alignment with plausible
+  timings, in about a minute instead of failing in ~2 seconds.
+- **This is not a guaranteed fix for longer recordings.** A full sociolinguistic
+  interview (tens of minutes) forced into a single utterance may still fail, or become
+  very slow, even at the wider beam — this was only confirmed to work at ~70 seconds.
+  The more robust (but more invasive) alternative, not built: split the transcript text
+  into multiple utterance-sized intervals (by sentence-ending punctuation, say) spread
+  across the duration — even without real timestamps, bounding each alignment search to
+  a shorter window is much more survivable for MFA than one very long span. Worth
+  prototyping if beam-widening alone proves insufficient.
+
 ## Flexibility in tier order
 
 Instead of imposing a tier order, let the user pick. This would be an "advanced option" for MFA.
