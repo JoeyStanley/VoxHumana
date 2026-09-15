@@ -24,6 +24,13 @@ def transcribe(audio_path, job_dir, config=None):
         condition_on_previous_text=condition_on_previous_text,
     )
 
+    if not result["segments"]:
+        raise RuntimeError(
+            "No speech was detected in this audio. If this is a stereo file, check "
+            "that the two channels aren't out of phase -- mixing to mono for "
+            "transcription can cancel the audio out entirely."
+        )
+
     stem = Path(audio_path).stem
     whisper_dir = Path(job_dir) / "whisper_output"
     whisper_dir.mkdir(parents=True, exist_ok=True)

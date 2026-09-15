@@ -782,7 +782,7 @@
     data.append('textgrid', selectedTextGrid);
     try {
       const res  = await fetch(`${ROOT_PATH}/api/textgrid-tiers`, { method: 'POST', body: data });
-      const body = await res.json();
+      const body = await parseJsonResponse(res);
       if (!res.ok) throw new Error(body.detail || 'Could not read TextGrid tiers.');
       populateTierSelects(body.tiers, body.guess);
       populateUtteranceTierSelect(body.tiers, body.guess);
@@ -1005,7 +1005,7 @@
       const data = new FormData();
       data.append('textgrid', fileEntry.file);
       const res  = await fetch(`${ROOT_PATH}/api/textgrid-tiers`, { method: 'POST', body: data });
-      const body = await res.json();
+      const body = await parseJsonResponse(res);
       if (!res.ok) throw new Error(body.detail || 'Could not read TextGrid tiers.');
       row.tierInfo = body;
       if (mode === 'wordphone') {
@@ -1370,6 +1370,64 @@
     return data;
   }
 
+  // The app itself always answers with JSON, including its own error
+  // responses -- so a body that fails to parse means something in front of
+  // it (a reverse proxy, a university gateway) intercepted the request and
+  // sent back its own HTML error page instead, most often because a large
+  // upload over a slow connection ran past a proxy timeout. Surface that as
+  // an actionable message instead of a raw "Unexpected token '<'" parse error.
+  function parseJsonOrFriendlyError(text) {
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      throw new Error(
+        'The server sent back something other than a result, instead of a normal response from ' +
+        'VoxHumana. This usually means a proxy or the connection itself timed out partway through ' +
+        '-- common with large files on slow connections. Try again on a faster network, or split ' +
+        'the recording into smaller pieces (see the User Guide).'
+      );
+    }
+  }
+
+  async function parseJsonResponse(res) {
+    return parseJsonOrFriendlyError(await res.text());
+  }
+
+  // XHR (not fetch) because only XHR exposes upload progress -- long uploads
+  // otherwise leave the submit button looking frozen for however long the
+  // transfer takes, which is exactly what was mistaken for a hang.
+  function uploadJobFormData(formData, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${ROOT_PATH}/api/jobs`);
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+      });
+      xhr.addEventListener('load', () => {
+        let body;
+        try {
+          body = parseJsonOrFriendlyError(xhr.responseText);
+        } catch (err) {
+          reject(err);
+          return;
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(body);
+        } else {
+          reject(new Error(body.detail || 'Submission failed'));
+        }
+      });
+      xhr.addEventListener('error', () => {
+        reject(new Error(
+          'Lost the connection to the server while uploading. This usually means the upload took ' +
+          'too long for the connection to sustain -- try again on a faster network, or split the ' +
+          'recording into smaller pieces (see the User Guide).'
+        ));
+      });
+      xhr.send(formData);
+    });
+  }
+
   function enqueueSubmission(rowId) {
     uploadQueue.push(rowId);
     pumpUploadQueue();
@@ -1418,9 +1476,10 @@
         data.append('utterance_tier_index', String(row.uttIdx));
       }
 
-      const res  = await fetch(`${ROOT_PATH}/api/jobs`, { method: 'POST', body: data });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.detail || 'Submission failed');
+      const body = await uploadJobFormData(data, (frac) => {
+        row.uploadProgress = frac;
+        updateConfirmedJobPanel(rowId);
+      });
       row.jobId = body.job_id;
       row.downloadToken = body.download_token;
       setRowStatus(row, 'queued');
@@ -1613,7 +1672,10 @@
   function confirmedJobStatusLabel(row) {
     switch (row.jobStatus) {
       case 'queued_for_upload': return 'Waiting to upload…';
-      case 'uploading':         return 'Uploading…';
+      case 'uploading':
+        return typeof row.uploadProgress === 'number'
+          ? `Uploading… ${Math.round(row.uploadProgress * 100)}%`
+          : 'Uploading…';
       case 'queued':            return 'Queued';
       case 'running':           return 'Running';
       case 'done':               return 'Done';
@@ -2005,7 +2067,7 @@
 
     const btn = document.getElementById('submit-btn');
     btn.disabled    = true;
-    btn.textContent = 'Submitting…';
+    btn.textContent = 'Uploading… 0%';
 
     const data = buildJobFormData(collectSharedSettingsFromForm());
     data.append('audio', selectedFile);
@@ -2019,9 +2081,9 @@
     }
 
     try {
-      const res  = await fetch(`${ROOT_PATH}/api/jobs`, { method: 'POST', body: data });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.detail || 'Submission failed');
+      const body = await uploadJobFormData(data, (frac) => {
+        btn.textContent = `Uploading… ${Math.round(frac * 100)}%`;
+      });
       currentJobId         = body.job_id;
       currentDownloadToken = body.download_token;
       vxhSaveJob({ job_id: currentJobId, download_token: currentDownloadToken, filename: selectedFile.name, submitted_at: new Date().toISOString() });
