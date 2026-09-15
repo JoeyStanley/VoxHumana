@@ -6,7 +6,7 @@ publication details may change.
 
 ### VoxHumana
 
-> Stanley, Joey (in preparation). *VoxHumana: Automated sociophonetic analysis.* Brigham Young University.
+> Joey Stanley (2027). *Introducing VoxHumana: An automated phonetic processing tool and 'spiritual successor' to DARLA.* Linguistic Society of American Annual Meeting. January 6--9. San Francisco, CA.
 
 ### Whisper
 
