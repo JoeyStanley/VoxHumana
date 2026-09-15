@@ -64,3 +64,9 @@ own intermediate files use.
 - **Duration mismatch** between the TextGrid and the audio (e.g. uploading a TextGrid made
   for a trimmed or re-encoded version of the file) — nothing catches this automatically, so
   verify durations match before submitting.
+- **Pasting text into an interval** in Praat — if the text you paste contains a line break
+  (common when copying a paragraph from a Word doc, PDF, or web page), it gets embedded as a
+  literal newline inside that interval's label. Praat itself tolerates this, but it can produce
+  a corrupted TextGrid that MFA silently misreads as having no transcript at all, surfacing as
+  an unrelated-looking alignment error. If alignment fails on an otherwise-normal file, check
+  for and remove any embedded line breaks in your interval text.

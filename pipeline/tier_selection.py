@@ -131,7 +131,11 @@ def extract_utterance_tier(textgrid_path, utterance_idx, output_path=None):
     out_tg.add_tier(utterance_tier)
 
     dest = Path(output_path) if output_path else Path(textgrid_path)
-    tgt.write_to_file(out_tg, str(dest))
+    # tgt's default "short" TextGrid format mis-serializes interval text that
+    # contains an embedded literal newline, corrupting the file for praatio
+    # (what MFA actually reads it with) into a tier with zero entries. "long"
+    # format handles embedded newlines correctly.
+    tgt.write_to_file(out_tg, str(dest), format="long")
     return dest
 
 
@@ -163,5 +167,7 @@ def extract_word_phone_tiers(textgrid_path, word_idx, phone_idx, output_path=Non
     out_tg.add_tier(phone_tier)
 
     dest = Path(output_path) if output_path else Path(textgrid_path)
-    tgt.write_to_file(out_tg, str(dest))
+    # See extract_utterance_tier: "long" format avoids tgt mis-serializing
+    # interval text with an embedded literal newline.
+    tgt.write_to_file(out_tg, str(dest), format="long")
     return dest
