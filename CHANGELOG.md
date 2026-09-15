@@ -7,6 +7,7 @@ All notable changes to VoxHumana will be documented here.
 ## [0.16.2] - 2026-09-15
 ### Added
 - Visual cues when uploading large files in the upload button.
+- Citation information to LSA talk.
 
 ## [0.16.1] - 2026-09-07
 ### Added 
