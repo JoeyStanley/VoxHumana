@@ -3,10 +3,12 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+### Added
+- A trivial change to check deployment.
 
 ## [0.16.3] - 2026-09-15
 ### Fixed
-- Added robustness to trailing newline characters by changing from "short" to "long" TextGrids in backend. Added note about being careful with pasted text in transcriptions. (Thanks, Peggy!) 
+- Added robustness to trailing newline characters by changing from "short" to "long" TextGrids in backend. Added note about being careful with pasted text in transcriptions. (Thanks, Peggy!)
 
 ## [0.16.2] - 2026-09-15
 ### Added
