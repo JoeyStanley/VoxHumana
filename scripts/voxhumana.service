@@ -1,0 +1,16 @@
+[Unit]
+Description=VoxHumana web server
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/VoxHumana
+Environment="VXH_ROOT_PATH=/VoxHumana"
+Environment="PATH=/home/shiny/miniconda3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+ExecStart=/srv/VoxHumana/.venv/bin/uvicorn web.app:app --host 127.0.0.1 --port 8008 --workers 1
+StandardOutput=append:/srv/VoxHumana/voxhumana.log
+StandardError=append:/srv/VoxHumana/voxhumana-error.log
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
