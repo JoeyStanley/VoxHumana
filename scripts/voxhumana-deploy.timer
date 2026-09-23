@@ -1,0 +1,10 @@
+[Unit]
+Description=Run voxhumana-deploy.service every 60 seconds
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=60
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

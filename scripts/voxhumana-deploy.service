@@ -1,0 +1,9 @@
+[Unit]
+Description=Poll VoxHumana git repo and deploy on new commits
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/VoxHumana
+ExecStart=/srv/VoxHumana/scripts/poll_deploy.sh
+StandardOutput=append:/srv/VoxHumana/deploy-poll.log
+StandardError=append:/srv/VoxHumana/deploy-poll.log
