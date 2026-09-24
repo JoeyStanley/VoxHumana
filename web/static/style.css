@@ -326,6 +326,24 @@ html, body {
   box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
 }
 
+textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--pcb);
+  border-radius: 4px;
+  background: white;
+  font-size: 12px;
+  color: var(--pd);
+  outline: none;
+  font-family: Arial, sans-serif;
+  resize: vertical;
+  box-sizing: border-box;
+}
+textarea:focus {
+  border-color: var(--pg);
+  box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
+}
+
 /* Segmented control */
 .segmented { display: flex; border: 1px solid var(--pcb); border-radius: 4px; overflow: hidden; }
 .seg-opt { flex: 1; }

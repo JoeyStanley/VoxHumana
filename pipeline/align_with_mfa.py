@@ -3,6 +3,92 @@ import subprocess
 import shutil
 from pathlib import Path
 
+from pipeline.languages import MFA_G2P_MODEL_BY_DICTIONARY, mfa_dictionary_file
+
+
+def merge_or_validate_pronunciations(dictionary_name, new_pronunciations_path, target_dir,
+                                      conda_env="aligner", timeout=300):
+    """
+    Copy the installed `dictionary_name` dictionary into `target_dir` and merge
+    in the entries from `new_pronunciations_path` via `mfa model add_words`.
+
+    Always operates on a fresh copy of the installed dictionary - never
+    mutates the shared, globally installed model. Used both to build a real
+    merged dictionary (out-of-vocabulary "upload + merge" and "type" modes)
+    and, for "upload + replace", purely to validate that the uploaded
+    pronunciations' phones are compatible with the dictionary's phone set
+    (the caller discards the merged copy in that case and uses the original
+    upload as-is).
+
+    Returns the path to the merged copy (target_dir / "<dictionary_name>_merged.dict").
+
+    Raises RuntimeError with a user-facing message - naming the specific bad
+    phone(s) when MFA reports a PhoneMismatchError - on any failure. Safe to
+    catch and re-raise as an HTTP 400 from a request handler.
+    """
+    target_dir = Path(target_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    builtin_dict = mfa_dictionary_file(dictionary_name)
+    if not builtin_dict.exists():
+        raise RuntimeError(
+            f"Could not find the installed '{dictionary_name}' dictionary on the server "
+            f"(expected at {builtin_dict}). Contact the site administrator."
+        )
+
+    target = target_dir / f"{dictionary_name}_merged.dict"
+    shutil.copy2(builtin_dict, target)
+
+    cmd = [
+        "conda", "run", "-n", conda_env, "--no-capture-output",
+        "mfa", "model", "add_words",
+        str(target), str(new_pronunciations_path), "--overwrite",
+    ]
+
+    with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise RuntimeError("Adding custom pronunciations to the dictionary timed out.")
+
+    if proc.returncode != 0:
+        combined = f"{stdout}\n{stderr}"
+        if "PhoneMismatchError" in combined:
+            # MFA reports unrecognized phones one per line immediately after
+            # this header, with no blank-line separator before `conda run`'s
+            # own "ERROR conda.cli.main_run: ... failed" line gets appended
+            # right after them - stop there so that trailing line doesn't
+            # get mistaken for a phone. Pulling out just the phone names lets
+            # the message name the exact symbol that's wrong (e.g. a
+            # shortened ARPABET symbol like "H" instead of "HH").
+            after = combined.split(
+                "There were extra phones that were not in the dictionary:", 1
+            )
+            phones = []
+            if len(after) == 2:
+                for line in after[1].splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("ERROR conda"):
+                        break
+                    phones.append(line)
+            phones_str = ", ".join(phones) if phones else "(see details below)"
+            raise RuntimeError(
+                "One or more custom pronunciations use phone symbols that aren't part of "
+                f"the '{dictionary_name}' dictionary's phone set (unrecognized: {phones_str}). "
+                "Double check each phone against that dictionary's phone inventory — a common "
+                "mistake is a shortened ARPABET symbol (e.g. 'H' instead of 'HH')."
+            )
+        raise RuntimeError(
+            f"Could not add your custom pronunciations to the dictionary (exit code "
+            f"{proc.returncode}).\n{stderr.strip()}"
+        )
+
+    return target
+
 
 def align_with_mfa(audio_path, job_dir, config=None):
     """
@@ -26,6 +112,20 @@ def align_with_mfa(audio_path, job_dir, config=None):
         output_format (str):  "long_textgrid" (default), "short_textgrid", "json", or "csv"
         docker_image (str):   Docker image, default "mmcauliffe/montreal-forced-aligner:latest"
         timeout (int):        seconds before giving up, default 7200 (2 hours)
+        oov_mode (str):       "guess" (default), "upload", or "type" - how out-of-
+                               vocabulary words are handled. "guess" uses MFA's G2P
+                               model (see MFA_G2P_MODEL_BY_DICTIONARY) if one is
+                               available for `dictionary`. "upload"/"type" expect
+                               oov_resolved_dictionary_path to already point at a
+                               dictionary file prepared (and phone-validated) by
+                               merge_or_validate_pronunciations() before this
+                               function is ever called - see web/app.py's
+                               create_job, which runs that synchronously at job
+                               submission time so a bad phone fails fast instead
+                               of surfacing deep into a background alignment run.
+        oov_resolved_dictionary_path (str): path to a pre-built dictionary file
+                               to use instead of `dictionary`, for oov_mode
+                               "upload"/"type".
 
     Returns:
         Path to the MFA output directory containing aligned TextGrid(s).
@@ -62,6 +162,19 @@ def align_with_mfa(audio_path, job_dir, config=None):
     output_format = config.get("output_format", "long_textgrid")
     runner = config.get("runner", "conda")
 
+    # Out-of-vocabulary word handling: a pre-resolved custom dictionary
+    # (already merged/validated by merge_or_validate_pronunciations() at job
+    # submission time, see web/app.py) takes precedence over the plain
+    # dictionary name. Otherwise, fall back to MFA's own G2P guessing if a
+    # G2P model is available for this dictionary.
+    oov_resolved_dictionary_path = config.get("oov_resolved_dictionary_path")
+    g2p_model = None
+    if oov_resolved_dictionary_path:
+        dictionary_arg = str(oov_resolved_dictionary_path)
+    else:
+        dictionary_arg = dictionary
+        g2p_model = MFA_G2P_MODEL_BY_DICTIONARY.get(dictionary)
+
     if runner == "docker":
         docker_image = config.get("docker_image", "mmcauliffe/montreal-forced-aligner:latest")
         cmd = [
@@ -70,7 +183,7 @@ def align_with_mfa(audio_path, job_dir, config=None):
             docker_image,
             "mfa", "align",
             "/data/mfa_corpus",
-            dictionary,
+            dictionary_arg,
             acoustic_model,
             "/data/mfa_output",
             "--temporary_directory", "/data/mfa_temp",
@@ -80,13 +193,15 @@ def align_with_mfa(audio_path, job_dir, config=None):
         ]
         if fine_tune:
             cmd.append("--fine_tune")
+        if g2p_model:
+            cmd += ["--g2p_model_path", g2p_model]
     else:
         conda_env = config.get("conda_env", "aligner")
         cmd = [
             "conda", "run", "-n", conda_env, "--no-capture-output",
             "mfa", "align",
             str(corpus_dir),
-            dictionary,
+            dictionary_arg,
             acoustic_model,
             str(output_dir),
             "--temporary_directory", str(temp_dir),
@@ -96,6 +211,8 @@ def align_with_mfa(audio_path, job_dir, config=None):
         ]
         if fine_tune:
             cmd.append("--fine_tune")
+        if g2p_model:
+            cmd += ["--g2p_model_path", g2p_model]
 
     timeout = config.get("timeout", 7200)  # 2 hours default
 

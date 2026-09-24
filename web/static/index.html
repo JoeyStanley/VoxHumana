@@ -211,6 +211,46 @@
               <label for="fine-tune">Fine tune</label>
             </div>
             <p class="adv-coming-soon" style="margin: 2px 0 0 22px">Runs an extra MFA refinement pass after the initial alignment. This improves accuracy, but is slower.</p>
+
+            <div style="margin-top:14px">
+              <label style="display:block; margin-bottom:6px; font-weight:600; font-size:13px;">Out-of-vocabulary (OOV) words</label>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                <label style="display:flex; align-items:center; gap:6px; font-weight:normal; cursor:pointer;">
+                  <input type="radio" name="oov_mode" value="guess" id="oov-mode-guess" checked onchange="onOovModeChange()">
+                  Let MFA guess (default)
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; font-weight:normal; cursor:pointer;">
+                  <input type="radio" name="oov_mode" value="upload" id="oov-mode-upload" onchange="onOovModeChange()">
+                  Upload a custom dictionary file
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; font-weight:normal; cursor:pointer;">
+                  <input type="radio" name="oov_mode" value="type" id="oov-mode-type" onchange="onOovModeChange()">
+                  Type custom words
+                </label>
+              </div>
+              <p class="adv-coming-soon" style="margin:4px 0 0 22px">Controls how MFA handles words in the transcript that aren't in its pronunciation dictionary.</p>
+              <p class="adv-coming-soon" id="oov-guess-lang-note" style="display:none; margin:4px 0 0 22px; color:#7a3a20;">Automatic guessing isn't available for Spanish or Portuguese yet — out-of-vocabulary words will be left unaligned unless you upload or type custom pronunciations.</p>
+
+              <div id="oov-upload-fields" style="display:none; margin-top:10px; margin-left:22px">
+                <input type="file" id="oov-dict-input" accept=".txt,.dict">
+                <div class="upload-zone" id="oov-dict-drop-zone" style="padding:20px">
+                  <div class="upload-primary" id="oov-dict-drop-primary" style="font-size:12px">Drop dictionary file here or click to browse</div>
+                  <div class="upload-secondary" id="oov-dict-drop-secondary">.txt or .dict — tab-separated "word[TAB]pronunciation" lines</div>
+                  <div class="upload-filename" id="oov-dict-drop-filename" style="display:none"></div>
+                </div>
+                <div class="field-check" style="margin-top:10px">
+                  <input type="checkbox" id="oov-merge-checkbox" name="oov_merge_with_builtin" checked>
+                  <label for="oov-merge-checkbox">Merge with built-in dictionary</label>
+                </div>
+                <p class="adv-coming-soon" style="margin:2px 0 0 22px">When unchecked, your uploaded file completely replaces the built-in dictionary for this job instead of adding to it.</p>
+                <p class="adv-coming-soon" style="margin:4px 0 0 22px">Format: one entry per line, tab-separated — the word, then its pronunciation using the phone set of the selected dictionary (e.g. CMU ARPABET for english_us_arpa). Checked against that dictionary's phone set before the job starts, so a bad phone symbol is caught immediately.</p>
+              </div>
+
+              <div id="oov-type-fields" style="display:none; margin-top:10px; margin-left:22px">
+                <textarea name="oov_custom_words" id="oov-custom-words" rows="5" placeholder="mormonese&#9;M AO1 R M AH0 N IY1 Z"></textarea>
+                <p class="adv-coming-soon" style="margin:4px 0 0">One word per line, tab-separated from its pronunciation using the phone set of the selected dictionary. Always merged with the built-in dictionary, and checked against its phone set before the job starts.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -505,6 +545,7 @@
   // ─── State ────────────────────────────────────────────────────────────────────
   let selectedFile     = null;
   let selectedTextGrid = null;
+  let selectedOovDictionary = null;
   let currentJobId        = null;
   let currentDownloadToken = null;
   let primarySettled   = true;  // false while the primary job still needs polling
@@ -619,6 +660,29 @@
     if (e.dataTransfer.files[0]) setTextGrid(e.dataTransfer.files[0]);
   });
   tgFileInput.addEventListener('change', () => { if (tgFileInput.files[0]) setTextGrid(tgFileInput.files[0]); });
+
+  // Custom OOV dictionary upload
+  const oovDropZone  = document.getElementById('oov-dict-drop-zone');
+  const oovFileInput = document.getElementById('oov-dict-input');
+
+  oovDropZone.addEventListener('click', () => oovFileInput.click());
+  oovDropZone.addEventListener('dragover', (e) => { e.preventDefault(); oovDropZone.classList.add('drag-over'); });
+  oovDropZone.addEventListener('dragleave', () => oovDropZone.classList.remove('drag-over'));
+  oovDropZone.addEventListener('drop', (e) => {
+    e.preventDefault(); oovDropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) setOovDictionary(e.dataTransfer.files[0]);
+  });
+  oovFileInput.addEventListener('change', () => { if (oovFileInput.files[0]) setOovDictionary(oovFileInput.files[0]); });
+
+  function setOovDictionary(file) {
+    selectedOovDictionary = file;
+    oovDropZone.classList.add('has-file');
+    document.getElementById('oov-dict-drop-primary').textContent     = 'File selected';
+    document.getElementById('oov-dict-drop-secondary').style.display = 'none';
+    const fn = document.getElementById('oov-dict-drop-filename');
+    fn.textContent   = file.name;
+    fn.style.display = 'block';
+  }
 
   // ─── "Process additional files" drop zone (on the running page) ─────────────
   // Always goes through the batch table, even for a single file, since this
@@ -1350,6 +1414,9 @@
       acoustic_model:             form.acoustic_model.value,
       fine_tune:                  form.fine_tune.checked,
       dictionary:                 form.dictionary.value,
+      oov_mode:                   form.oov_mode.value,
+      oov_merge_with_builtin:     form.oov_merge_with_builtin.checked,
+      oov_custom_words:           form.oov_custom_words.value,
       formant_ceiling:            form.formant_ceiling.value,
       num_formants:               form.num_formants.value,
       include_overlaps:           form.include_overlaps.checked,
@@ -1469,6 +1536,9 @@
       const data = buildJobFormData(collectSharedSettingsFromForm());
       data.append('audio', audioEntry.file);
       if (tgEntry) data.append('textgrid', tgEntry.file);
+      if (document.getElementById('vxh-form').oov_mode.value === 'upload' && selectedOovDictionary) {
+        data.append('oov_dictionary', selectedOovDictionary);
+      }
       if (tierMode === 'wordphone') {
         data.append('phone_tier_index', String(row.phoneIdx));
         data.append('word_tier_index',  String(row.wordIdx));
@@ -1942,6 +2012,12 @@
 
     note.style.display = formantsSupported ? 'none' : '';
 
+    // "Let MFA guess" OOV handling relies on a downloaded G2P model, which
+    // only exists (under an exact-matching name) for English, French, and
+    // German today — see MFA_G2P_MODEL_BY_DICTIONARY in pipeline/languages.py.
+    const oovGuessSupported = (lang === 'en' || lang === 'fr' || lang === 'de');
+    document.getElementById('oov-guess-lang-note').style.display = oovGuessSupported ? 'none' : '';
+
     // "Treat vowels and following liquids as single units" relies on CMU
     // ARPABET stress-digit labels, so it only works for English.
     const preliquidCb   = document.getElementById('combine-preliquid');
@@ -1977,6 +2053,13 @@
     document.getElementById('fave-extract-fields').style.display = usingFave ? '' : 'none';
     document.querySelector('#toggle-formants .step-label-tool').textContent =
       usingFave ? 'FAVE-extract' : 'new-fave';
+  }
+
+  // ─── Out-of-vocabulary word handling ─────────────────────────────────────────
+  function onOovModeChange() {
+    const mode = document.getElementById('vxh-form').oov_mode.value;
+    document.getElementById('oov-upload-fields').style.display = mode === 'upload' ? '' : 'none';
+    document.getElementById('oov-type-fields').style.display   = mode === 'type'   ? '' : 'none';
   }
 
   // ─── Combine pre-liquid vowel sequences ──────────────────────────────────────
@@ -2072,6 +2155,9 @@
     const data = buildJobFormData(collectSharedSettingsFromForm());
     data.append('audio', selectedFile);
     if (selectedTextGrid) data.append('textgrid', selectedTextGrid);
+    if (document.getElementById('vxh-form').oov_mode.value === 'upload' && selectedOovDictionary) {
+      data.append('oov_dictionary', selectedOovDictionary);
+    }
     if (tierPickerVisible) {
       data.append('phone_tier_index', phoneTierSelect.value);
       data.append('word_tier_index',  wordTierSelect.value);
@@ -2322,6 +2408,7 @@
     currentDownloadToken = null;
     selectedFile     = null;
     selectedTextGrid = null;
+    selectedOovDictionary = null;
 
     clearBatchAddState();
     stopGlobalPollingIfIdle();
@@ -2341,6 +2428,15 @@
     document.getElementById('textgrid-drop-secondary').style.display = '';
     document.getElementById('textgrid-drop-filename').style.display  = 'none';
     tgFileInput.value = '';
+
+    // OOV mode/merge choice intentionally persist (same precedent as the
+    // dictionary/acoustic model step toggles above) — only the attached file
+    // itself clears, since it's a one-time upload, not a setting.
+    oovDropZone.classList.remove('has-file');
+    document.getElementById('oov-dict-drop-primary').textContent     = 'Drop dictionary file here or click to browse';
+    document.getElementById('oov-dict-drop-secondary').style.display = '';
+    document.getElementById('oov-dict-drop-filename').style.display  = 'none';
+    oovFileInput.value = '';
 
     tierPickerLoadedFor = null;
     document.getElementById('tier-picker-section').style.display = 'none';

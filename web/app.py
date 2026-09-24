@@ -1,5 +1,6 @@
 """VoxHumana web server — FastAPI app that wraps the processing pipeline."""
 
+import asyncio
 import importlib.metadata
 import io
 import json
@@ -32,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipeline.transcribe_with_whisper import transcribe
 from pipeline.convert_whisper_to_textgrid import convert_whisper_to_textgrid
 from pipeline.generate_transcript import generate_transcript
-from pipeline.align_with_mfa import align_with_mfa
+from pipeline.align_with_mfa import align_with_mfa, merge_or_validate_pronunciations
 from pipeline.extract_with_newfave import extract_with_newfave, LANGUAGE_DEFAULTS, PRELIQUID_RECODE_RULES
 from pipeline.extract_with_fave import extract_with_fave, get_fave_version
 from pipeline.combine_textgrids import combine_textgrids
@@ -44,6 +45,8 @@ from pipeline.tier_selection import (
     extract_utterance_tier,
 )
 from pipeline.languages import (
+    MFA_DICTIONARY_DOCS_URL,
+    MFA_G2P_MODEL_BY_DICTIONARY,
     NEWFAVE_LANGUAGE_PRESETS,
     SUPPORTED_MFA_ACOUSTIC_MODELS,
     SUPPORTED_MFA_DICTIONARIES,
@@ -74,6 +77,8 @@ def _get_app_version() -> str:
 APP_VERSION = _get_app_version()
 
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
+MAX_OOV_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB — a plain-text pronunciation dictionary, not audio
+_OOV_DICT_EXTENSIONS = {".txt", ".dict"}
 JOB_RETENTION_HOURS = 72
 
 # NEWFAVE_LANGUAGE_PRESETS, SUPPORTED_MFA_ACOUSTIC_MODELS, and
@@ -160,13 +165,26 @@ def _sanitize_stem(filename: str) -> str:
 def _cleanup_intermediates(job_dir: Path, audio_path: Path) -> None:
     """Delete large files that are no longer needed once the pipeline finishes."""
     audio_path.unlink(missing_ok=True)
-    for dirname in ("mfa_corpus", "mfa_temp"):
+    for dirname in ("mfa_corpus", "mfa_temp", "mfa_oov"):
         d = job_dir / dirname
         if d.exists():
             shutil.rmtree(d)
 
 
 _AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif"}
+
+
+def _looks_like_pronunciation_dict(text: str) -> bool:
+    """Cheap sanity check for an uploaded/typed OOV dictionary: not empty, and
+    at least one of the first ~20 non-blank lines looks tab-separated
+    ("word<TAB>phones"). Catches "wrong file entirely" (audio, CSV, a Word
+    doc) before bothering to invoke MFA — real phone-set validation is left
+    to merge_or_validate_pronunciations()'s PhoneMismatchError handling.
+    """
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        return False
+    return any("\t" in line for line in lines[:20])
 
 
 def _expire_old_jobs() -> None:
@@ -268,6 +286,7 @@ def _write_processing_log(
         if f.is_file()
         and "mfa_corpus" not in f.parts
         and "mfa_temp" not in f.parts
+        and "mfa_oov" not in f.parts
         and f.name != audio_filename
         and f.name != "processing_log.txt"
     )
@@ -410,6 +429,11 @@ def _write_processing_log(
         fine_tune = m_cfg.get("fine_tune", False)
         num_jobs = m_cfg.get("num_jobs", 1)
         output_format = m_cfg.get("output_format", "long_textgrid")
+        oov_mode = m_cfg.get("oov_mode", "guess")
+        oov_merge_with_builtin = m_cfg.get("oov_merge_with_builtin", True)
+        oov_dictionary_original_filename = m_cfg.get("oov_dictionary_original_filename")
+        oov_custom_words_text = m_cfg.get("oov_custom_words_text")
+        g2p_model = MFA_G2P_MODEL_BY_DICTIONARY.get(dictionary)
         tg_source = "user-supplied TextGrid" if not ran_transcription else "Whisper/TextGridTools-generated TextGrid"
 
         ln(f"STEP 2 — FORCED ALIGNMENT: Montreal Forced Aligner (MFA)  v{mfa_ver}")
@@ -419,10 +443,32 @@ def _write_processing_log(
         ln("produces another Praat TextGrid with word- and phone-level time-aligned")
         ln("intervals. This TextGrid is the primary input to new-fave in Step 3.")
         ln("")
-        ln("If any words in the transcript were not found in the pronunciation dictionary,")
-        ln("MFA guessed their pronunciations. Those words are listed in oovs_found.txt")
-        ln("(included in your download if any were found). Poor guesses can degrade")
-        ln("alignment quality around those words.")
+        ln("Any words in the transcript not found in the pronunciation dictionary are")
+        ln("listed in oovs_found.txt (included in your download if any were found).")
+        ln("")
+        if oov_mode == "guess":
+            if g2p_model:
+                ln(f"Out-of-vocabulary words: MFA's G2P model ('{g2p_model}') automatically")
+                ln("generated pronunciations for these. Poor guesses can degrade alignment")
+                ln("quality around those words.")
+            else:
+                ln("Out-of-vocabulary words: automatic guessing isn't available for this")
+                ln(f"dictionary ('{dictionary}') yet, so OOV words were left unaligned.")
+        elif oov_mode == "upload":
+            ln(f"Out-of-vocabulary words: a custom dictionary uploaded by the user "
+               f"('{oov_dictionary_original_filename}') was "
+               f"{'merged with' if oov_merge_with_builtin else 'used in place of'} "
+               f"the built-in '{dictionary}' dictionary for this job.")
+        elif oov_mode == "type":
+            ln("Out-of-vocabulary words: custom pronunciations entered by the user were")
+            ln(f"merged with the built-in '{dictionary}' dictionary for this job:")
+            ln("")
+            for word_line in (oov_custom_words_text or "").splitlines():
+                if word_line.strip():
+                    ln(f"    {word_line}")
+        ln("")
+        ln(f"MFA dictionary reference: {MFA_DICTIONARY_DOCS_URL}")
+        ln(f"(this job used the '{dictionary}' dictionary)")
         if ran_transcription:
             ln("")
             if ran_formants:
@@ -450,13 +496,28 @@ def _write_processing_log(
         ln(f"    #      {audio_filename}")
         ln(f"    #      {stem}.TextGrid   (utterance TextGrid from whisper_output/)")
         ln(f"    # 2. Run:")
-        ln(f"    mfa align corpus_dir/ \\")
-        ln(f"             {dictionary} \\")
-        ln(f"             {acoustic_model} \\")
-        ln(f"             mfa_output/ \\")
-        if fine_tune:
-            ln(f"             --fine_tune \\")
-        ln(f"             --output_format {output_format}")
+        if oov_mode == "guess":
+            ln(f"    mfa align corpus_dir/ \\")
+            ln(f"             {dictionary} \\")
+            ln(f"             {acoustic_model} \\")
+            ln(f"             mfa_output/ \\")
+            if fine_tune:
+                ln(f"             --fine_tune \\")
+            if g2p_model:
+                ln(f"             --g2p_model_path {g2p_model} \\")
+            ln(f"             --output_format {output_format}")
+        else:
+            ln(f"    # A custom dictionary was used for this job (see above) — the merged/")
+            ln(f"    # replaced dictionary file itself isn't kept after the job finishes,")
+            ln(f"    # so this command isn't reproducible verbatim. Substitute your own")
+            ln(f"    # merged dictionary path for DICTIONARY_PATH below.")
+            ln(f"    mfa align corpus_dir/ \\")
+            ln(f"             DICTIONARY_PATH \\")
+            ln(f"             {acoustic_model} \\")
+            ln(f"             mfa_output/ \\")
+            if fine_tune:
+                ln(f"             --fine_tune \\")
+            ln(f"             --output_format {output_format}")
     else:
         ln("STEP 2 — FORCED ALIGNMENT: skipped")
         ln(BAR)
@@ -773,6 +834,10 @@ def _write_server_log(
     ln(f"  dictionary:               {m_cfg.get('dictionary', 'english_us_arpa')}")
     ln(f"  fine_tune:                {m_cfg.get('fine_tune', False)}")
     ln(f"  num_jobs:                 {m_cfg.get('num_jobs', 1)}")
+    ln(f"  oov_mode:                 {m_cfg.get('oov_mode', 'guess')}")
+    if m_cfg.get("oov_mode") == "upload":
+        ln(f"  oov_dictionary_file:      {m_cfg.get('oov_dictionary_original_filename')}")
+        ln(f"  oov_merge_with_builtin:   {m_cfg.get('oov_merge_with_builtin', True)}")
     nf_language = nf_cfg.get("language", "en")
     nf_lang_defaults = LANGUAGE_DEFAULTS.get(nf_language, LANGUAGE_DEFAULTS["en"])
     nf_point_heuristic = nf_cfg.get("point_heuristic", nf_lang_defaults["point_heuristic"])
@@ -855,6 +920,8 @@ def _write_server_log(
         "mfa_acoustic_model":        m_cfg.get("acoustic_model", "english_us_arpa"),
         "mfa_dictionary":            m_cfg.get("dictionary", "english_us_arpa"),
         "mfa_fine_tune":             m_cfg.get("fine_tune", False),
+        "mfa_oov_mode":              m_cfg.get("oov_mode", "guess"),
+        "mfa_oov_merge_with_builtin": m_cfg.get("oov_merge_with_builtin", True),
         "formant_ceiling":           nf_cfg.get("formant_ceiling"),
         "num_formants":              nf_cfg.get("num_formants"),
         "include_overlaps":          nf_cfg.get("include_overlaps", True),
@@ -1071,6 +1138,10 @@ async def create_job(
     acoustic_model: str = Form("english_us_arpa"),
     dictionary: str = Form("english_us_arpa"),
     fine_tune: bool = Form(False),
+    oov_mode: str = Form("guess"),
+    oov_merge_with_builtin: bool = Form(True),
+    oov_custom_words: Optional[str] = Form(None),
+    oov_dictionary: Optional[UploadFile] = File(None),
     formant_ceiling: Optional[str] = Form(None),
     num_formants: Optional[str] = Form(None),
     include_overlaps: bool = Form(True),
@@ -1097,6 +1168,34 @@ async def create_job(
             status_code=400,
             detail=f"Unsupported dictionary '{dictionary}'. "
                    f"Supported: {sorted(SUPPORTED_MFA_DICTIONARIES)}",
+        )
+
+    # Out-of-vocabulary word handling only means anything when MFA alignment
+    # actually runs. The Alignment step's advanced options (including this
+    # radio group) persist across "Start Over" regardless of which steps are
+    # currently toggled on, so a stale oov_mode could otherwise be submitted
+    # alongside Align turned off — normalize back to the no-op default rather
+    # than demanding a dictionary/word list nobody will use.
+    if not run_alignment:
+        oov_mode = "guess"
+
+    # Out-of-vocabulary word handling: "guess" (MFA's G2P, default), "upload"
+    # (a user-supplied dictionary file), or "type" (pasted word/pronunciation
+    # pairs). Presence checks here; the files themselves are read, sanity-
+    # checked, and phone-validated further down, once job_dir exists.
+    if oov_mode not in ("guess", "upload", "type"):
+        raise HTTPException(status_code=400, detail=f"Unsupported oov_mode '{oov_mode}'.")
+    if oov_mode == "upload" and oov_dictionary is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload mode selected for out-of-vocabulary word handling, but no "
+                   "dictionary file was provided.",
+        )
+    if oov_mode == "type" and not (oov_custom_words and oov_custom_words.strip()):
+        raise HTTPException(
+            status_code=400,
+            detail="Type-custom-words mode selected for out-of-vocabulary word handling, "
+                   "but no words were entered.",
         )
 
     # Safety net: new-fave formant extraction needs a labelset parser and
@@ -1160,6 +1259,8 @@ async def create_job(
     #   - Align is running  → whisper_output/ (utterance TextGrid for MFA)
     #   - Align is skipped  → mfa_output/     (MFA-format TextGrid for new-fave)
     uploaded_files = [original_name]
+    if oov_mode == "upload" and oov_dictionary is not None:
+        uploaded_files.append(oov_dictionary.filename or "custom_dictionary.dict")
     tier_selection: Optional[dict] = None
     if textgrid is not None and not run_transcription:
         tg_original = textgrid.filename or "transcript.TextGrid"
@@ -1240,6 +1341,73 @@ async def create_job(
                 "utterance_idx": utterance_idx,
             }
 
+    # Out-of-vocabulary custom dictionary/words: write whatever was submitted
+    # to disk, sanity-check it looks like a pronunciation dictionary, then
+    # validate it against MFA itself — synchronously, right here in the
+    # request — so a bad phone symbol (e.g. "H" instead of "HH") fails fast
+    # with a specific error instead of surfacing deep into a background
+    # alignment run. If this fails, the job is never queued.
+    oov_dict_path: Optional[Path] = None
+    oov_words_path: Optional[Path] = None
+    oov_resolved_dictionary_path: Optional[Path] = None
+    if oov_mode in ("upload", "type"):
+        oov_dir = job_dir / "mfa_oov"
+        oov_dir.mkdir(parents=True, exist_ok=True)
+
+        if oov_mode == "upload":
+            oov_suffix = Path(oov_dictionary.filename or "").suffix.lower()
+            if oov_suffix not in _OOV_DICT_EXTENSIONS:
+                shutil.rmtree(job_dir, ignore_errors=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Custom dictionary must be .txt or .dict (got "
+                           f"'{oov_suffix or '(none)'}').",
+                )
+            oov_contents = await oov_dictionary.read()
+            if len(oov_contents) > MAX_OOV_UPLOAD_BYTES:
+                shutil.rmtree(job_dir, ignore_errors=True)
+                raise HTTPException(
+                    status_code=413,
+                    detail="Custom dictionary file too large. Maximum is 5 MB.",
+                )
+            oov_text = oov_contents.decode(errors="replace")
+            if not _looks_like_pronunciation_dict(oov_text):
+                shutil.rmtree(job_dir, ignore_errors=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail="Custom dictionary doesn't look like a tab-separated "
+                           "word/pronunciation file (word<TAB>phones per line).",
+                )
+            oov_dict_path = oov_dir / f"{_sanitize_stem(oov_dictionary.filename or 'custom_dict')}{oov_suffix}"
+            oov_dict_path.write_bytes(oov_contents)
+            new_pronunciations_path = oov_dict_path
+        else:  # oov_mode == "type"
+            if not _looks_like_pronunciation_dict(oov_custom_words):
+                shutil.rmtree(job_dir, ignore_errors=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail="Custom words don't look like tab-separated word/pronunciation "
+                           "lines (word<TAB>phones per line).",
+                )
+            oov_words_path = oov_dir / "typed_words.dict"
+            oov_words_path.write_text(oov_custom_words)
+            new_pronunciations_path = oov_words_path
+
+        try:
+            merged_path = await asyncio.to_thread(
+                merge_or_validate_pronunciations, dictionary, new_pronunciations_path, oov_dir,
+            )
+        except RuntimeError as exc:
+            shutil.rmtree(job_dir, ignore_errors=True)
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        if oov_mode == "upload" and not oov_merge_with_builtin:
+            # Validated above for phone compatibility, but the actual
+            # alignment dictionary is the raw upload, not the merged copy.
+            oov_resolved_dictionary_path = oov_dict_path
+        else:
+            oov_resolved_dictionary_path = merged_path
+
     config = {
         "whisper": {
             "model": whisper_model,
@@ -1251,6 +1419,11 @@ async def create_job(
             "acoustic_model": acoustic_model,
             "dictionary": dictionary,
             "fine_tune": fine_tune,
+            "oov_mode": oov_mode,
+            "oov_resolved_dictionary_path": str(oov_resolved_dictionary_path) if oov_resolved_dictionary_path else None,
+            "oov_merge_with_builtin": oov_merge_with_builtin,
+            "oov_dictionary_original_filename": oov_dictionary.filename if oov_dictionary else None,
+            "oov_custom_words_text": oov_custom_words if oov_mode == "type" else None,
         },
         "newfave": {
             "language": newfave_language or "en",

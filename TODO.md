@@ -53,20 +53,26 @@ detection logic before advertising this option to users.
 
 ---
 
-## MFA: custom dictionaries
+## MFA: custom dictionaries (done)
 
 OOV word extraction to `mfa_output/oovs_found.txt` is implemented and confirmed working
 end-to-end on 2026-09-04: a real recording containing the coined word "mormonese" correctly
 surfaced it in `oovs_found.txt`, both on a fresh Whisper transcription and via Trolley mode's
 "skip Transcription" path re-running just MFA on the same audio.
 
-Still to build: **custom dictionaries**. Power users (e.g., researchers working with a
-specific dialect community) may want to upload a custom pronunciation dictionary alongside
-their audio. MFA accepts a plain-text dictionary file as the `DICTIONARY_PATH` argument
-instead of a model name. To implement: add an optional file upload field in the Alignment
-section, validate that it's a `.txt` or `.dict` file, and pass its path to MFA instead of
-the default model name. Consider whether to allow this alongside or instead of the
-built-in dictionaries.
+Done on 2026-09-16: users can now supply custom pronunciations for out-of-vocabulary words via
+an `oov_mode` control in the Alignment step's Advanced options — "Let MFA guess" (G2P, default),
+"Upload a custom dictionary file" (merge with or replace the built-in dictionary), or "Type
+custom words" (always merges). Custom pronunciations are validated against the selected
+dictionary's phone set synchronously at job submission (`merge_or_validate_pronunciations()` in
+`pipeline/align_with_mfa.py`, called from `web/app.py`'s `create_job`) so a bad phone symbol
+fails immediately with a specific error instead of surfacing deep into a background alignment
+run. See `pipeline/languages.py` for the G2P model mapping and dictionary-file resolution.
+
+Not done: per-language phone-set instructions in the OOV upload/type UI are currently generic
+("e.g. CMU ARPABET for english_us_arpa") rather than dynamically rewritten per selected
+dictionary — writing accurate phone-set copy for each of the 5 supported dictionaries is real
+content work, not yet done.
 
 ---
 
@@ -79,11 +85,27 @@ disabled for non-English — see below).
 ### Adding a new language (checklist)
 1. Download MFA models on the server:
    `mfa model download acoustic <name>` and `mfa model download dictionary <name>`.
+1b. If the language should support "Let MFA guess" out-of-vocabulary handling, also download
+    a G2P model (`mfa model download g2p <name>`) and add an entry to
+    `MFA_G2P_MODEL_BY_DICTIONARY` in `pipeline/languages.py`. Check MFA's G2P catalog first
+    (`mfa model download g2p` with no name lists it) — G2P model names don't always match
+    dictionary names (e.g. no exact `spanish_mfa`/`portuguese_mfa` G2P model exists, only
+    regional variants — see the item below).
 2. Add to the two allowlists in `web/app.py`: `SUPPORTED_MFA_ACOUSTIC_MODELS` and
    `SUPPORTED_MFA_DICTIONARIES`.
 3. Add one `<option>` to each of the three dropdowns in `web/static/index.html`
    (Language, Acoustic model, Dictionary) and one entry to the `LANG_TO_MFA` JS map.
 4. Test end-to-end on a real recording in that language.
+
+### Regional variants for Spanish and Portuguese (Whisper + MFA)
+
+MFA has no G2P model named exactly `spanish_mfa`/`portuguese_mfa` — only regional variants
+(`spanish_latin_america_mfa`, `spanish_spain_mfa`, `portuguese_brazil_mfa`,
+`portuguese_portugal_mfa`). As of 2026-09-16, "Let MFA guess" OOV handling is unavailable for
+Spanish and Portuguese for this reason (the UI shows a note explaining this). Properly fixing
+this means adding regional variants to both Whisper's language handling and MFA's acoustic
+model/dictionary/G2P selection for these two languages, not just picking one regional G2P
+model as a default — a larger initiative than the OOV feature itself.
 
 ### Planned next languages (after Spanish)
 French, Portuguese, German — to be added in a batch once each is tested individually.
