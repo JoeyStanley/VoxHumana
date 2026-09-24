@@ -4,6 +4,8 @@ All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
 
+## [0.16.5] - 2026-09-24
+
 ## [0.16.4] - 2026-09-18
 ### Added
 - A trivial change to check deployment.
