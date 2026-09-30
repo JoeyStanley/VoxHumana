@@ -64,7 +64,7 @@
         </div>
 
         <!-- TextGrid upload — shown when Transcribe is unchecked -->
-        <div id="textgrid-upload-section" style="margin-top:14px">
+        <div id="textgrid-upload-section" style="display:none; margin-top:14px">
           <div class="section-head" style="font-size:11px; margin-bottom:8px">
             Uploaded TextGrid
             <div class="section-rule"></div>
@@ -117,7 +117,7 @@
       <!-- ── Transcribe ──────────────────────────────────────────────────── -->
       <div class="section">
         <div class="step-head">
-          <label class="step-toggle" id="toggle-transcription" style="cursor:default; pointer-events:none;">
+          <label class="step-toggle checked" id="toggle-transcription" onclick="toggleStep('transcription')">
             <span class="cb-box"></span>
             <span class="step-label-group">
               <span class="step-label-name">Transcribe</span>
@@ -127,8 +127,7 @@
           <div class="section-rule"></div>
           <button type="button" class="help-btn" onclick="openDrawer('transcription')" title="Help">?</button>
         </div>
-        <p style="margin:6px 0 0 34px; font-size:12px; color:#7a3a20; line-height:1.5;">Temporarily disabled until some things get fixed — upload your own TextGrid below instead.</p>
-        <div class="step-body collapsed" id="body-transcription">
+        <div class="step-body" id="body-transcription">
           <div class="grid-2">
             <div class="field">
               <label for="language">Language</label>
@@ -597,8 +596,8 @@
     if (el) el.textContent = '';
   }
 
-  // Which steps are active (Transcribe temporarily disabled — see toggle-transcription below)
-  const stepActive = { transcription: false, alignment: true, formants: true };
+  // Which steps are active (all on by default)
+  const stepActive = { transcription: true, alignment: true, formants: true };
 
   // True when formants was auto-disabled due to a non-English language selection,
   // so we know to re-enable it if the user switches back to English (but not if
