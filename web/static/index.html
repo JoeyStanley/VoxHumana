@@ -213,7 +213,7 @@
             <p class="adv-coming-soon" style="margin: 2px 0 0 22px">Runs an extra MFA refinement pass after the initial alignment. This improves accuracy, but is slower.</p>
 
             <div style="margin-top:14px">
-              <label style="display:block; margin-bottom:6px; font-weight:600; font-size:13px;">Out-of-vocabulary (OOV) words</label>
+              <label style="display:block; margin-bottom:6px; font-weight:600; font-size:13px;">Out-of-vocabulary (OOV) words <span style="font-weight:normal">(experimental)</span></label>
               <div class="field-check">
                 <input type="radio" name="oov_mode" value="guess" id="oov-mode-guess" checked onchange="onOovModeChange()">
                 <label for="oov-mode-guess">Let MFA guess (default)</label>
@@ -682,6 +682,20 @@
     fn.textContent   = file.name;
     fn.style.display = 'block';
   }
+
+  // The dictionary format needs literal tab characters between a word and its
+  // pronunciation, but a plain <textarea> treats Tab as "move focus to the
+  // next field" rather than typing a tab. Capture it and insert a real tab
+  // character at the cursor instead, like a code editor would.
+  document.getElementById('oov-custom-words').addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    const el = e.target;
+    const start = el.selectionStart;
+    const end   = el.selectionEnd;
+    el.value = el.value.slice(0, start) + '\t' + el.value.slice(end);
+    el.selectionStart = el.selectionEnd = start + 1;
+  });
 
   // ─── "Process additional files" drop zone (on the running page) ─────────────
   // Always goes through the batch table, even for a single file, since this
