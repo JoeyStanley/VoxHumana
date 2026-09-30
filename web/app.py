@@ -1516,6 +1516,15 @@ async def get_jobs_status(ids: str):
     return JSONResponse(result)
 
 
+@app.get("/api/queue")
+async def get_queue():
+    """Current queue length (running + waiting), shown on the form before submitting.
+
+    Only a count is exposed — never job IDs, which double as status lookup keys.
+    """
+    return JSONResponse({"queue_length": len(active_jobs)})
+
+
 @app.get("/api/jobs/{job_id}/download")
 async def download_results(job_id: str, token: str = ""):
     if job_id not in jobs:

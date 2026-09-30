@@ -384,11 +384,12 @@ textarea:focus {
 .adv-rule { border: none; border-top: 1px solid var(--pcb); margin: 0 0 14px; }
 .field-check { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .field-check label { font-size: 12px; color: var(--pb); margin: 0; cursor: pointer; font-weight: normal; letter-spacing: normal; }
-.field-check input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--pg); flex-shrink: 0; }
+.field-check input[type="checkbox"], .field-check input[type="radio"] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--pg); flex-shrink: 0; }
 
 /* Submit area */
 .submit-area { display: flex; gap: 12px; align-items: flex-end; }
 .submit-area .field { flex: 1; }
+.queue-status { align-self: center; font-size: 12px; font-style: italic; color: var(--pbl); line-height: 1; }
 
 /* Buttons */
 .btn {
