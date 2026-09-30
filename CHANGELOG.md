@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+
+## [0.17.0] - 2026-09-30
 ### Added
 - Ability to customize the dictionary that MFA uses and handle out of dictionary words. The default is for MFA to guess. But you can upload a custom dictionary file that can substitute or merge with the existing one, or if there are one-off words that you want to add, you can type those in manually. 
 - Display the queue length at the bottom of the submit page so that people can see the current status.
