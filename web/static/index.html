@@ -214,19 +214,17 @@
 
             <div style="margin-top:14px">
               <label style="display:block; margin-bottom:6px; font-weight:600; font-size:13px;">Out-of-vocabulary (OOV) words</label>
-              <div style="display:flex; flex-direction:column; gap:6px;">
-                <label style="display:flex; align-items:center; gap:6px; font-weight:normal; cursor:pointer;">
-                  <input type="radio" name="oov_mode" value="guess" id="oov-mode-guess" checked onchange="onOovModeChange()">
-                  Let MFA guess (default)
-                </label>
-                <label style="display:flex; align-items:center; gap:6px; font-weight:normal; cursor:pointer;">
-                  <input type="radio" name="oov_mode" value="upload" id="oov-mode-upload" onchange="onOovModeChange()">
-                  Upload a custom dictionary file
-                </label>
-                <label style="display:flex; align-items:center; gap:6px; font-weight:normal; cursor:pointer;">
-                  <input type="radio" name="oov_mode" value="type" id="oov-mode-type" onchange="onOovModeChange()">
-                  Type custom words
-                </label>
+              <div class="field-check">
+                <input type="radio" name="oov_mode" value="guess" id="oov-mode-guess" checked onchange="onOovModeChange()">
+                <label for="oov-mode-guess">Let MFA guess (default)</label>
+              </div>
+              <div class="field-check">
+                <input type="radio" name="oov_mode" value="upload" id="oov-mode-upload" onchange="onOovModeChange()">
+                <label for="oov-mode-upload">Upload a custom dictionary file</label>
+              </div>
+              <div class="field-check">
+                <input type="radio" name="oov_mode" value="type" id="oov-mode-type" onchange="onOovModeChange()">
+                <label for="oov-mode-type">Type custom words</label>
               </div>
               <p class="adv-coming-soon" style="margin:4px 0 0 22px">Controls how MFA handles words in the transcript that aren't in its pronunciation dictionary.</p>
               <p class="adv-coming-soon" id="oov-guess-lang-note" style="display:none; margin:4px 0 0 22px; color:#7a3a20;">Automatic guessing isn't available for Spanish or Portuguese yet — out-of-vocabulary words will be left unaligned unless you upload or type custom pronunciations.</p>
@@ -247,7 +245,7 @@
               </div>
 
               <div id="oov-type-fields" style="display:none; margin-top:10px; margin-left:22px">
-                <textarea name="oov_custom_words" id="oov-custom-words" rows="5" placeholder="mormonese&#9;M AO1 R M AH0 N IY1 Z"></textarea>
+                <textarea name="oov_custom_words" id="oov-custom-words" rows="5" placeholder="interrupty&#9;IH2 N T ER0 R AH1 P T IY0"></textarea>
                 <p class="adv-coming-soon" style="margin:4px 0 0">One word per line, tab-separated from its pronunciation using the phone set of the selected dictionary. Always merged with the built-in dictionary, and checked against its phone set before the job starts.</p>
               </div>
             </div>
@@ -350,6 +348,7 @@
       <div class="section" style="margin-bottom:0">
         <div class="submit-area">
           <button type="submit" class="btn" id="submit-btn">Submit</button>
+          <span id="queue-status" class="queue-status"></span>
         </div>
       </div>
 
@@ -2351,6 +2350,7 @@
     document.getElementById('state-error').style.display   = (!d && state === 'error')   ? '' : 'none';
     document.getElementById('state-docs').style.display    = d ? '' : 'none';
     if (!d && state === 'running') startFunMessages(); else stopFunMessages();
+    if (!d && state === 'form') refreshQueueStatus();
     // Show track only during processing/results, never on the form or docs
     const showTrack = !d && state !== 'form';
     document.getElementById('pipeline-track').style.display = showTrack ? '' : 'none';
@@ -2507,8 +2507,28 @@
     if (e.key === 'Escape') closeDrawer();
   });
 
+  // ─── Queue length ─────────────────────────────────────────────────────────────
+  // Shown beside the Submit button so users can judge whether now is a good
+  // time to submit. Only polled while the form is on screen and the tab is
+  // visible; on any failure the note is simply hidden.
+  async function refreshQueueStatus() {
+    if (appViewState !== 'form' || inDocs) return;
+    const el = document.getElementById('queue-status');
+    try {
+      const res = await fetch(`${ROOT_PATH}/api/queue`);
+      if (!res.ok) throw new Error();
+      const { queue_length } = await res.json();
+      el.textContent = `Current queue length: ${queue_length}`;
+    } catch (e) {
+      el.textContent = '';
+    }
+  }
+  setInterval(() => { if (!document.hidden) refreshQueueStatus(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshQueueStatus(); });
+
   // ─── Bootstrap ────────────────────────────────────────────────────────────────
   vxhRecoverOnLoad();
+  refreshQueueStatus();
 </script>
 </body>
 </html>
