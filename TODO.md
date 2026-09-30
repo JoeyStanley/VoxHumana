@@ -69,6 +69,23 @@ dictionary's phone set synchronously at job submission (`merge_or_validate_pronu
 fails immediately with a specific error instead of surfacing deep into a background alignment
 run. See `pipeline/languages.py` for the G2P model mapping and dictionary-file resolution.
 
+Not done: this hasn't been tested end-to-end yet (marked "(experimental)" in the UI in the
+meantime). Before removing that label, work through:
+- One-time setup: confirm `mfa model download g2p english_us_arpa/french_mfa/german_mfa` are
+  installed on the server — without them, "Let MFA guess" silently no-ops like the old default.
+- Golden path: reuse the "mormonese" test recording above through all three modes (guess,
+  upload+merge, upload+replace with a small dictionary, type) and confirm the expected
+  pronunciation/alignment behavior in each case.
+- Fail-fast: submit a deliberately wrong phone (e.g. `hello` with `H` instead of `HH`) via
+  Upload or Type and confirm it's rejected in seconds, before transcription/alignment runs, with
+  the bad phone named in the error — not after a job partially completes.
+- Validation edge cases: upload mode with no file, wrong extension, type mode with an empty
+  textarea — each should 400 immediately.
+- Confirm `processing_log.txt` on a completed job records the mode used, the uploaded filename
+  or typed pronunciations verbatim, and the MFA dictionary docs link.
+- Confirm `data/jobs/<id>/mfa_oov/` is deleted after the job finishes, and that a batch of 2+
+  files with Upload mode selected once validates/runs each row independently.
+
 Not done: per-language phone-set instructions in the OOV upload/type UI are currently generic
 ("e.g. CMU ARPABET for english_us_arpa") rather than dynamically rewritten per selected
 dictionary — writing accurate phone-set copy for each of the 5 supported dictionaries is real
