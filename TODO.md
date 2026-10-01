@@ -505,3 +505,15 @@ Instead of imposing a tier order, let the user pick. This would be an "advanced 
 ## Stereo?
 
 Check to make sure that stereo audio files can indeed be processed. (Per Jen)
+
+## Browser tab title reflects job status
+
+Right now the tab title is static, so you have to actually check the tab to see progress.
+Update `document.title` to reflect what's happening:
+
+- **One job**: show queue position while waiting ("Queued (2 of 3) — VoxHumana"), then the
+  current pipeline stage while running ("Transcribing… — VoxHumana", "Aligning (MFA)… —
+  VoxHumana", "Extracting formants… — VoxHumana"), then done/error state.
+- **Multiple jobs** (batch): not sure yet what the best summary looks like — maybe a count
+  of in-progress/done ("3 running, 1 done — VoxHumana")? Worth revisiting once the one-job
+  case is in and it's clearer what reads well in a cramped tab title.
