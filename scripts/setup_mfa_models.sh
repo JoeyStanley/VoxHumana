@@ -27,12 +27,25 @@ echo "Repo root:   $REPO_ROOT"
 echo "Conda env:   $CONDA_ENV"
 echo
 
-if ! conda run -n "$CONDA_ENV" mfa version >/dev/null 2>&1; then
-  echo "ERROR: conda env '$CONDA_ENV' doesn't have MFA installed."
-  echo "See TODO_for_server.md section 3 to create it first:"
+if ! command -v conda >/dev/null 2>&1; then
+  echo "ERROR: 'conda' isn't on PATH in this shell."
+  echo "If conda is already installed, your interactive shell probably just hasn't"
+  echo "sourced its init script yet (this is separate from whether the app itself"
+  echo "can find it -- the systemd service has its own PATH). Try:"
+  echo "  source \$HOME/miniconda3/etc/profile.d/conda.sh"
+  echo "(see TODO_for_server.md section 3), then re-run this script."
+  exit 1
+fi
+
+if ! MFA_VERSION_OUTPUT=$(conda run -n "$CONDA_ENV" mfa version 2>&1); then
+  echo "ERROR: 'conda run -n $CONDA_ENV mfa version' failed:"
+  echo "$MFA_VERSION_OUTPUT" | sed 's/^/    /'
+  echo
+  echo "If the env doesn't exist yet, see TODO_for_server.md section 3 to create it:"
   echo "  conda create -n $CONDA_ENV -c conda-forge montreal-forced-aligner -y"
   exit 1
 fi
+echo "MFA version: $MFA_VERSION_OUTPUT"
 
 DICTIONARIES=$(python3 -c "
 import sys; sys.path.insert(0, '.')
