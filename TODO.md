@@ -16,20 +16,13 @@ with no inter-speaker variation).
 
 ---
 
-## MFA: additional acoustic models and dictionaries (coming soon — blocked on multi-language)
+## MFA: additional acoustic models and dictionaries (done)
 
-The Alignment section's acoustic model and dictionary dropdowns currently have only one
-option each (`english_us_arpa`) and are disabled in the UI with a "coming soon" note.
-Expanding them is blocked on the same multi-language MFA work described below.
-
-When adding a new language:
-1. Install the MFA acoustic model and dictionary (`mfa model download acoustic <name>`,
-   `mfa model download dictionary <name>`).
-2. Add the new `<option>` to both dropdowns in the Alignment section.
-3. Decide whether to auto-pair model and dictionary based on the Whisper language selection,
-   or let the user choose them independently (independent choice is more flexible but
-   requires more UI guidance to avoid mismatched pairs).
-4. Re-enable both dropdowns and remove the "coming soon" note once at least two options exist.
+Done: the Alignment section's acoustic model and dictionary dropdowns list all 5 supported
+languages (`english_us_arpa`, `spanish_mfa`, `french_mfa`, `german_mfa`, `portuguese_mfa`),
+auto-paired to the Whisper language selection via `syncLanguage()`/`LANG_TO_MFA` in
+`web/static/index.html`, with no "coming soon" gating. See "Multi-language support: next
+languages" below for the up-to-date checklist for adding further languages.
 
 ---
 
@@ -93,11 +86,20 @@ content work, not yet done.
 
 ---
 
-## Multi-language support: next languages
+## Multi-language support: next languages (priority)
 
-Whisper, MFA, and the UI language selector are wired up for multiple languages; Spanish
-(`spanish_mfa`) is live end-to-end for Transcription + Alignment (Formant extraction is
-disabled for non-English — see below).
+Bumped to priority on 2026-10-01: adding a language used to mean someone with server access
+had to be walked through a manual sequence of `mfa model download` commands by hand. That's no
+longer true — `scripts/setup_mfa_models.sh` derives the full model list (acoustic, dictionary,
+G2P) straight from `pipeline/languages.py` and downloads whatever's missing, idempotently. Now
+that the install workflow is understood end-to-end (including how to run it under the `shiny`
+service account on the production server), the server-side part of adding a language is a
+non-issue — what's left is genuinely just the per-language wiring/testing checklist below.
+
+Whisper, MFA, and the UI language selector are wired up for multiple languages; English,
+Spanish, French, German, and Portuguese (`english_us_arpa`/`spanish_mfa`/`french_mfa`/
+`german_mfa`/`portuguese_mfa`) are all live end-to-end for Transcription + Alignment (Formant
+extraction is disabled for non-English — see below).
 
 ### Adding a new language (checklist)
 1. Download MFA models on the server:
@@ -114,7 +116,7 @@ disabled for non-English — see below).
    (Language, Acoustic model, Dictionary) and one entry to the `LANG_TO_MFA` JS map.
 4. Test end-to-end on a real recording in that language.
 
-### Regional variants for Spanish and Portuguese (Whisper + MFA)
+### Regional variants for Spanish and Portuguese (Whisper + MFA) (priority)
 
 MFA has no G2P model named exactly `spanish_mfa`/`portuguese_mfa` — only regional variants
 (`spanish_latin_america_mfa`, `spanish_spain_mfa`, `portuguese_brazil_mfa`,
@@ -122,12 +124,17 @@ MFA has no G2P model named exactly `spanish_mfa`/`portuguese_mfa` — only regio
 Spanish and Portuguese for this reason (the UI shows a note explaining this). Properly fixing
 this means adding regional variants to both Whisper's language handling and MFA's acoustic
 model/dictionary/G2P selection for these two languages, not just picking one regional G2P
-model as a default — a larger initiative than the OOV feature itself.
+model as a default — a larger initiative than the OOV feature itself, but no longer blocked by
+not knowing how to get new models onto the server (see note above) — just needs the design work
+(how regional choice surfaces in the UI alongside the existing Language dropdown) and the
+per-variant wiring/testing.
 
-### Planned next languages (after Spanish)
-French, Portuguese, German — to be added in a batch once each is tested individually.
-Longer-term: Italian, Dutch, Mandarin, Japanese, Korean, and others where both Whisper
-and MFA have solid models. See the language/MFA overlap table in session notes.
+### Planned next languages
+English, Spanish, French, German, and Portuguese are done (see above). Next, roughly in order:
+regional Spanish/Portuguese variants (above); then Italian, Dutch, Mandarin, Japanese, Korean,
+and others where both Whisper and MFA have solid models — check MFA's model catalog
+(`mfa model download acoustic`/`dictionary`/`g2p` with no name) against Whisper's supported
+languages before committing to one, same as was done for the regional-variant gap above.
 
 ### Also consider
 - The `task` parameter in Whisper: setting `task="translate"` outputs an English transcript
