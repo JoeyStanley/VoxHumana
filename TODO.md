@@ -517,3 +517,7 @@ Update `document.title` to reflect what's happening:
 - **Multiple jobs** (batch): not sure yet what the best summary looks like — maybe a count
   of in-progress/done ("3 running, 1 done — VoxHumana")? Worth revisiting once the one-job
   case is in and it's clearer what reads well in a cramped tab title.
+
+  ## UXUI
+
+  Check with the UX/UI folks in ODH to see if they can offer advice on this.
