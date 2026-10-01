@@ -61,24 +61,45 @@ source $HOME/miniconda3/etc/profile.d/conda.sh
 echo 'source $HOME/miniconda3/etc/profile.d/conda.sh' >> ~/.bashrc
 ```
 
-Create the aligner environment and download the models:
+Create the aligner environment:
 
 ```bash
 conda create -n aligner -c conda-forge montreal-forced-aligner -y
-conda run -n aligner mfa model download acoustic english_us_arpa
-conda run -n aligner mfa model download dictionary english_us_arpa
 ```
 
-VoxHumana also supports Spanish, French, German, and Portuguese (Whisper, MFA,
-and new-fave steps all handle these languages). Download their MFA models too,
-or jobs submitted in these languages will fail at the alignment step:
+### Recommended: run the setup script
+
+`scripts/setup_mfa_models.sh` downloads every pretrained model VoxHumana needs —
+acoustic + dictionary models for all 5 supported languages, plus G2P models for the
+languages that have one (used by "Let MFA guess" out-of-vocabulary handling, see
+`pipeline/align_with_mfa.py`) — and is **safe to re-run anytime**: `mfa model download`
+itself checks its local cache and skips anything already present, so running it again
+(e.g. on a later deploy, or just to double check) takes a few seconds and changes
+nothing. There's no need to set up any kind of startup hook or disable it after first
+use — just run it once now, and re-run it again by hand whenever `pipeline/languages.py`
+gains a new language or G2P entry.
 
 ```bash
+bash scripts/setup_mfa_models.sh
+```
+
+### Manual steps (what the script does, if you'd rather run it by hand)
+
+```bash
+conda run -n aligner mfa model download acoustic english_us_arpa
+conda run -n aligner mfa model download dictionary english_us_arpa
+conda run -n aligner mfa model download g2p english_us_arpa
+
 for m in spanish_mfa french_mfa german_mfa portuguese_mfa; do
   conda run -n aligner mfa model download acoustic $m
   conda run -n aligner mfa model download dictionary $m
 done
+for m in french_mfa german_mfa; do
+  conda run -n aligner mfa model download g2p $m
+done
 ```
+(`spanish_mfa`/`portuguese_mfa` have no G2P model in MFA's catalog under those exact
+names — see the comment above `MFA_G2P_MODEL_BY_DICTIONARY` in `pipeline/languages.py`.)
 
 Models are stored in `~/Documents/MFA/pretrained_models/` (MFA's global model store).
 This is expected — models are shared across all jobs on the server and are never
@@ -89,6 +110,7 @@ To verify:
 conda run -n aligner mfa version
 conda run -n aligner mfa model list acoustic
 conda run -n aligner mfa model list dictionary
+conda run -n aligner mfa model list g2p
 ```
 
 ---

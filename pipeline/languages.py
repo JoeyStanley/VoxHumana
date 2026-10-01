@@ -57,3 +57,17 @@ def mfa_dictionary_file(dictionary_name: str) -> Path:
     here - a missing file surfaces naturally as a failure in the caller.
     """
     return MFA_PRETRAINED_MODELS_ROOT / "dictionary" / f"{dictionary_name}.dict"
+
+
+def mfa_g2p_model_file(g2p_model_name: str) -> Path:
+    """Path to an installed MFA G2P model's .zip file.
+
+    Unlike mfa_dictionary_file(), callers MUST check this file's existence
+    before relying on a name from MFA_G2P_MODEL_BY_DICTIONARY: that mapping
+    only says a G2P model exists *in MFA's catalog* under that name, not that
+    it has actually been downloaded on this server. Passing
+    `--g2p_model_path` for a model that isn't installed makes `mfa align`
+    fail outright (PretrainedModelNotFoundError) instead of degrading
+    gracefully - see align_with_mfa.py.
+    """
+    return MFA_PRETRAINED_MODELS_ROOT / "g2p" / f"{g2p_model_name}.zip"

@@ -3,7 +3,7 @@ import subprocess
 import shutil
 from pathlib import Path
 
-from pipeline.languages import MFA_G2P_MODEL_BY_DICTIONARY, mfa_dictionary_file
+from pipeline.languages import MFA_G2P_MODEL_BY_DICTIONARY, mfa_dictionary_file, mfa_g2p_model_file
 
 
 def merge_or_validate_pronunciations(dictionary_name, new_pronunciations_path, target_dir,
@@ -165,15 +165,30 @@ def align_with_mfa(audio_path, job_dir, config=None):
     # Out-of-vocabulary word handling: a pre-resolved custom dictionary
     # (already merged/validated by merge_or_validate_pronunciations() at job
     # submission time, see web/app.py) takes precedence over the plain
-    # dictionary name. Otherwise, fall back to MFA's own G2P guessing if a
-    # G2P model is available for this dictionary.
+    # dictionary name. Otherwise, fall back to MFA's own G2P guessing - but
+    # only if that G2P model is actually downloaded on this server.
+    # MFA_G2P_MODEL_BY_DICTIONARY only records that a model exists *in MFA's
+    # catalog* under this name; passing --g2p_model_path for a model that
+    # isn't installed makes `mfa align` fail outright instead of degrading
+    # gracefully, so the file's presence must be checked here too. Unlike
+    # DICTIONARY_PATH/ACOUSTIC_MODEL_PATH, --g2p_model_path takes an actual
+    # file path, not a bare model name - confirmed live: passing the name
+    # alone fails with "File 'english_us_arpa' does not exist."
     oov_resolved_dictionary_path = config.get("oov_resolved_dictionary_path")
-    g2p_model = None
+    g2p_model_path = None
     if oov_resolved_dictionary_path:
         dictionary_arg = str(oov_resolved_dictionary_path)
     else:
         dictionary_arg = dictionary
-        g2p_model = MFA_G2P_MODEL_BY_DICTIONARY.get(dictionary)
+        g2p_model_name = MFA_G2P_MODEL_BY_DICTIONARY.get(dictionary)
+        # The docker runner doesn't mount the host's pretrained-models
+        # directory into the container, so a host-side g2p file path
+        # wouldn't resolve in there - skip G2P entirely for that runner
+        # rather than pass a path the container can't see.
+        if g2p_model_name and runner != "docker":
+            candidate = mfa_g2p_model_file(g2p_model_name)
+            if candidate.exists():
+                g2p_model_path = str(candidate)
 
     if runner == "docker":
         docker_image = config.get("docker_image", "mmcauliffe/montreal-forced-aligner:latest")
@@ -193,8 +208,8 @@ def align_with_mfa(audio_path, job_dir, config=None):
         ]
         if fine_tune:
             cmd.append("--fine_tune")
-        if g2p_model:
-            cmd += ["--g2p_model_path", g2p_model]
+        if g2p_model_path:
+            cmd += ["--g2p_model_path", g2p_model_path]
     else:
         conda_env = config.get("conda_env", "aligner")
         cmd = [
@@ -211,8 +226,8 @@ def align_with_mfa(audio_path, job_dir, config=None):
         ]
         if fine_tune:
             cmd.append("--fine_tune")
-        if g2p_model:
-            cmd += ["--g2p_model_path", g2p_model]
+        if g2p_model_path:
+            cmd += ["--g2p_model_path", g2p_model_path]
 
     timeout = config.get("timeout", 7200)  # 2 hours default
 

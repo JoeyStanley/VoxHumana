@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+### Fixed
+- Fixed a crash introduced in 0.17.0: "Let MFA guess" out-of-vocabulary handling (the default) was passing `--g2p_model_path` to MFA unconditionally, which fails outright if the server doesn't have that G2P model downloaded, and even once downloaded was passing the model's bare name instead of its file path, which MFA also rejects. Alignment now checks the model is actually installed before using it, and falls back to the old no-op behavior if not, instead of failing every job.
 
 ## [0.17.0] - 2026-09-30
 ### Added
