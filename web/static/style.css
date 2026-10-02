@@ -46,6 +46,18 @@ html, body {
   justify-content: space-between;
   border-bottom: 1px solid var(--pcb);
 }
+/* Beta-testing notice */
+.beta-notice {
+  padding: 12px 28px;
+  background: var(--pc);
+  border-bottom: 1px solid var(--pcb);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--pbm);
+}
+.beta-notice strong { color: var(--pb); }
+.beta-notice a { color: var(--pb); }
+
 .logo-area { display: flex; flex-direction: column; gap: 4px; }
 .logo-row  { display: flex; align-items: center; gap: 12px; }
 .pipe-glyph { display: flex; align-items: flex-end; gap: 3px; }

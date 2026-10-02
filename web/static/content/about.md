@@ -47,4 +47,4 @@ I acknowledge that some users may feel uncomfortable with this use of AI; I reco
 ### About the project
 
 VoxHumana is developed and maintained by [Joey Stanley](https://joeystanley.com), associate professor in the [linguistics department](https://ling.byu.edu) at [Brigham Young University]
-(https://www.byu.edu). Please send questions and bug reports to [joey_stanley@byu.edu](mailto:joey_stanley@byu.edu).
+(https://www.byu.edu). Please send questions and bug reports to [voxhumana.ling@gmail.com](mailto:voxhumana.ling@gmail.com).
