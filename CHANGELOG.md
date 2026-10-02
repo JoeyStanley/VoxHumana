@@ -3,6 +3,9 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+### Added
+- Note that it's still in beta-testing mode.
+- voxhumana.ling@gmail.com as a dedicated place for VxH correspondence.
 
 ## [0.17.1] - 2026-10-01
 ### Fixed
