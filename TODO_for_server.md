@@ -210,6 +210,15 @@ mkdir -p data/jobs data/logs
 chmod 755 data/jobs data/logs
 ```
 
+**Admin token.** On first startup the app creates `data/admin_token.txt` (mode 600),
+the password for the `/admin` page (class codes and the queue view). It's generated
+on the server so nothing secret goes into the public repo. Read it once over SSH:
+```bash
+cat data/admin_token.txt
+```
+To change it, delete the file and restart the service. A new one is generated.
+Class codes are saved in `data/class_codes.json`, so they survive restarts.
+
 If running as a dedicated service user (recommended), ensure that user owns the
 entire VoxHumana directory:
 ```bash

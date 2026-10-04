@@ -376,7 +376,17 @@ While we're at it, add other versions of MFA.
 
 ## Multiple jobs at once
 
-This might be a server permissions thing, but I'd like to make it faster on the server. I'd also like to intelligently manage a queue of jobs: prioritize shorter ones and only tap into some of the threads/cores for the long queues when they're not otherwise being used by shorter jobs. 
+**Status (2026-10-02): scheduling done, parallelism deferred.** The single worker now picks
+jobs by fair share across submitters, cheapest jobs first, with 24-hour aging and class-code
+priority (`web/scheduler.py`, `web/class_codes.py`, `/admin`). Not done yet:
+- Pipelining (start the next job's Whisper while the previous job is in MFA/new-fave).
+- Multiple lanes, e.g. one express lane reserved for short jobs so a class never waits
+  behind a multi-hour Whisper run. Needs the production server's core/RAM/GPU numbers first.
+- Auto-deploy (`scripts/deploy.sh`) restarts the server on every push, which wipes the
+  in-memory queue and kills the running job. Consider waiting until the queue is idle.
+- Tune the cost weights in `web/scheduler.py` against `data/logs/summary.jsonl`.
+
+Original note: This might be a server permissions thing, but I'd like to make it faster on the server. I'd also like to intelligently manage a queue of jobs: prioritize shorter ones and only tap into some of the threads/cores for the long queues when they're not otherwise being used by shorter jobs. 
 
 ## Support for .txt transcriptions
 

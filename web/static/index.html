@@ -351,6 +351,11 @@
       </div>
 
       <div class="section" style="margin-bottom:0">
+        <div class="field class-code-field">
+          <label for="class-code">Class code <span style="font-weight:normal">(optional)</span></label>
+          <input type="text" id="class-code" name="class_code" autocomplete="off" spellcheck="false" placeholder="Only if your instructor gave you one">
+          <div id="class-code-status" class="class-code-status"></div>
+        </div>
         <div class="submit-area">
           <button type="submit" class="btn" id="submit-btn">Submit</button>
           <span id="queue-status" class="queue-status"></span>
@@ -1446,12 +1451,32 @@
       run_transcription:          stepActive.transcription,
       run_alignment:              stepActive.alignment,
       run_formants:               stepActive.formants,
+      class_code:                 form.class_code.value.trim(),
     };
+  }
+
+  // Random per-browser ID sent with every job so the server's fair-share
+  // queue can tell submitters apart (a whole batch counts as one person, and
+  // a classroom sharing one campus IP still counts as many). Not tied to any
+  // personal information.
+  let vxhSubmitterIdMemo = null;
+  function vxhSubmitterId() {
+    if (vxhSubmitterIdMemo) return vxhSubmitterIdMemo;
+    const KEY = 'vxh_submitter_id';
+    try { vxhSubmitterIdMemo = localStorage.getItem(KEY); } catch (e) {}
+    if (!vxhSubmitterIdMemo) {
+      vxhSubmitterIdMemo = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      try { localStorage.setItem(KEY, vxhSubmitterIdMemo); } catch (e) {}
+    }
+    return vxhSubmitterIdMemo;
   }
 
   function buildJobFormData(settings) {
     const data = new FormData();
     Object.entries(settings).forEach(([k, v]) => data.append(k, v));
+    data.append('submitter_id', vxhSubmitterId());
     return data;
   }
 
@@ -2536,12 +2561,63 @@
     try {
       const res = await fetch(`${ROOT_PATH}/api/queue`);
       if (!res.ok) throw new Error();
-      const { queue_length } = await res.json();
-      el.textContent = `Current queue length: ${queue_length}`;
+      const q = await res.json();
+      if (!q.queue_length) {
+        el.textContent = 'Queue: empty — your job would start right away';
+      } else {
+        const people = q.submitters === 1 ? '1 person' : `${q.submitters} people`;
+        el.textContent = `Queue: ${q.running} running, ${q.waiting} waiting (${people})`;
+      }
     } catch (e) {
       el.textContent = '';
     }
   }
+
+  // ─── Class code ───────────────────────────────────────────────────────────────
+  // Checked as the user types so a typo or an out-of-window code shows up
+  // before they submit (the server rejects both at submit time too).
+  const classCodeInput  = document.getElementById('class-code');
+  const classCodeStatus = document.getElementById('class-code-status');
+  let classCodeTimer = null;
+  let classCodeSeq = 0;
+
+  function fmtCodeTime(iso, withDate) {
+    const d = new Date(iso);
+    return withDate
+      ? d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  async function checkClassCode() {
+    const code = classCodeInput.value.trim();
+    const seq = ++classCodeSeq;
+    classCodeStatus.className = 'class-code-status';
+    if (!code) { classCodeStatus.textContent = ''; return; }
+    try {
+      const res = await fetch(`${ROOT_PATH}/api/class-code?code=${encodeURIComponent(code)}`);
+      const info = await res.json();
+      if (seq !== classCodeSeq) return;  // a newer keystroke's check is in flight
+      if (!info.valid) {
+        classCodeStatus.textContent = 'Code not recognized — check the spelling.';
+        classCodeStatus.classList.add('bad');
+      } else if (info.active) {
+        const sameDay = new Date(info.ends_at).toDateString() === new Date().toDateString();
+        classCodeStatus.textContent = `✓ ${info.label} — priority until ${fmtCodeTime(info.ends_at, !sameDay)}`;
+        classCodeStatus.classList.add('good');
+      } else {
+        classCodeStatus.textContent =
+          `${info.label}: not active right now (${fmtCodeTime(info.starts_at, true)} – ${fmtCodeTime(info.ends_at, true)}). ` +
+          'Clear this field to submit without priority.';
+        classCodeStatus.classList.add('bad');
+      }
+    } catch (e) {
+      if (seq === classCodeSeq) classCodeStatus.textContent = '';
+    }
+  }
+  classCodeInput.addEventListener('input', () => {
+    clearTimeout(classCodeTimer);
+    classCodeTimer = setTimeout(checkClassCode, 400);
+  });
   setInterval(() => { if (!document.hidden) refreshQueueStatus(); }, 15000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshQueueStatus(); });
 
