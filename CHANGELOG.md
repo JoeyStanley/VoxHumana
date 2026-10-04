@@ -3,9 +3,15 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+
+## [0.18.0] - 2026-10-04
 ### Added
-- Note that it's still in beta-testing mode.
+- A note saying that it's still in beta-testing mode.
 - voxhumana.ling@gmail.com as a dedicated place for VxH correspondence.
+- Fair-share job queue. Instead of first-come, first-served, the next job goes to whoever has used the least processing time recently, with each person's shorter (or non-Whisper) files first. One heavy user can no longer block everyone else. Anyone who hasn't had a turn in 24 hours goes next.
+- Class codes. An instructor's code puts their students' jobs ahead of the regular queue during a set time window. Codes are created on a new password-protected admin page (`/admin`), which also shows the current queue.
+### Changed
+- Queue messages now say how many jobs are ahead of yours. The note beside Submit shows how many jobs are running and waiting, and from how many people.
 
 ## [0.17.1] - 2026-10-01
 ### Fixed

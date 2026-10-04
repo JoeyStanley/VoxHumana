@@ -18,6 +18,25 @@ take about 60 minutes. Switching to the **Small** model is the quickest way to s
 You can also split the recording into shorter segments and run them in parallel on separate
 machines, or run VoxHumana locally on a GPU-equipped machine.
 
+### How does the queue work?
+
+VoxHumana processes one file at a time, but the queue isn't strictly first-come, first-served.
+When the server frees up, the next job goes to whoever has used the least processing time
+recently, and each person's shorter files go before their longer ones. Files that skip
+transcription count as short, since Whisper is the slowest step. This keeps one person who
+submits many long recordings from blocking everyone else. Their files still get processed,
+just interleaved with other people's.
+
+Because of this, your place in line can change while you wait. Someone who submits a short
+file after you may start before you do. No one waits indefinitely: anyone who hasn't had a
+turn in 24 hours goes next.
+
+**Using VoxHumana with a class?** Instructors can request a class code by emailing
+[voxhumana.ling@gmail.com](mailto:voxhumana.ling@gmail.com). Jobs submitted with the code
+during your class time go ahead of the regular queue. Enter it in the **Class code** field
+above the Submit button. A job that's already running can't be interrupted, so students may
+still wait for that job to finish first.
+
 ### My transcription has errors. Will that affect the results?
 
 Minor errors — a few wrong words, fillers missed — generally have little effect on MFA

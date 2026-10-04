@@ -402,6 +402,10 @@ textarea:focus {
 .submit-area { display: flex; gap: 12px; align-items: flex-end; }
 .submit-area .field { flex: 1; }
 .queue-status { align-self: center; font-size: 12px; font-style: italic; color: var(--pbl); line-height: 1; }
+.class-code-field { max-width: 320px; }
+.class-code-status { font-size: 11px; color: var(--pbl); margin-top: 4px; min-height: 14px; line-height: 1.4; }
+.class-code-status.good { color: #3d6b2f; }
+.class-code-status.bad { color: #a0442a; }
 
 /* Buttons */
 .btn {

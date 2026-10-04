@@ -1,6 +1,7 @@
 """VoxHumana web server — FastAPI app that wraps the processing pipeline."""
 
 import asyncio
+import hashlib
 import importlib.metadata
 import io
 import json
@@ -9,6 +10,7 @@ import re
 import shutil
 import subprocess
 import random
+import secrets
 import tempfile
 import tomllib
 import zipfile
@@ -18,7 +20,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException, Header
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -44,6 +46,8 @@ from pipeline.tier_selection import (
     guess_utterance_tier,
     extract_utterance_tier,
 )
+from web.scheduler import FairScheduler, QueuedJob, estimate_cost
+from web.class_codes import ClassCodeStore, code_status
 from pipeline.languages import (
     MFA_DICTIONARY_DOCS_URL,
     MFA_G2P_MODEL_BY_DICTIONARY,
@@ -58,6 +62,7 @@ from pipeline.languages import (
 ROOT_PATH = os.environ.get("VXH_ROOT_PATH", "").rstrip("/")
 
 _INDEX_HTML = Path(__file__).parent / "static" / "index.html"
+_ADMIN_HTML = Path(__file__).parent / "static" / "admin.html"
 _PYPROJECT_TOML = Path(__file__).parent.parent / "pyproject.toml"
 
 app = FastAPI(title="VoxHumana")
@@ -103,11 +108,18 @@ job_client_info: dict[str, dict] = {}
 # One job at a time — the pipeline is compute-heavy.
 executor = ThreadPoolExecutor(max_workers=1)
 
-# Ordered list of job IDs that are queued or currently running (FIFO — the
-# executor has exactly one worker thread, so execution order always matches
-# this list's order). active_jobs[0] is always the job currently being
-# processed. Used to report queue position to waiting jobs.
-active_jobs: list[str] = []
+# Decides which waiting job runs next (fair share across submitters, cheaper
+# jobs first, class-code priority, aging — see web/scheduler.py). Each
+# submitted job adds one _run_next_job "tick" to the executor; the tick asks
+# the scheduler for the best job *when it runs*, so execution order follows
+# the scheduler rather than submission order.
+scheduler = FairScheduler()
+
+# Pipeline arguments for jobs still waiting in the scheduler, keyed by job ID.
+_job_run_args: dict[str, tuple[Path, dict]] = {}
+
+# submitter_id from the browser: letters, digits, hyphens (a UUID in practice).
+_SUBMITTER_ID_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 
 
 # Organ stops drawn from the Salt Lake Tabernacle organ — used to generate
@@ -136,6 +148,54 @@ def _generate_job_id() -> str:
     datestamp = date.today().strftime("%y%m%d")
     stop1, stop2 = random.sample(_ORGAN_STOPS, 2)
     return f"{datestamp}_{stop1}_{stop2}"
+
+
+# Class codes give a class's jobs queue priority during a time window. They
+# are managed on the /admin page and kept in data/ (gitignored) — the repo is
+# public, so they can't live in it. Generated codes look like "Gemshorn-Tuba-42".
+class_codes = ClassCodeStore(BASE_DIR / "data" / "class_codes.json", _ORGAN_STOPS)
+
+
+def _load_or_create_admin_token() -> str:
+    """Return the /admin password, creating data/admin_token.txt on first run.
+
+    Generated on the server rather than set in config so nothing secret ever
+    goes into the (public) repo or the systemd unit. Read it once over SSH:
+    `cat data/admin_token.txt`.
+    """
+    token_path = BASE_DIR / "data" / "admin_token.txt"
+    try:
+        token = token_path.read_text().strip()
+        if token:
+            return token
+    except FileNotFoundError:
+        pass
+    token = secrets.token_urlsafe(32)
+    fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(token + "\n")
+    print(f"VoxHumana: created admin token at {token_path}", flush=True)
+    return token
+
+
+ADMIN_TOKEN = _load_or_create_admin_token()
+
+
+def _require_admin(authorization: Optional[str]) -> None:
+    """Raise 401 unless the request carries `Authorization: Bearer <admin token>`."""
+    supplied = (authorization or "").removeprefix("Bearer ").strip()
+    if not supplied or not secrets.compare_digest(supplied, ADMIN_TOKEN):
+        raise HTTPException(status_code=401, detail="Invalid admin token.")
+
+
+def _fmt_utc(iso: str) -> str:
+    """'2026-10-05T19:00:00+00:00' -> 'Oct 05, 19:00 UTC' for error messages."""
+    return datetime.fromisoformat(iso).astimezone(timezone.utc).strftime("%b %d, %H:%M UTC")
+
+
+def _submitter_hash(submitter: str) -> str:
+    """Short, stable stand-in for a submitter in logs and on the admin page."""
+    return hashlib.sha256(submitter.encode()).hexdigest()[:10]
 
 
 def _get_client_ip(request: Request) -> str:
@@ -329,10 +389,14 @@ def _write_processing_log(
     queue_position = jobs.get(job_id, {}).get("queue_position_at_submission", 1)
     wait_seconds = jobs.get(job_id, {}).get("wait_seconds", 0.0)
     if queue_position > 1:
-        ln(f"Queue:     started at position {queue_position} in line — waited "
-           f"{_fmt_duration(wait_seconds)} for earlier jobs before processing began")
+        ahead = queue_position - 1
+        ln(f"Queue:     {ahead} other job{'s' if ahead != 1 else ''} running or waiting at "
+           f"submission — waited {_fmt_duration(wait_seconds)} before processing began")
     else:
         ln("Queue:     no wait — processing began immediately")
+    class_code_label = jobs.get(job_id, {}).get("class_code_label")
+    if class_code_label:
+        ln(f"Priority:  class code ({class_code_label})")
 
     # Input / output
     ln("")
@@ -784,8 +848,13 @@ def _write_server_log(
     status_line = "SUCCESS" if failed_step is None else f"FAILED at \"{failed_step}\""
     queue_position = jobs.get(job_id, {}).get("queue_position_at_submission", 1)
     wait_seconds = jobs.get(job_id, {}).get("wait_seconds", 0.0)
-    client_ip = job_client_info.get(job_id, {}).get("client_ip", "unknown")
-    user_agent = job_client_info.get(job_id, {}).get("user_agent", "")
+    client_info = job_client_info.get(job_id, {})
+    client_ip = client_info.get("client_ip", "unknown")
+    user_agent = client_info.get("user_agent", "")
+    submitter = _submitter_hash(client_info["submitter"]) if client_info.get("submitter") else None
+    class_code_label = jobs.get(job_id, {}).get("class_code_label")
+    estimated_cost_seconds = client_info.get("estimated_cost_seconds")
+    audio_duration_at_submit = client_info.get("audio_duration_at_submit")
 
     BAR = "=" * 60
     lines = []
@@ -804,6 +873,10 @@ def _write_server_log(
     ln(f"Queue pos.:   {queue_position}  (wait: {_fmt_duration(wait_seconds)})")
     ln(f"Client IP:    {client_ip}")
     ln(f"User-Agent:   {user_agent or 'unknown'}")
+    ln(f"Submitter:    {submitter or 'unknown'}")
+    ln(f"Class code:   {class_code_label or 'none'}")
+    if estimated_cost_seconds is not None:
+        ln(f"Est. cost:    {_fmt_duration(estimated_cost_seconds)}")
     ln(f"Status:       {status_line}")
     ln("")
     ln("Step timings:")
@@ -910,6 +983,10 @@ def _write_server_log(
         "wait_seconds":              round(wait_seconds, 1),
         "client_ip":                 client_ip,
         "user_agent":                user_agent,
+        "submitter":                 submitter,
+        "class_code_label":          class_code_label,
+        "estimated_cost_seconds":    estimated_cost_seconds,
+        "audio_duration_at_submit":  audio_duration_at_submit,
         "status":                    "success" if failed_step is None else "failed",
         "failed_step":               failed_step,
         "error_type":                error_type,
@@ -939,6 +1016,15 @@ def _write_server_log(
     }
     with open(LOGS_DIR / "summary.jsonl", "a") as f:
         f.write(json.dumps(summary) + "\n")
+
+
+def _run_next_job() -> None:
+    """Executor tick: run whichever waiting job the scheduler picks now."""
+    queued = scheduler.pop_next()
+    if queued is None:
+        return
+    audio_path, config = _job_run_args.pop(queued.job_id)
+    _run_pipeline(queued.job_id, audio_path, config)
 
 
 def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
@@ -1046,15 +1132,14 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
     finally:
         # Each step below is independently guarded — this function runs on
         # the single background worker thread, so if a step here ever raised
-        # (or, before this fix, if an earlier step's raise skipped the
-        # active_jobs.remove() below), it wouldn't just corrupt this job's
-        # bookkeeping — every job queued behind it would appear stuck.
-        # active_jobs.remove() runs first, before best-effort logging/
-        # cleanup, so queue position for the rest of the queue is correct
-        # even if a cleanup step below fails.
+        # (or if an earlier step's raise skipped scheduler.finish() below),
+        # it wouldn't just corrupt this job's bookkeeping — every job queued
+        # behind it would appear stuck. scheduler.finish() runs first,
+        # before best-effort logging/cleanup, so queue position for the rest
+        # of the queue is correct even if a cleanup step below fails.
         try:
-            active_jobs.remove(job_id)
-        except ValueError:
+            scheduler.finish(job_id)
+        except Exception:
             pass
 
         completed_at = datetime.now(timezone.utc)
@@ -1153,7 +1238,32 @@ async def create_job(
     run_transcription: bool = Form(True),
     run_alignment: bool = Form(True),
     run_formants: bool = Form(True),
+    submitter_id: Optional[str] = Form(None),
+    class_code: Optional[str] = Form(None),
 ):
+    # Class code: checked up front so a typo or an out-of-window code fails
+    # before the upload is saved. Only the label is kept on the job (it's
+    # shown back to the user); the code itself never leaves this function.
+    class_code_label = None
+    if class_code and class_code.strip():
+        entry = class_codes.get(class_code)
+        if entry is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Class code not recognized. Check the spelling, or clear the "
+                       "Class code field to submit without priority.",
+            )
+        status = code_status(entry)
+        if status != "active":
+            raise HTTPException(
+                status_code=400,
+                detail=f"The class code for {entry['label']} is "
+                       f"{'not active yet' if status == 'upcoming' else 'no longer active'} "
+                       f"(active {_fmt_utc(entry['starts_at'])} to {_fmt_utc(entry['ends_at'])}). Clear the "
+                       "Class code field to submit without priority.",
+            )
+        class_code_label = entry["label"]
+
     # Validate MFA model/dictionary names against the server-side allowlist.
     # These values go straight into the MFA CLI command, so we reject unknowns
     # rather than pass arbitrary strings through.
@@ -1448,9 +1558,36 @@ async def create_job(
 
     download_token = uuid.uuid4().hex
 
+    # Who submitted this, for fair sharing between users. The browser sends a
+    # random ID kept in localStorage (so a whole batch, or a classroom behind
+    # one shared IP, is told apart correctly); fall back to the IP for direct
+    # API calls without one.
+    client_ip = _get_client_ip(request)
+    submitter = (
+        submitter_id if submitter_id and _SUBMITTER_ID_RE.match(submitter_id)
+        else f"ip:{client_ip}"
+    )
+
+    # Audio length drives the cost estimate the scheduler orders jobs by.
+    try:
+        audio_duration_at_submit = await asyncio.to_thread(
+            librosa.get_duration, path=str(audio_path)
+        )
+    except Exception:
+        audio_duration_at_submit = None
+    cost = estimate_cost(
+        audio_duration_at_submit, whisper_model,
+        run_transcription, run_alignment, run_formants,
+    )
+
     job_client_info[job_id] = {
-        "client_ip": _get_client_ip(request),
+        "client_ip": client_ip,
         "user_agent": request.headers.get("user-agent", ""),
+        "submitter": submitter,
+        "estimated_cost_seconds": round(cost, 1),
+        "audio_duration_at_submit": (
+            round(audio_duration_at_submit, 3) if audio_duration_at_submit else None
+        ),
     }
 
     jobs[job_id] = {
@@ -1464,29 +1601,45 @@ async def create_job(
         "download_token": download_token,
         # 1 = no one ahead (next up); >1 = that many jobs (including this one)
         # were queued or running when this job was submitted.
-        "queue_position_at_submission": len(active_jobs) + 1,
+        "queue_position_at_submission": scheduler.pending_count() + scheduler.running_count() + 1,
+        "class_code_label": class_code_label,
     }
 
-    active_jobs.append(job_id)
-    executor.submit(_run_pipeline, job_id, audio_path, config)
+    _job_run_args[job_id] = (audio_path, config)
+    scheduler.add(QueuedJob(job_id, submitter, cost, class_code_label))
+    executor.submit(_run_next_job)
 
     return JSONResponse({"job_id": job_id, "download_token": download_token})
 
 
 def _job_status_payload(job_id: str) -> Optional[dict]:
-    """Return a job's status dict (with queue position filled in), or None if unknown."""
+    """Return a job's status dict (with queue position filled in), or None if unknown.
+
+    Position comes from the scheduler's predicted order, which can shift as
+    other jobs arrive (a newcomer with a short file may go ahead of you).
+    """
     if job_id not in jobs:
         return None
     job = dict(jobs[job_id])
-    if job["status"] == "queued" and job_id in active_jobs:
-        position = active_jobs.index(job_id) + 1  # 1 = up next / currently starting
-        total = len(active_jobs)
-        job["queue_position"] = position
-        job["queue_length"] = total
-        job["step_name"] = (
-            "Starting…" if position == 1
-            else f"Waiting in queue (position {position} of {total})"
-        )
+    if job["status"] == "queued":
+        order = scheduler.predicted_order()
+        if job_id not in order:
+            # Picked by the worker, but _run_pipeline hasn't marked it running yet.
+            job["step_name"] = "Starting…"
+            return job
+        ahead = order.index(job_id)
+        running = scheduler.running_count()
+        job["queue_position"] = ahead + 1           # 1 = next to start
+        job["queue_length"] = len(order) + running  # waiting + running
+        job["queue_ahead"] = ahead
+        if ahead == 0:
+            text = ("Next in line — starts when the current job finishes" if running
+                    else "Starting…")
+        else:
+            text = f"Waiting in queue — {ahead} job{'s' if ahead != 1 else ''} ahead of yours"
+        if job.get("class_code_label"):
+            text = f"Priority ({job['class_code_label']}) · {text}"
+        job["step_name"] = text
     return job
 
 
@@ -1518,11 +1671,99 @@ async def get_jobs_status(ids: str):
 
 @app.get("/api/queue")
 async def get_queue():
-    """Current queue length (running + waiting), shown on the form before submitting.
+    """Current queue size, shown on the form before submitting.
 
-    Only a count is exposed — never job IDs, which double as status lookup keys.
+    Only counts are exposed — never job IDs, which double as status lookup keys.
     """
-    return JSONResponse({"queue_length": len(active_jobs)})
+    running = scheduler.running_count()
+    waiting = scheduler.pending_count()
+    return JSONResponse({
+        "queue_length": running + waiting,
+        "running": running,
+        "waiting": waiting,
+        "submitters": scheduler.submitter_count(),
+    })
+
+
+@app.get("/api/class-code")
+async def check_class_code(code: str = ""):
+    """Look up one class code for the form's inline check. Never lists codes."""
+    entry = class_codes.get(code) if code.strip() else None
+    if entry is None:
+        return JSONResponse({"valid": False})
+    return JSONResponse({
+        "valid": True,
+        "active": code_status(entry) == "active",
+        "label": entry["label"],
+        "starts_at": entry["starts_at"],
+        "ends_at": entry["ends_at"],
+    })
+
+
+# ─── Admin (class codes + queue view) ─────────────────────────────────────────
+# Not linked from the site. Every /api/admin route requires the token from
+# data/admin_token.txt as `Authorization: Bearer <token>`.
+
+@app.get("/admin", response_class=HTMLResponse, include_in_schema=False)
+async def serve_admin():
+    html = _ADMIN_HTML.read_text()
+    html = html.replace("__ROOT_PATH__", ROOT_PATH)
+    html = html.replace("__VERSION__", APP_VERSION)
+    return HTMLResponse(html)
+
+
+@app.get("/api/admin/class-codes")
+async def admin_list_class_codes(authorization: Optional[str] = Header(None)):
+    _require_admin(authorization)
+    return JSONResponse({"codes": class_codes.list()})
+
+
+@app.post("/api/admin/class-codes")
+async def admin_create_class_code(
+    authorization: Optional[str] = Header(None),
+    label: str = Form(...),
+    starts_at: str = Form(...),
+    ends_at: str = Form(...),
+    code: Optional[str] = Form(None),
+):
+    _require_admin(authorization)
+    try:
+        entry = class_codes.create(label, starts_at, ends_at, code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return JSONResponse(entry)
+
+
+@app.delete("/api/admin/class-codes/{code}")
+async def admin_delete_class_code(code: str, authorization: Optional[str] = Header(None)):
+    _require_admin(authorization)
+    if not class_codes.delete(code):
+        raise HTTPException(status_code=404, detail="Code not found.")
+    return JSONResponse({"deleted": code})
+
+
+@app.get("/api/admin/queue")
+async def admin_queue(authorization: Optional[str] = Header(None)):
+    """Running job plus waiting jobs in predicted order — who's using VxH right now."""
+    _require_admin(authorization)
+    now = datetime.now(timezone.utc).timestamp()
+    snap = scheduler.snapshot()
+
+    def row(q: QueuedJob) -> dict:
+        return {
+            "job_id": q.job_id,
+            "submitter": _submitter_hash(q.submitter),
+            "audio_filename": jobs.get(q.job_id, {}).get("audio_filename"),
+            "estimated_cost_seconds": round(q.cost),
+            "priority_label": q.priority_label,
+            "waited_seconds": round((q.started_at or now) - q.enqueued_at),
+            "step_name": jobs.get(q.job_id, {}).get("step_name"),
+        }
+
+    return JSONResponse({
+        "running": [row(q) for q in snap["running"]],
+        "waiting": [row(q) for q in snap["waiting"]],
+    })
 
 
 @app.get("/api/jobs/{job_id}/download")

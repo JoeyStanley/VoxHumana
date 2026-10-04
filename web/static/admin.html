@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>VoxHumana Admin</title>
+  <link rel="stylesheet" href="__ROOT_PATH__/style.css">
+  <script>const ROOT_PATH = "__ROOT_PATH__";</script>
+  <style>
+    .admin-body { padding: 24px 28px 28px; }
+    .admin-body .section-head { margin-top: 6px; }
+    .admin-note { font-size: 12px; color: var(--pbm); line-height: 1.5; margin: 0 0 12px; }
+    .admin-error { font-size: 12px; color: #a0442a; margin: 6px 0 0; min-height: 16px; }
+    .admin-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .admin-row .field { flex: 1 1 180px; margin-bottom: 0; }
+    .admin-row input[type="datetime-local"], .admin-row input[type="password"] {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--pcb); border-radius: 4px;
+      font-size: 13px; color: var(--pb); background: var(--pc); font-family: inherit;
+    }
+    .admin-table-wrap { overflow-x: auto; margin-bottom: 8px; }
+    .admin-table { width: 100%; border-collapse: collapse; font-size: 12px; color: var(--pb); }
+    .admin-table th { text-align: left; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pbl); padding: 6px 8px; border-bottom: 1px solid var(--pcb); white-space: nowrap; }
+    .admin-table td { padding: 7px 8px; border-bottom: 1px solid var(--pcb); vertical-align: top; }
+    .admin-table td.mono { font-family: Menlo, Consolas, monospace; font-size: 11px; }
+    .admin-table .empty { color: var(--pbl); font-style: italic; }
+    .pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .pill.active   { background: #e3efd9; color: #3d6b2f; }
+    .pill.upcoming { background: var(--pc); color: var(--pbm); border: 1px solid var(--pcb); }
+    .pill.expired  { background: #f1ece4; color: var(--pbl); }
+    .link-btn { background: none; border: none; color: #a0442a; cursor: pointer; font-size: 12px; padding: 0; text-decoration: underline; }
+    .btn-small { padding: 6px 14px; font-size: 12px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <div class="accent-bar"></div>
+  <div class="header">
+    <div class="logo-area">
+      <div class="logo-row">
+        <div class="wordmark">Vox <em>Humana</em></div>
+      </div>
+      <div class="tagline">Admin</div>
+    </div>
+    <nav class="nav">
+      <a href="__ROOT_PATH__/">Back to site</a>
+      <a href="#" id="logout-link" hidden>Log out</a>
+    </nav>
+  </div>
+
+  <div class="admin-body">
+
+    <!-- Login -->
+    <div id="login-view" class="section">
+      <div class="section-head">Log in <div class="section-rule"></div></div>
+      <p class="admin-note">Paste the token from <code>data/admin_token.txt</code> on the server.</p>
+      <form id="login-form" class="admin-row">
+        <div class="field">
+          <label for="token-input">Admin token</label>
+          <input type="password" id="token-input" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn">Log in</button>
+      </form>
+      <p class="admin-error" id="login-error"></p>
+    </div>
+
+    <div id="admin-view" hidden>
+
+      <!-- Class codes -->
+      <div class="section">
+        <div class="section-head">Class codes <div class="section-rule"></div></div>
+        <p class="admin-note">
+          Jobs submitted with an active code go ahead of everyone else's. A job submitted while
+          its code is active keeps its priority after the window closes. Times are in your local time zone.
+        </p>
+        <form id="create-form">
+          <div class="admin-row" style="margin-bottom:10px">
+            <div class="field">
+              <label for="code-label">Label</label>
+              <input type="text" id="code-label" placeholder="e.g. LING 340" maxlength="60" required>
+            </div>
+            <div class="field">
+              <label for="code-custom">Code <span style="font-weight:normal">(optional)</span></label>
+              <input type="text" id="code-custom" placeholder="Leave blank to generate">
+            </div>
+          </div>
+          <div class="admin-row">
+            <div class="field">
+              <label for="code-start">Starts</label>
+              <input type="datetime-local" id="code-start" required>
+            </div>
+            <div class="field">
+              <label for="code-end">Ends</label>
+              <input type="datetime-local" id="code-end" required>
+            </div>
+            <button type="submit" class="btn">Create code</button>
+          </div>
+          <p class="admin-error" id="create-error"></p>
+        </form>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>Code</th><th>Label</th><th>Window</th><th>Status</th><th></th></tr></thead>
+            <tbody id="codes-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Queue -->
+      <div class="section" style="margin-bottom:0">
+        <div class="section-head">
+          Queue <div class="section-rule"></div>
+          <button type="button" class="btn btn-outline btn-small" id="refresh-queue">Refresh</button>
+        </div>
+        <p class="admin-note">
+          Waiting jobs are listed in their predicted start order. "Submitter" is a short hash of the
+          submitter's browser ID, so the same value means the same person.
+        </p>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>#</th><th>Job</th><th>File</th><th>Submitter</th><th>Est. cost</th><th>Waited</th><th>Priority</th></tr></thead>
+            <tbody id="queue-body"></tbody>
+          </table>
+        </div>
+        <p class="admin-error" id="queue-error"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const TOKEN_KEY = 'vxh_admin_token';
+  let token = null;
+  try { token = sessionStorage.getItem(TOKEN_KEY); } catch (e) {}
+
+  const $ = (id) => document.getElementById(id);
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function fmtTime(iso) {
+    return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  function fmtSeconds(sec) {
+    sec = Math.max(0, Math.round(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+  }
+
+  async function api(path, options = {}) {
+    const res = await fetch(`${ROOT_PATH}${path}`, {
+      ...options,
+      headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` },
+    });
+    let body = null;
+    try { body = await res.json(); } catch (e) {}
+    if (res.status === 401) { logout('That token was not accepted.'); throw new Error('unauthorized'); }
+    if (!res.ok) throw new Error((body && body.detail) || `Request failed (${res.status})`);
+    return body;
+  }
+
+  function showAdmin(show) {
+    $('login-view').hidden = show;
+    $('admin-view').hidden = !show;
+    $('logout-link').hidden = !show;
+  }
+
+  function logout(message) {
+    token = null;
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    showAdmin(false);
+    $('login-error').textContent = message || '';
+  }
+
+  async function loadCodes() {
+    const { codes } = await api('/api/admin/class-codes');
+    const body = $('codes-body');
+    if (!codes.length) {
+      body.innerHTML = '<tr><td colspan="5" class="empty">No class codes yet.</td></tr>';
+      return;
+    }
+    body.innerHTML = codes.map(c => `
+      <tr>
+        <td class="mono">${esc(c.code)}</td>
+        <td>${esc(c.label)}</td>
+        <td>${esc(fmtTime(c.starts_at))} – ${esc(fmtTime(c.ends_at))}</td>
+        <td><span class="pill ${esc(c.status)}">${esc(c.status)}</span></td>
+        <td><button type="button" class="link-btn" data-delete="${esc(c.code)}">Delete</button></td>
+      </tr>`).join('');
+  }
+
+  async function loadQueue() {
+    $('queue-error').textContent = '';
+    try {
+      const q = await api('/api/admin/queue');
+      const rows = [
+        ...q.running.map(r => ({ ...r, pos: 'Running' })),
+        ...q.waiting.map((r, i) => ({ ...r, pos: i + 1 })),
+      ];
+      $('queue-body').innerHTML = rows.length
+        ? rows.map(r => `
+          <tr>
+            <td>${esc(r.pos)}</td>
+            <td class="mono">${esc(r.job_id)}</td>
+            <td>${esc(r.audio_filename)}</td>
+            <td class="mono">${esc(r.submitter)}</td>
+            <td>${esc(fmtSeconds(r.estimated_cost_seconds))}</td>
+            <td>${esc(fmtSeconds(r.waited_seconds))}</td>
+            <td>${esc(r.priority_label || '')}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="7" class="empty">The queue is empty.</td></tr>';
+    } catch (e) {
+      if (e.message !== 'unauthorized') $('queue-error').textContent = e.message;
+    }
+  }
+
+  async function enterAdmin() {
+    try {
+      await loadCodes();
+    } catch (e) {
+      if (e.message !== 'unauthorized') $('login-error').textContent = e.message;
+      return;
+    }
+    showAdmin(true);
+    loadQueue();
+  }
+
+  $('login-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    token = $('token-input').value.trim();
+    try { sessionStorage.setItem(TOKEN_KEY, token); } catch (e) {}
+    $('token-input').value = '';
+    $('login-error').textContent = '';
+    enterAdmin();
+  });
+
+  $('logout-link').addEventListener('click', (e) => { e.preventDefault(); logout(); });
+
+  $('create-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('create-error').textContent = '';
+    const start = new Date($('code-start').value);
+    const end = new Date($('code-end').value);
+    if (isNaN(start) || isNaN(end)) { $('create-error').textContent = 'Enter a start and end time.'; return; }
+    const data = new FormData();
+    data.append('label', $('code-label').value);
+    data.append('starts_at', start.toISOString());
+    data.append('ends_at', end.toISOString());
+    data.append('code', $('code-custom').value);
+    try {
+      await api('/api/admin/class-codes', { method: 'POST', body: data });
+      $('code-label').value = '';
+      $('code-custom').value = '';
+      await loadCodes();
+    } catch (err) {
+      if (err.message !== 'unauthorized') $('create-error').textContent = err.message;
+    }
+  });
+
+  $('codes-body').addEventListener('click', async (e) => {
+    const code = e.target.dataset && e.target.dataset.delete;
+    if (!code || !confirm(`Delete class code ${code}? Students will no longer be able to use it.`)) return;
+    try {
+      await api(`/api/admin/class-codes/${encodeURIComponent(code)}`, { method: 'DELETE' });
+      await loadCodes();
+    } catch (err) {
+      if (err.message !== 'unauthorized') $('create-error').textContent = err.message;
+    }
+  });
+
+  $('refresh-queue').addEventListener('click', loadQueue);
+
+  // Default the new-code window to the next whole hour, two hours long.
+  (function defaultWindow() {
+    const pad = (n) => String(n).padStart(2, '0');
+    const local = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const start = new Date(); start.setMinutes(0, 0, 0); start.setHours(start.getHours() + 1);
+    const end = new Date(start.getTime() + 2 * 3600 * 1000);
+    $('code-start').value = local(start);
+    $('code-end').value = local(end);
+  })();
+
+  if (token) enterAdmin();
+</script>
+</body>
+</html>
