@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+
+## [0.18.0] - 2026-10-04
 ### Added
 - A note saying that it's still in beta-testing mode.
 - voxhumana.ling@gmail.com as a dedicated place for VxH correspondence.
