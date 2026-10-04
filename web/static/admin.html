@@ -8,6 +8,9 @@
   <link rel="stylesheet" href="__ROOT_PATH__/style.css">
   <script>const ROOT_PATH = "__ROOT_PATH__";</script>
   <style>
+    /* Wide enough for every queue column on a laptop screen; the table only
+       scrolls sideways inside its box on narrower windows. */
+    .shell { max-width: 1400px; }
     .admin-body { padding: 24px 28px 28px; }
     .admin-body .section-head { margin-top: 6px; }
     .admin-note { font-size: 12px; color: var(--pbm); line-height: 1.5; margin: 0 0 12px; }
@@ -29,6 +32,12 @@
     .pill.upcoming { background: var(--pc); color: var(--pbm); border: 1px solid var(--pcb); }
     .pill.expired  { background: #f1ece4; color: var(--pbl); }
     .link-btn { background: none; border: none; color: #a0442a; cursor: pointer; font-size: 12px; padding: 0; text-decoration: underline; }
+    .link-btn:disabled { color: var(--pbl); cursor: default; text-decoration: none; }
+    .admin-table td.nowrap { white-space: nowrap; }
+    .admin-table .muted { color: var(--pbl); }
+    .sort-btn { background: none; border: none; padding: 0; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; white-space: nowrap; }
+    .sort-btn:hover { color: var(--pb); }
+    .sort-ind { display: inline-block; width: 1em; text-align: center; }
     .btn-small { padding: 6px 14px; font-size: 12px; }
     [hidden] { display: none !important; }
   </style>
@@ -54,7 +63,7 @@
     <!-- Login -->
     <div id="login-view" class="section">
       <div class="section-head">Log in <div class="section-rule"></div></div>
-      <p class="admin-note">Paste the token from <code>data/admin_token.txt</code> on the server.</p>
+      <p class="admin-note">Enter the admin token.</p>
       <form id="login-form" class="admin-row">
         <div class="field">
           <label for="token-input">Admin token</label>
@@ -113,12 +122,15 @@
           <button type="button" class="btn btn-outline btn-small" id="refresh-queue">Refresh</button>
         </div>
         <p class="admin-note">
-          Waiting jobs are listed in their predicted start order. "Submitter" is a short hash of the
-          submitter's browser ID, so the same value means the same person.
+          Waiting jobs are listed in their predicted start order (# column); click a column heading to
+          sort by it instead. "Est. time" is the estimated processing time on this server. "Submitter" is a short hash of the
+          submitter's browser ID, so the same value means the same person. Cancelling a job stops it
+          (a running one within a few seconds), deletes the upload, and tells the user it was
+          cancelled by the administrator.
         </p>
         <div class="admin-table-wrap">
           <table class="admin-table">
-            <thead><tr><th>#</th><th>Job</th><th>File</th><th>Submitter</th><th>Est. cost</th><th>Waited</th><th>Priority</th></tr></thead>
+            <thead><tr id="queue-head"></tr></thead>
             <tbody id="queue-body"></tbody>
           </table>
         </div>
@@ -143,10 +155,23 @@
     return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   }
 
+  // e.g. "Whisper (turbo) · MFA · new-fave"
+  function stepsText(steps) {
+    if (!steps) return '';
+    const parts = [];
+    if (steps.whisper) parts.push(`Whisper (${steps.whisper})`);
+    if (steps.mfa) parts.push('MFA');
+    if (steps.formants) parts.push(steps.formants);
+    return parts.join(' · ');
+  }
+
+  // 45s · 2m 16s · 1h 05m
   function fmtSeconds(sec) {
     sec = Math.max(0, Math.round(sec));
-    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
-    return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    if (h) return `${h}h ${String(m).padStart(2, '0')}m`;
+    if (m) return `${m}m ${String(s).padStart(2, '0')}s`;
+    return `${s}s`;
   }
 
   async function api(path, options = {}) {
@@ -191,26 +216,82 @@
       </tr>`).join('');
   }
 
+  // ─── Queue table (sortable) ───────────────────────────────────────────────
+  // Rows default to the scheduler's predicted start order (the # column).
+  // The chosen sort survives refreshes, and ties keep predicted order.
+  const QUEUE_COLUMNS = [
+    { key: 'order',    label: '#',         value: r => r.order },
+    { key: 'job',      label: 'Job',       value: r => r.job_id },
+    { key: 'file',     label: 'File',      value: r => (r.audio_filename || '').toLowerCase() },
+    { key: 'length',   label: 'Length',    value: r => r.audio_seconds ?? -1 },
+    { key: 'steps',    label: 'Steps',     value: r => stepsText(r.steps) },
+    { key: 'submitter',label: 'Submitter', value: r => r.submitter },
+    { key: 'est',      label: 'Est. time', value: r => r.estimated_cost_seconds },
+    { key: 'waited',   label: 'Waited',    value: r => r.waited_seconds },
+    { key: 'priority', label: 'Priority',  value: r => r.priority_label || '' },
+  ];
+  let queueRows = [];
+  let queueSort = { key: 'order', dir: 1 };
+  try { queueSort = JSON.parse(sessionStorage.getItem('vxh_admin_queue_sort')) || queueSort; } catch (e) {}
+
+  function renderQueueHead() {
+    $('queue-head').innerHTML = QUEUE_COLUMNS.map(c => {
+      const active = c.key === queueSort.key;
+      const aria = active ? (queueSort.dir === 1 ? 'ascending' : 'descending') : 'none';
+      return `<th aria-sort="${aria}"><button type="button" class="sort-btn" data-sort="${c.key}">${esc(c.label)}` +
+        `<span class="sort-ind">${active ? (queueSort.dir === 1 ? '▲' : '▼') : ''}</span></button></th>`;
+    }).join('') + '<th></th>';
+  }
+
+  function renderQueueBody() {
+    const col = QUEUE_COLUMNS.find(c => c.key === queueSort.key) || QUEUE_COLUMNS[0];
+    const rows = [...queueRows].sort((a, b) => {
+      const va = col.value(a), vb = col.value(b);
+      const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb));
+      return cmp * queueSort.dir || a.order - b.order;
+    });
+    $('queue-body').innerHTML = rows.length
+      ? rows.map(r => {
+          const running = r.order === 0;
+          const left = running && r.running_seconds != null
+            ? Math.max(0, r.estimated_cost_seconds - r.running_seconds) : null;
+          return `
+          <tr>
+            <td>${running ? 'Running' : r.order}</td>
+            <td class="mono">${esc(r.job_id)}${running && r.step_name ? `<br><span class="muted" style="font-family:Arial, sans-serif">${esc(r.step_name)}</span>` : ''}</td>
+            <td>${esc(r.audio_filename)}</td>
+            <td class="nowrap">${r.audio_seconds ? esc(fmtSeconds(r.audio_seconds)) : '?'}</td>
+            <td>${esc(stepsText(r.steps))}</td>
+            <td class="mono">${esc(r.submitter)}</td>
+            <td class="nowrap">${esc(fmtSeconds(r.estimated_cost_seconds))}${left != null ? `<br><span class="muted">~${esc(fmtSeconds(left))} left</span>` : ''}</td>
+            <td class="nowrap">${esc(fmtSeconds(r.waited_seconds))}</td>
+            <td>${esc(r.priority_label || '')}</td>
+            <td><button type="button" class="link-btn" data-cancel="${esc(r.job_id)}" data-file="${esc(r.audio_filename || '')}">Cancel</button></td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="${QUEUE_COLUMNS.length + 1}" class="empty">The queue is empty.</td></tr>`;
+  }
+
+  $('queue-head').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-sort]');
+    if (!btn) return;
+    const key = btn.dataset.sort;
+    queueSort = key === queueSort.key ? { key, dir: -queueSort.dir } : { key, dir: 1 };
+    try { sessionStorage.setItem('vxh_admin_queue_sort', JSON.stringify(queueSort)); } catch (e) {}
+    renderQueueHead();
+    renderQueueBody();
+  });
+
   async function loadQueue() {
     $('queue-error').textContent = '';
     try {
       const q = await api('/api/admin/queue');
-      const rows = [
-        ...q.running.map(r => ({ ...r, pos: 'Running' })),
-        ...q.waiting.map((r, i) => ({ ...r, pos: i + 1 })),
+      // order: 0 = running, then 1, 2, … in predicted start order
+      queueRows = [
+        ...q.running.map(r => ({ ...r, order: 0 })),
+        ...q.waiting.map((r, i) => ({ ...r, order: i + 1 })),
       ];
-      $('queue-body').innerHTML = rows.length
-        ? rows.map(r => `
-          <tr>
-            <td>${esc(r.pos)}</td>
-            <td class="mono">${esc(r.job_id)}</td>
-            <td>${esc(r.audio_filename)}</td>
-            <td class="mono">${esc(r.submitter)}</td>
-            <td>${esc(fmtSeconds(r.estimated_cost_seconds))}</td>
-            <td>${esc(fmtSeconds(r.waited_seconds))}</td>
-            <td>${esc(r.priority_label || '')}</td>
-          </tr>`).join('')
-        : '<tr><td colspan="7" class="empty">The queue is empty.</td></tr>';
+      renderQueueBody();
     } catch (e) {
       if (e.message !== 'unauthorized') $('queue-error').textContent = e.message;
     }
@@ -272,6 +353,23 @@
 
   $('refresh-queue').addEventListener('click', loadQueue);
 
+  $('queue-body').addEventListener('click', async (e) => {
+    const btn = e.target;
+    const jobId = btn.dataset && btn.dataset.cancel;
+    if (!jobId || !confirm(`Cancel job ${jobId} (${btn.dataset.file})? The user will see that it was cancelled by the administrator.`)) return;
+    btn.disabled = true;
+    btn.textContent = 'Cancelling…';
+    try {
+      await api(`/api/admin/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' });
+      // A running job takes a moment to stop; refresh once it has.
+      setTimeout(loadQueue, 2500);
+    } catch (err) {
+      if (err.message !== 'unauthorized') $('queue-error').textContent = err.message;
+      btn.disabled = false;
+      btn.textContent = 'Cancel';
+    }
+  });
+
   // Default the new-code window to the next whole hour, two hours long.
   (function defaultWindow() {
     const pad = (n) => String(n).padStart(2, '0');
@@ -282,6 +380,7 @@
     $('code-end').value = local(end);
   })();
 
+  renderQueueHead();
   if (token) enterAdmin();
 </script>
 </body>

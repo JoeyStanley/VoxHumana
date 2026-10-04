@@ -188,13 +188,13 @@ Whisper downloads its model on first use to `~/.cache/whisper/`. Pre-download it
 so the first real user doesn't wait an extra few minutes:
 
 ```bash
-uv run python -c "import whisper; whisper.load_model('turbo'); print('Whisper model ready')"
+uv run python -c "import whisper; whisper.load_model('small'); print('Whisper model ready')"
 ```
 
-The turbo model is ~1.6 GB. Other models users may select (small, medium, large)
+`small` is the web default (~460 MB). Other models users may select (turbo, medium, large)
 should also be pre-downloaded if you expect them to be used:
 ```bash
-uv run python -c "import whisper; [whisper.load_model(m) for m in ['small','medium','large']]"
+uv run python -c "import whisper; [whisper.load_model(m) for m in ['turbo','medium','large']]"
 ```
 (`large` is ~3 GB — the biggest of the four.)
 

@@ -86,6 +86,13 @@ class ClassCodeStore:
             entries = [dict(c, status=code_status(c, now)) for c in self._codes]
         return sorted(entries, key=lambda c: c["starts_at"], reverse=True)
 
+    def active_until(self) -> Optional[datetime]:
+        """End of the latest-ending code that's active right now, or None."""
+        now = datetime.now(timezone.utc)
+        with self._lock:
+            ends = [_parse_utc(c["ends_at"]) for c in self._codes if code_status(c, now) == "active"]
+        return max(ends, default=None)
+
     def create(self, label: str, starts_at: str, ends_at: str, code: Optional[str] = None) -> dict:
         """Add a code. Raises ValueError with a user-facing message on bad input."""
         label = (label or "").strip()

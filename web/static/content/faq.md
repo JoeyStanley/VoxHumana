@@ -13,10 +13,11 @@ This creates 30-minute chunks. Adjust `-segment_time` as needed (value is in sec
 
 ### Processing is taking a very long time.
 
-Whisper transcription without a GPU runs at roughly 1× real-time — a 60-minute interview can
-take about 60 minutes. Switching to the **Small** model is the quickest way to speed things up.
-You can also split the recording into shorter segments and run them in parallel on separate
-machines, or run VoxHumana locally on a GPU-equipped machine.
+Transcription is the slowest step. On the VoxHumana server, the default **Small** model takes
+about 50 minutes for a 60-minute interview, and **Turbo** takes about 3 hours. Your job may also
+wait in the queue behind other people's. If you don't need a transcript, uploading your own
+TextGrid skips Whisper entirely. You can also run VoxHumana locally on a GPU-equipped machine,
+where Whisper is much faster.
 
 ### How does the queue work?
 
@@ -36,6 +37,11 @@ turn in 24 hours goes next.
 during your class time go ahead of the regular queue. Enter it in the **Class code** field
 above the Submit button. A job that's already running can't be interrupted, so students may
 still wait for that job to finish first.
+
+### Can I cancel a job?
+
+Yes. Click **Cancel job** on the processing screen, whether the job is still waiting or
+already running. Processing stops within a few seconds and your uploaded file is deleted.
 
 ### My transcription has errors. Will that affect the results?
 

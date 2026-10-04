@@ -147,10 +147,10 @@
             <div class="field">
               <label for="whisper-model">Whisper model</label>
               <select id="whisper-model" name="whisper_model">
-                <option value="turbo">Turbo (recommended)</option>
-                <option value="large">Large (most accurate)</option>
+                <option value="small" selected>Small (default, fastest)</option>
+                <option value="turbo">Turbo (more accurate, ~3× slower)</option>
                 <option value="medium">Medium</option>
-                <option value="small">Small (fastest)</option>
+                <option value="large">Large (most accurate, slowest)</option>
               </select>
             </div>
           </div>
@@ -383,6 +383,7 @@
         Keep this tab open; the page will update automatically when results are ready.
       </div>
       <div class="progress-note" style="margin-top:6px">Job ID: <code id="running-job-id"></code></div>
+      <button type="button" class="btn-outline cancel-job-btn" id="cancel-job-btn" onclick="cancelPrimaryJob()">Cancel job</button>
       <div class="field-check" style="margin-top:4px">
         <input type="checkbox" id="sound-notify" onchange="onSoundNotifyChange(this)">
         <label for="sound-notify" style="font-size:11px; color:var(--pbl)">Play a sound when processing is complete</label>
@@ -398,9 +399,9 @@
       </div>
       <div class="primary-error-inline" id="primary-error-inline" style="display:none">
         <button type="button" class="batch-remove-btn" style="position:absolute; top:8px; right:8px;" title="Dismiss" onclick="dismissPrimaryJob()">×</button>
-        <div class="primary-inline-title" style="color:#c4603a;">✕ Processing failed</div>
+        <div class="primary-inline-title" id="primary-error-inline-title" style="color:#c4603a;">✕ Processing failed</div>
         <div class="primary-inline-message" id="primary-error-inline-message"></div>
-        <button type="button" class="btn-outline" style="padding:6px 14px; font-size:10px; margin-top:8px;" onclick="downloadResults()">Download partial results</button>
+        <button type="button" class="btn-outline" id="primary-error-inline-partial" style="padding:6px 14px; font-size:10px; margin-top:8px;" onclick="downloadResults()">Download partial results</button>
       </div>
     </div>
 
@@ -454,9 +455,9 @@
     <button type="button" class="batch-remove-btn" style="position:absolute; top:8px; right:8px;" title="Dismiss" onclick="resetForm()">×</button>
     <div class="error-view">
       <div class="error-icon">✕</div>
-      <div class="error-title">Processing failed</div>
+      <div class="error-title" id="error-title">Processing failed</div>
       <div class="error-message" id="error-message"></div>
-      <div class="error-contact">
+      <div class="error-contact" id="error-contact">
         <p>Need help? Email <a href="mailto:voxhumana.ling@gmail.com">voxhumana.ling@gmail.com</a> and include:</p>
         <ul>
           <li>Your <strong>Job ID</strong>: <code id="error-job-id"></code></li>
@@ -466,7 +467,7 @@
         </ul>
       </div>
       <div style="display:flex; gap:12px;">
-        <button class="btn-outline" onclick="downloadResults()">Download partial results</button>
+        <button class="btn-outline" id="error-partial-btn" onclick="downloadResults()">Download partial results</button>
         <button class="btn" onclick="resetForm()">Try again</button>
       </div>
     </div>
@@ -1671,6 +1672,7 @@
   function handleRowJobUpdate(row, job) {
     setRowStatus(row, job.status);
     row.stepName = job.step_name;
+    row.cancelled = !!job.cancelled;
     if (job.status === 'done' || job.status === 'error') {
       if (job.status === 'error') row.errorMessage = job.error || 'An unknown error occurred.';
       else if (row.soundEnabled) playCompletionSound();
@@ -1786,13 +1788,14 @@
     switch (row.jobStatus) {
       case 'queued_for_upload': return 'Waiting to upload…';
       case 'uploading':
-        return typeof row.uploadProgress === 'number'
-          ? `Uploading… ${Math.round(row.uploadProgress * 100)}%`
-          : 'Uploading…';
+        if (typeof row.uploadProgress !== 'number') return 'Uploading…';
+        return row.uploadProgress >= 1
+          ? 'Adding to queue…'
+          : `Uploading… ${Math.round(row.uploadProgress * 100)}%`;
       case 'queued':            return 'Queued';
       case 'running':           return 'Running';
       case 'done':               return 'Done';
-      case 'error':               return 'Error';
+      case 'error':               return row.cancelled ? 'Cancelled' : 'Error';
       default: return '';
     }
   }
@@ -1808,7 +1811,7 @@
         <div class="spinner-pipe"></div>
       </div>`;
     const stepLabel = settled
-      ? (row.jobStatus === 'done' ? 'Done' : 'Failed')
+      ? (row.jobStatus === 'done' ? 'Done' : (row.cancelled ? 'Cancelled' : 'Failed'))
       : (row.stepName || confirmedJobStatusLabel(row));
 
     let settledHtml = '';
@@ -1817,6 +1820,11 @@
         <span class="primary-inline-title">✓ Done</span>
         <button type="button" class="btn" style="padding:6px 16px; font-size:10px;" onclick="downloadRowResults('${row.rowId}')">Download results</button>
       </div>`;
+    } else if (row.jobStatus === 'error' && row.cancelled) {
+      settledHtml = `<div class="primary-error-inline" style="display:flex;">
+        <div class="primary-inline-title" style="color:#c4603a;">✕ Cancelled</div>
+        <div class="primary-inline-message">${escapeHtml(row.errorMessage || 'This job was cancelled.')}</div>
+      </div>`;
     } else if (row.jobStatus === 'error') {
       settledHtml = `<div class="primary-error-inline" style="display:flex;">
         <div class="primary-inline-title" style="color:#c4603a;">✕ Processing failed</div>
@@ -1824,6 +1832,10 @@
         <button type="button" class="btn-outline" style="padding:6px 14px; font-size:10px; margin-top:8px;" onclick="downloadRowResults('${row.rowId}')">Download partial results</button>
       </div>`;
     }
+
+    const cancelHtml = (!settled && row.jobId)
+      ? `<button type="button" class="btn-outline cancel-job-btn" ${row.cancelling ? 'disabled' : ''} onclick="cancelRowJob('${row.rowId}')">${row.cancelling ? 'Cancelling…' : 'Cancel job'}</button>`
+      : '';
 
     const dismissHtml = settled
       ? `<button type="button" class="batch-remove-btn" title="Dismiss" onclick="event.stopPropagation(); onRemoveRow('${row.rowId}')">×</button>`
@@ -1843,6 +1855,7 @@
           <div class="progress-step-label">${escapeHtml(stepLabel)}</div>
           ${settledHtml}
           <div class="progress-note" style="margin-top:6px">Job ID: <code>${escapeHtml(row.jobId || '(pending)')}</code></div>
+          ${cancelHtml}
           <div class="field-check" style="margin-top:4px">
             <input type="checkbox" id="sound-notify-${row.rowId}" ${row.soundEnabled ? 'checked' : ''} onchange="onRowSoundNotifyChange('${row.rowId}', this)">
             <label for="sound-notify-${row.rowId}" style="font-size:11px; color:var(--pbl)">Play a sound when processing is complete</label>
@@ -1880,10 +1893,12 @@
   function renderSummaryBar() {
     const summary = document.getElementById('batch-summary-bar');
     if (batchRows.length) {
-      const done    = batchRows.filter(r => r.jobStatus === 'done').length;
-      const errored = batchRows.filter(r => r.jobStatus === 'error').length;
+      const done      = batchRows.filter(r => r.jobStatus === 'done').length;
+      const errored   = batchRows.filter(r => r.jobStatus === 'error' && !r.cancelled).length;
+      const cancelled = batchRows.filter(r => r.jobStatus === 'error' && r.cancelled).length;
       summary.style.display = 'block';
-      summary.textContent = `${batchRows.length} file${batchRows.length === 1 ? '' : 's'} added — ${done} done, ${errored} error${errored === 1 ? '' : 's'}`;
+      summary.textContent = `${batchRows.length} file${batchRows.length === 1 ? '' : 's'} added — ${done} done, ${errored} error${errored === 1 ? '' : 's'}` +
+        (cancelled ? `, ${cancelled} cancelled` : '');
     } else {
       summary.style.display = 'none';
     }
@@ -1966,12 +1981,13 @@
         document.getElementById('done-job-id').textContent = currentJobId;
         showState('done');
       } else if (primary.job.status === 'error') {
-        showError(primary.job.error || 'An unknown error occurred.', primary.job.uploaded_files || []);
+        showError(primary.job.error || 'An unknown error occurred.', primary.job.uploaded_files || [], primary.job.cancelled);
       } else {
         showState('running');
         document.getElementById('progress-filename').textContent = primary.rec.filename || '';
         document.getElementById('running-job-id').textContent = currentJobId;
         primarySettled = false;
+        setPrimaryCancelButton(true);
         ensureGlobalPolling();
       }
       return;
@@ -1981,8 +1997,8 @@
     document.getElementById('progress-filename').textContent = primary.rec.filename || '';
     document.getElementById('running-job-id').textContent = currentJobId;
     if (primary.job.status === 'done') showPrimaryInlineDone();
-    else if (primary.job.status === 'error') showPrimaryInlineError(primary.job.error || 'An unknown error occurred.');
-    else primarySettled = false;
+    else if (primary.job.status === 'error') showPrimaryInlineError(primary.job.error || 'An unknown error occurred.', primary.job.cancelled);
+    else { primarySettled = false; setPrimaryCancelButton(true); }
 
     additional.forEach(({ rec, job }) => {
       const row = makeRow(null, null, 'exact');
@@ -1993,6 +2009,7 @@
       row.downloadToken = rec.download_token;
       row.jobStatus = job.status;
       row.errorMessage = job.error || null;
+      row.cancelled = !!job.cancelled;
       row.collapsed = job.status === 'queued'; // matches the normal default: only "upcoming" starts collapsed
       batchRows.push(row);
     });
@@ -2210,8 +2227,10 @@
     }
 
     try {
+      // At 100% the file is sent, but the server still has to save it and
+      // add it to the queue — say so instead of sitting on "100%".
       const body = await uploadJobFormData(data, (frac) => {
-        btn.textContent = `Uploading… ${Math.round(frac * 100)}%`;
+        btn.textContent = frac >= 1 ? 'Adding to queue…' : `Uploading… ${Math.round(frac * 100)}%`;
       });
       currentJobId         = body.job_id;
       currentDownloadToken = body.download_token;
@@ -2223,6 +2242,7 @@
       document.getElementById('progress-filename').textContent = selectedFile.name;
       document.getElementById('running-job-id').textContent = currentJobId;
       primarySettled = false;
+      setPrimaryCancelButton(true);
       ensureGlobalPolling();
     } catch (err) {
       btn.disabled    = false;
@@ -2248,10 +2268,62 @@
     } else if (job.status === 'error') {
       primarySettled = true;
       if (batchRows.length) {
-        showPrimaryInlineError(job.error || 'An unknown error occurred.');
+        showPrimaryInlineError(job.error || 'An unknown error occurred.', job.cancelled);
       } else {
-        showError(job.error || 'An unknown error occurred.', job.uploaded_files || []);
+        showError(job.error || 'An unknown error occurred.', job.uploaded_files || [], job.cancelled);
       }
+    }
+  }
+
+  // ─── Cancelling ───────────────────────────────────────────────────────────────
+  // Waiting jobs are dropped from the queue right away; a running job stops
+  // within a few seconds. Either way the next status poll shows it as
+  // cancelled, and the server deletes the uploaded file.
+  const CANCEL_CONFIRM = 'Cancel this job? Processing will stop and your uploaded file will be deleted. This can\'t be undone.';
+
+  async function requestCancel(jobId, token) {
+    const res = await fetch(
+      `${ROOT_PATH}/api/jobs/${encodeURIComponent(jobId)}/cancel?token=${encodeURIComponent(token || '')}`,
+      { method: 'POST' },
+    );
+    const body = await parseJsonResponse(res);
+    if (!res.ok) throw new Error(body.detail || 'Could not cancel this job.');
+    return body;
+  }
+
+  function setPrimaryCancelButton(visible) {
+    const btn = document.getElementById('cancel-job-btn');
+    btn.style.display = visible ? '' : 'none';
+    btn.disabled = false;
+    btn.textContent = 'Cancel job';
+  }
+
+  async function cancelPrimaryJob() {
+    if (!currentJobId || primarySettled || !confirm(CANCEL_CONFIRM)) return;
+    const btn = document.getElementById('cancel-job-btn');
+    btn.disabled = true;
+    btn.textContent = 'Cancelling…';
+    try {
+      await requestCancel(currentJobId, currentDownloadToken);
+      pollActiveJobs();
+    } catch (err) {
+      setPrimaryCancelButton(true);
+      alert(err.message);
+    }
+  }
+
+  async function cancelRowJob(rowId) {
+    const row = batchRows.find(r => r.rowId === rowId);
+    if (!row || !row.jobId || !confirm(CANCEL_CONFIRM)) return;
+    row.cancelling = true;
+    updateConfirmedJobPanel(rowId);
+    try {
+      await requestCancel(row.jobId, row.downloadToken);
+      pollActiveJobs();
+    } catch (err) {
+      row.cancelling = false;
+      updateConfirmedJobPanel(rowId);
+      alert(err.message);
     }
   }
 
@@ -2259,6 +2331,7 @@
   // whenever additional files are also in flight, so their table stays
   // visible instead of being replaced by a different page.
   function showPrimaryInlineDone() {
+    setPrimaryCancelButton(false);
     updateTrack(5);
     document.querySelector('#state-running .progress-spinner').style.display = 'none';
     document.getElementById('progress-step-label').textContent = 'Done';
@@ -2266,11 +2339,14 @@
     document.getElementById('primary-done-inline').style.display = '';
   }
 
-  function showPrimaryInlineError(message) {
+  function showPrimaryInlineError(message, cancelled) {
+    setPrimaryCancelButton(false);
     updateTrack(0);
     document.querySelector('#state-running .progress-spinner').style.display = 'none';
-    document.getElementById('progress-step-label').textContent = 'Failed';
+    document.getElementById('progress-step-label').textContent = cancelled ? 'Cancelled' : 'Failed';
     stopFunMessages();
+    document.getElementById('primary-error-inline-title').textContent = cancelled ? '✕ Cancelled' : '✕ Processing failed';
+    document.getElementById('primary-error-inline-partial').style.display = cancelled ? 'none' : '';
     document.getElementById('primary-error-inline-message').textContent = message;
     document.getElementById('primary-error-inline').style.display = '';
   }
@@ -2424,7 +2500,12 @@
     showState(appViewState);
   }
 
-  function showError(message, files) {
+  // `cancelled`: the job was stopped on purpose, so there's no failure to
+  // report and nothing left to download.
+  function showError(message, files, cancelled) {
+    document.getElementById('error-title').textContent = cancelled ? 'Job cancelled' : 'Processing failed';
+    document.getElementById('error-contact').style.display = cancelled ? 'none' : '';
+    document.getElementById('error-partial-btn').style.display = cancelled ? 'none' : '';
     document.getElementById('error-message').textContent = message;
     document.getElementById('error-job-id').textContent  = currentJobId || '(unavailable)';
     const fileList = document.getElementById('error-uploaded-files');
@@ -2555,21 +2636,50 @@
   // Shown beside the Submit button so users can judge whether now is a good
   // time to submit. Only polled while the form is on screen and the tab is
   // visible; on any failure the note is simply hidden.
+  let lastQueueInfo   = null;   // latest /api/queue response
+  let classCodeActive = false;  // the Class code field holds a currently active code
+
   async function refreshQueueStatus() {
     if (appViewState !== 'form' || inDocs) return;
-    const el = document.getElementById('queue-status');
     try {
       const res = await fetch(`${ROOT_PATH}/api/queue`);
       if (!res.ok) throw new Error();
-      const q = await res.json();
-      if (!q.queue_length) {
-        el.textContent = 'Queue: empty — your job would start right away';
-      } else {
-        const people = q.submitters === 1 ? '1 person' : `${q.submitters} people`;
-        el.textContent = `Queue: ${q.running} running, ${q.waiting} waiting (${people})`;
-      }
+      lastQueueInfo = await res.json();
     } catch (e) {
-      el.textContent = '';
+      lastQueueInfo = null;
+    }
+    renderQueueStatus();
+  }
+
+  function fmtMinutesLeft(total) {
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    if (total < 60) return plural(total, 'minute');
+    const h = Math.floor(total / 60), m = total % 60;
+    return m ? `${plural(h, 'hour')} and ${plural(m, 'minute')}` : plural(h, 'hour');
+  }
+
+  // Re-rendered on every queue poll and whenever the Class code check
+  // changes, so the class-priority note disappears as soon as a valid code
+  // is entered.
+  function renderQueueStatus() {
+    const el = document.getElementById('queue-status');
+    el.textContent = '';
+    const q = lastQueueInfo;
+    if (!q) return;
+    const n = q.queue_length;
+    const line = document.createElement('div');
+    line.textContent = !n
+      ? 'There are no jobs currently in the queue, so your job will start right away.'
+      : `There ${n === 1 ? 'is 1 job' : `are ${n} jobs`} currently in the queue. Your job will be ` +
+        'added to that queue depending on how long it\'s estimated to take to process.';
+    el.appendChild(line);
+    if (q.class_priority_minutes_left && !classCodeActive) {
+      const note = document.createElement('div');
+      note.className = 'queue-status-note';
+      note.textContent = `Note that a class has requested priority for another ` +
+        `${fmtMinutesLeft(q.class_priority_minutes_left)} and any jobs submitted by them ` +
+        'will take priority over yours.';
+      el.appendChild(note);
     }
   }
 
@@ -2592,11 +2702,18 @@
     const code = classCodeInput.value.trim();
     const seq = ++classCodeSeq;
     classCodeStatus.className = 'class-code-status';
-    if (!code) { classCodeStatus.textContent = ''; return; }
+    if (!code) {
+      classCodeStatus.textContent = '';
+      classCodeActive = false;
+      renderQueueStatus();
+      return;
+    }
     try {
       const res = await fetch(`${ROOT_PATH}/api/class-code?code=${encodeURIComponent(code)}`);
       const info = await res.json();
       if (seq !== classCodeSeq) return;  // a newer keystroke's check is in flight
+      classCodeActive = !!(info.valid && info.active);
+      renderQueueStatus();
       if (!info.valid) {
         classCodeStatus.textContent = 'Code not recognized — check the spelling.';
         classCodeStatus.classList.add('bad');
