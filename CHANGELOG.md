@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+
+## [0.18.1] - 2026-10-05
 ### Added
 - Cancel a job. Users can cancel their own job, whether it's waiting or already running, from the processing screen, and the admin can cancel any job from the admin page. A running job stops within a few seconds, even partway through Whisper, and the uploaded file is deleted.
 - The admin queue view now shows each job's audio length and which steps (Whisper and model, MFA, new-fave/FAVE-extract) it will run.
