@@ -121,12 +121,14 @@
           Queue <div class="section-rule"></div>
           <button type="button" class="btn btn-outline btn-small" id="refresh-queue">Refresh</button>
         </div>
+        <p class="admin-note" id="queue-setup"></p>
         <p class="admin-note">
-          Waiting jobs are listed in their predicted start order (# column); click a column heading to
-          sort by it instead. "Est. time" is the estimated processing time on this server. "Submitter" is a short hash of the
-          submitter's browser ID, so the same value means the same person. Cancelling a job stops it
-          (a running one within a few seconds), deletes the upload, and tells the user it was
-          cancelled by the administrator.
+          Jobs are listed by queue, then in predicted start order (# column); click a column heading
+          to sort by it instead. "Est. time" and "Waited" are for that queue's part of the job: a job
+          that needs Whisper is in the transcription queue first, then moves to the alignment queue.
+          "Submitter" is a short hash of the submitter's browser ID, so the same value means the same
+          person. Cancelling a job stops it (a running one within a few seconds), deletes the upload,
+          and tells the user it was cancelled by the administrator.
         </p>
         <div class="admin-table-wrap">
           <table class="admin-table">
@@ -219,8 +221,10 @@
   // ─── Queue table (sortable) ───────────────────────────────────────────────
   // Rows default to the scheduler's predicted start order (the # column).
   // The chosen sort survives refreshes, and ties keep predicted order.
+  const QUEUE_LABELS = { transcribe: 'Transcription', align: 'Alignment' };
   const QUEUE_COLUMNS = [
-    { key: 'order',    label: '#',         value: r => r.order },
+    { key: 'order',    label: 'Queue',     value: r => r.order },
+    { key: 'position', label: '#',         value: r => r.position },
     { key: 'job',      label: 'Job',       value: r => r.job_id },
     { key: 'file',     label: 'File',      value: r => (r.audio_filename || '').toLowerCase() },
     { key: 'length',   label: 'Length',    value: r => r.audio_seconds ?? -1 },
@@ -231,7 +235,7 @@
     { key: 'priority', label: 'Priority',  value: r => r.priority_label || '' },
   ];
   let queueRows = [];
-  let queueSort = { key: 'order', dir: 1 };
+  let queueSort = { key: 'order', dir: 1 };  // default: queue, then predicted start order
   try { queueSort = JSON.parse(sessionStorage.getItem('vxh_admin_queue_sort')) || queueSort; } catch (e) {}
 
   function renderQueueHead() {
@@ -252,12 +256,13 @@
     });
     $('queue-body').innerHTML = rows.length
       ? rows.map(r => {
-          const running = r.order === 0;
+          const running = r.position === 0;
           const left = running && r.running_seconds != null
             ? Math.max(0, r.estimated_cost_seconds - r.running_seconds) : null;
           return `
           <tr>
-            <td>${running ? 'Running' : r.order}</td>
+            <td class="nowrap">${esc(QUEUE_LABELS[r.queue] || r.queue)}</td>
+            <td>${running ? 'Running' : r.position}</td>
             <td class="mono">${esc(r.job_id)}${running && r.step_name ? `<br><span class="muted" style="font-family:Arial, sans-serif">${esc(r.step_name)}</span>` : ''}</td>
             <td>${esc(r.audio_filename)}</td>
             <td class="nowrap">${r.audio_seconds ? esc(fmtSeconds(r.audio_seconds)) : '?'}</td>
@@ -286,11 +291,14 @@
     $('queue-error').textContent = '';
     try {
       const q = await api('/api/admin/queue');
-      // order: 0 = running, then 1, 2, … in predicted start order
-      queueRows = [
-        ...q.running.map(r => ({ ...r, order: 0 })),
-        ...q.waiting.map((r, i) => ({ ...r, order: i + 1 })),
-      ];
+      // order: transcription queue first, then alignment; within each,
+      // running (position 0) then predicted start order
+      queueRows = q.jobs.map(r => ({ ...r, order: (r.queue === 'align' ? 1000 : 0) + r.position }));
+      const transcribing = q.jobs.some(r => r.queue === 'transcribe' && r.position === 0);
+      $('queue-setup').textContent = q.pipeline
+        ? `Server: ${q.cpu_cores} cores, two queues — Whisper runs in the transcription queue while MFA and formant extraction run in the alignment queue.` +
+          (transcribing ? ` Whisper is currently using ${q.whisper_threads} of ${q.cpu_cores} cores.` : '')
+        : `Server: ${q.cpu_cores} cores, one queue — each job runs start to finish before the next begins.`;
       renderQueueBody();
     } catch (e) {
       if (e.message !== 'unauthorized') $('queue-error').textContent = e.message;

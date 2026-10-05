@@ -21,12 +21,18 @@ where Whisper is much faster.
 
 ### How does the queue work?
 
-VoxHumana processes one file at a time, but the queue isn't strictly first-come, first-served.
-When the server frees up, the next job goes to whoever has used the least processing time
-recently, and each person's shorter files go before their longer ones. Files that skip
-transcription count as short, since Whisper is the slowest step. This keeps one person who
-submits many long recordings from blocking everyone else. Their files still get processed,
-just interleaved with other people's.
+There are two queues, one for each half of the work: a **transcription** queue for Whisper,
+and an **alignment** queue for MFA and formant extraction. They run at the same time, so
+while one recording is being transcribed, another can be aligned. A job that needs Whisper
+goes through the transcription queue first, then moves to the alignment queue. A job that
+skips transcription (because you uploaded your own TextGrid) goes straight to the alignment
+queue, so it doesn't wait behind anyone's transcription.
+
+Neither queue is strictly first-come, first-served. When a spot opens up, the next job goes
+to whoever has used the least processing time recently, and each person's shorter files go
+before their longer ones. This keeps one person who submits many long recordings from
+blocking everyone else. Their files still get processed, just interleaved with other
+people's.
 
 Because of this, your place in line can change while you wait. Someone who submits a short
 file after you may start before you do. No one waits indefinitely: anyone who hasn't had a

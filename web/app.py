@@ -5,6 +5,7 @@ import hashlib
 import importlib.metadata
 import io
 import json
+import multiprocessing
 import os
 import re
 import shutil
@@ -16,6 +17,7 @@ import tomllib
 import zipfile
 import traceback
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -47,7 +49,7 @@ from pipeline.tier_selection import (
     guess_utterance_tier,
     extract_utterance_tier,
 )
-from web.scheduler import FairScheduler, QueuedJob, estimate_cost
+from web.scheduler import FairScheduler, QueuedJob, estimate_stage_times
 from web.killable import StepProcess, StepKilled
 from web.class_codes import ClassCodeStore, code_status
 from pipeline.languages import (
@@ -124,18 +126,66 @@ jobs: dict[str, dict] = {}
 # /api/jobs status endpoint, which returns `jobs[job_id]` verbatim.
 job_client_info: dict[str, dict] = {}
 
-# One job at a time — the pipeline is compute-heavy.
-executor = ThreadPoolExecutor(max_workers=1)
+# ─── Job queues ───────────────────────────────────────────────────────────────
+# Each job's work is split in two: transcription (Whisper, plus turning its
+# output into a TextGrid and a transcript), then alignment (MFA, formant
+# extraction, and adding the utterance tier). Each half has its own
+# fair-share queue (web/scheduler.py) and its own single worker thread, so
+# while one job is in Whisper another can be in MFA/new-fave, and a job that
+# skips Whisper goes straight to the alignment queue instead of waiting
+# behind someone's long transcription.
+#
+# Each queued job adds one _run_next() "tick" to its queue's executor; the
+# tick asks that queue for the best job *when it runs*, so execution order
+# follows the scheduler rather than submission order.
+#
+# Cores: while Whisper is busy, the alignment worker gets 1 core and Whisper
+# the rest. When the alignment queue is idle, Whisper borrows that core back
+# (it re-checks before each 30-second window — see
+# pipeline/transcribe_with_whisper.py). When no Whisper job is running or
+# waiting, alignment steps may use every core.
+#
+# With fewer than 3 cores, splitting isn't worth it (Whisper needs them
+# all), so each job runs start to finish in the transcription queue instead.
+# VXH_PIPELINE=0/1 overrides that; VXH_CPU_CORES overrides the core count.
+CPU_CORES = int(os.environ.get("VXH_CPU_CORES") or os.cpu_count() or 1)
+PIPELINE = (
+    os.environ["VXH_PIPELINE"] == "1" if os.environ.get("VXH_PIPELINE") in ("0", "1")
+    else CPU_CORES >= 3
+)
+try:
+    MEM_TOTAL_GB = round(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30, 1)
+except (ValueError, OSError, AttributeError):
+    MEM_TOTAL_GB = None
 
-# Decides which waiting job runs next (fair share across submitters, cheaper
-# jobs first, class-code priority, aging — see web/scheduler.py). Each
-# submitted job adds one _run_next_job "tick" to the executor; the tick asks
-# the scheduler for the best job *when it runs*, so execution order follows
-# the scheduler rather than submission order.
-scheduler = FairScheduler()
+transcribe_queue = FairScheduler()
+align_queue = FairScheduler()
+_QUEUES = {"transcribe": transcribe_queue, "align": align_queue}
+_executors = {
+    "transcribe": ThreadPoolExecutor(max_workers=1),
+    "align": ThreadPoolExecutor(max_workers=1),
+}
 
-# Pipeline arguments for jobs still waiting in the scheduler, keyed by job ID.
-_job_run_args: dict[str, tuple[Path, dict]] = {}
+# How many threads the running Whisper step should use. It's shared memory,
+# so the Whisper process sees changes mid-step (before its next window).
+_whisper_threads = multiprocessing.get_context("spawn").Value("i", CPU_CORES)
+
+
+@dataclass
+class _JobRun:
+    """What a job carries from submission, through its queue(s), to the end."""
+    job_id: str
+    audio_path: Path
+    config: dict
+    submitter: str
+    priority_label: Optional[str]
+    transcribe_cost: float              # estimated seconds in each queue
+    align_cost: float
+    step_times: list = field(default_factory=list)
+    align_enqueued_at: Optional[datetime] = None
+
+
+_job_runs: dict[str, _JobRun] = {}
 
 # submitter_id from the browser: letters, digits, hyphens (a UUID in practice).
 _SUBMITTER_ID_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
@@ -885,6 +935,7 @@ def _write_server_log(
         status_line = "SUCCESS" if failed_step is None else f"FAILED at \"{failed_step}\""
     queue_position = jobs.get(job_id, {}).get("queue_position_at_submission", 1)
     wait_seconds = jobs.get(job_id, {}).get("wait_seconds", 0.0)
+    align_wait_seconds = jobs.get(job_id, {}).get("align_wait_seconds")
     client_info = job_client_info.get(job_id, {})
     client_ip = client_info.get("client_ip", "unknown")
     user_agent = client_info.get("user_agent", "")
@@ -908,6 +959,9 @@ def _write_server_log(
     ln(f"Completed:    {completed_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     ln(f"Total time:   {_fmt_duration(total_seconds)}")
     ln(f"Queue pos.:   {queue_position}  (wait: {_fmt_duration(wait_seconds)})")
+    if align_wait_seconds is not None:
+        ln(f"Align wait:   {_fmt_duration(align_wait_seconds)}  (after transcription, for the alignment queue)")
+    ln(f"Server:       {CPU_CORES} cores, {MEM_TOTAL_GB} GB RAM, two-queue pipeline {'on' if PIPELINE else 'off'}")
     ln(f"Client IP:    {client_ip}")
     ln(f"User-Agent:   {user_agent or 'unknown'}")
     ln(f"Submitter:    {submitter or 'unknown'}")
@@ -1044,6 +1098,11 @@ def _write_server_log(
         "include_intervocalic":      nf_cfg.get("include_intervocalic", True) if nf_combine_preliquid else None,
         "formants_engine":           formants_engine,
         "step_seconds":              step_seconds,
+        "align_wait_seconds":        align_wait_seconds,
+        # Hardware and queue setup, so time estimates can be refit per setup.
+        "cpu_cores":                 CPU_CORES,
+        "mem_total_gb":              MEM_TOTAL_GB,
+        "pipeline":                  PIPELINE,
         "versions": {
             "voxhumana":      APP_VERSION,
             "openai-whisper": whisper_ver,
@@ -1062,10 +1121,10 @@ def _check_cancel(job_id: str) -> None:
         raise StepKilled()
 
 
-def _run_step(job_id: str, func, *args):
+def _run_step(job_id: str, func, *args, env: dict | None = None):
     """Run one heavy pipeline step in a killable child process (web/killable.py)."""
     _check_cancel(job_id)
-    step = StepProcess(func, *args)
+    step = StepProcess(func, *args, env=env)
     step.start()
     _running_steps[job_id] = step
     try:
@@ -1078,41 +1137,56 @@ def _run_step(job_id: str, func, *args):
         _running_steps.pop(job_id, None)
 
 
+def _set_align_cores(cores: int) -> None:
+    """Record how many cores the alignment worker is using; Whisper gets the rest."""
+    _whisper_threads.value = max(1, CPU_CORES - cores)
+
+
+def _align_step_env() -> dict:
+    """Thread limits for the next alignment-queue step (MFA, new-fave, FAVE-extract).
+
+    One core while a Whisper job is running or waiting; every core otherwise.
+    Decided per step — the steps are short, so no need to adjust mid-step.
+    """
+    cores = 1 if not transcribe_queue.is_idle() else CPU_CORES
+    _set_align_cores(cores)
+    # numpy/BLAS and joblib (new-fave's parallel workers) read these.
+    return {name: cores for name in (
+        "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "LOKY_MAX_CPU_COUNT",
+    )}
+
+
+def _enqueue(run: _JobRun, stage: str) -> None:
+    """Add a job to the "transcribe" or "align" queue and wake that queue's worker."""
+    if stage == "align":
+        cost = run.align_cost
+    else:  # without pipelining, the whole job runs in this queue
+        cost = run.transcribe_cost if PIPELINE else run.transcribe_cost + run.align_cost
+    jobs[run.job_id]["queue"] = stage
+    _QUEUES[stage].add(QueuedJob(run.job_id, run.submitter, cost, run.priority_label))
+    _executors[stage].submit(_run_next, stage)
+
+
 def _cancel_job(job_id: str, by: str) -> str:
     """Cancel a waiting or running job on behalf of "user" or "admin".
 
     Returns "cancelled" (it was waiting and is gone now), "cancelling" (it's
-    running; its pipeline thread finishes the cleanup once the step dies), or
+    running; its worker finishes the cleanup once the step dies), or
     "finished" (too late — it already completed or failed).
     """
     job = jobs[job_id]
     if job["status"] not in ("queued", "running"):
         return "finished"
     _cancel_requests[job_id] = by
-    if scheduler.remove(job_id):
-        audio_path, config = _job_run_args.pop(job_id)
+    if transcribe_queue.remove(job_id) or align_queue.remove(job_id):
+        run = _job_runs[job_id]
         job.update(status="error", cancelled=True, error=_CANCEL_MESSAGES[by],
                    step_name="Cancelled")
-        try:
-            _write_server_log(
-                job_id=job_id,
-                job_dir=JOBS_DIR / job_id,
-                audio_path=audio_path,
-                submitted_at=datetime.fromisoformat(job["created_at"]),
-                completed_at=datetime.now(timezone.utc),
-                step_times=[],
-                failed_step=None,
-                error_tb=None,
-                config=config,
-                cancelled_by=by,
-            )
-        except Exception:
-            pass
-        shutil.rmtree(JOBS_DIR / job_id, ignore_errors=True)
-        _cancel_requests.pop(job_id, None)
+        _finish_job(run, "Waiting for alignment" if run.align_enqueued_at else None,
+                    error_tb=None, cancelled_by=by)
         return "cancelled"
-    # Already picked by the worker: kill its current step, if one is running.
-    # Otherwise _check_cancel() stops it before its next step.
+    # Already picked by a worker (or between queues): kill its current step,
+    # if one is running. Otherwise _check_cancel() stops it before its next step.
     job["step_name"] = "Cancelling…"
     step = _running_steps.get(job_id)
     if step is not None:
@@ -1120,29 +1194,56 @@ def _cancel_job(job_id: str, by: str) -> str:
     return "cancelling"
 
 
-def _run_next_job() -> None:
-    """Executor tick: run whichever waiting job the scheduler picks now."""
+def _run_next(stage: str) -> None:
+    """Executor tick for one queue: run whichever waiting job it picks now."""
     if _shutting_down:
         return
-    queued = scheduler.pop_next()
+    queue = _QUEUES[stage]
+    queued = queue.pop_next()
     if queued is None:
         return
-    audio_path, config = _job_run_args.pop(queued.job_id)
-    _run_pipeline(queued.job_id, audio_path, config)
+    run = _job_runs[queued.job_id]
+    hand_off = False
+    try:
+        hand_off = _run_stage(run, stage)
+    finally:
+        # Guarded: this runs on a queue's only worker thread, so an exception
+        # escaping here would leave every job behind it looking stuck. The
+        # slot is freed before any hand-off, so a job is never counted in
+        # both queues at once.
+        try:
+            queue.finish(queued.job_id)
+            if stage == "align" and PIPELINE:
+                _set_align_cores(0)  # alignment worker idle: Whisper may use every core
+        except Exception:
+            pass
+    if hand_off:
+        _enqueue(run, "align")
 
 
-def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
-    """Run pipeline steps in a background thread, honoring the steps config."""
+def _run_stage(run: _JobRun, stage: str) -> bool:
+    """Run one queue's share of a job, honoring the steps config.
+
+    In the transcription queue that's Whisper and its TextGrid/transcript;
+    in the alignment queue, MFA, formants, and the utterance tier. Without
+    pipelining, the transcription queue runs everything. Returns True when
+    the job should move on to the alignment queue; otherwise the job is over
+    (done, failed, or cancelled) and has been logged and cleaned up.
+    """
+    job_id = run.job_id
+    job = jobs[job_id]
     job_dir = JOBS_DIR / job_id
-    submitted_at = datetime.fromisoformat(jobs[job_id]["created_at"])
-    started_at = datetime.now(timezone.utc)
-    wait_seconds = (started_at - submitted_at).total_seconds()
-    jobs[job_id].update(
-        status="running",
-        started_at=started_at.isoformat(),
-        wait_seconds=round(wait_seconds, 1),
-    )
-    step_times: list[tuple[str, float]] = []
+    audio_path, config = run.audio_path, run.config
+    stem = audio_path.stem
+    step_times = run.step_times
+
+    now = datetime.now(timezone.utc)
+    if job.get("started_at") is None:  # this job's first turn on a worker
+        wait_seconds = (now - datetime.fromisoformat(job["created_at"])).total_seconds()
+        job.update(status="running", started_at=now.isoformat(), wait_seconds=round(wait_seconds, 1))
+    elif run.align_enqueued_at is not None:
+        job["align_wait_seconds"] = round((now - run.align_enqueued_at).total_seconds(), 1)
+
     current_step: str | None = None
     error_tb: str | None = None
     cancelled_by: str | None = None
@@ -1151,58 +1252,71 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
     run_transcription = steps.get("transcription", True)
     run_alignment     = steps.get("alignment", True)
     run_formants      = steps.get("formants", True)
-
-    stem = audio_path.stem
+    do_alignment_half = stage == "align" or not PIPELINE
+    # Thread limits for alignment steps only matter when they share the CPU
+    # with a Whisper job, i.e. when running in the alignment queue.
+    align_env = _align_step_env if stage == "align" else (lambda: None)
 
     # Always defined so new-fave can find the TextGrid even when alignment was skipped.
     mfa_output_dir = job_dir / "mfa_output"
 
     try:
-        if run_transcription:
+        if stage == "transcribe" and run_transcription:
             current_step = "Step 1 – Transcribing with Whisper"
-            jobs[job_id].update(step=1, step_name="Transcribing with Whisper")
+            job.update(step=1, step_name="Transcribing with Whisper")
             _t = datetime.now(timezone.utc)
-            whisper_result = _run_step(job_id, transcribe, str(audio_path), str(job_dir), config.get("whisper"))
+            whisper_result = _run_step(
+                job_id, transcribe, str(audio_path), str(job_dir), config.get("whisper"),
+                _whisper_threads if PIPELINE else None,
+            )
             step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
             current_step = "Step 2 – Converting transcript to TextGrid"
-            jobs[job_id].update(step=2, step_name="Converting transcript to TextGrid")
+            job.update(step=2, step_name="Converting transcript to TextGrid")
             _t = datetime.now(timezone.utc)
             _check_cancel(job_id)
             convert_whisper_to_textgrid(whisper_result, str(audio_path), str(job_dir))
             step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
             current_step = "Step 2b – Generating line-by-line transcript"
-            jobs[job_id].update(step=2, step_name="Generating line-by-line transcript")
+            job.update(step=2, step_name="Generating line-by-line transcript")
             _t = datetime.now(timezone.utc)
             _check_cancel(job_id)
             generate_transcript(str(job_dir), stem, config.get("praat"))
             step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
-        if run_alignment:
+            if PIPELINE and (run_alignment or run_formants):
+                run.align_enqueued_at = datetime.now(timezone.utc)
+                job["step_name"] = "Transcribed — waiting for alignment"
+                return True
+
+        if do_alignment_half and run_alignment:
             current_step = "Step 3 – Aligning with MFA"
-            jobs[job_id].update(step=3, step_name="Aligning with MFA")
+            job.update(step=3, step_name="Aligning with MFA")
             _t = datetime.now(timezone.utc)
-            mfa_output_dir = _run_step(job_id, align_with_mfa, str(audio_path), str(job_dir), config.get("mfa"))
+            mfa_output_dir = _run_step(job_id, align_with_mfa, str(audio_path), str(job_dir),
+                                       config.get("mfa"), env=align_env())
             step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
             # If the user supplied their own TextGrid (Transcribe skipped), remove the
             # whisper_output/ staging folder — it only contained their uploaded file.
             if not run_transcription:
                 shutil.rmtree(job_dir / "whisper_output", ignore_errors=True)
 
-        if run_formants:
+        if do_alignment_half and run_formants:
             formants_engine = config.get("formants_engine", "newfave")
             if formants_engine == "fave_extract":
                 current_step = "Step 4 – Extracting formants with FAVE-extract"
-                jobs[job_id].update(step=4, step_name="Extracting formants with FAVE-extract")
+                job.update(step=4, step_name="Extracting formants with FAVE-extract")
                 _t = datetime.now(timezone.utc)
-                _run_step(job_id, extract_with_fave, str(audio_path), mfa_output_dir, str(job_dir), config.get("fave_extract"))
+                _run_step(job_id, extract_with_fave, str(audio_path), mfa_output_dir, str(job_dir),
+                          config.get("fave_extract"), env=align_env())
                 step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
             else:
                 current_step = "Step 4 – Extracting vowel formants with new-fave"
-                jobs[job_id].update(step=4, step_name="Extracting vowel formants with new-fave")
+                job.update(step=4, step_name="Extracting vowel formants with new-fave")
                 _t = datetime.now(timezone.utc)
-                _run_step(job_id, extract_with_newfave, str(audio_path), mfa_output_dir, str(job_dir), config.get("newfave"))
+                _run_step(job_id, extract_with_newfave, str(audio_path), mfa_output_dir, str(job_dir),
+                          config.get("newfave"), env=align_env())
                 step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
             # If the user supplied their own MFA TextGrid (Align skipped), remove the
             # mfa_output/ staging folder — it only contained their uploaded file.
@@ -1214,10 +1328,10 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         # for the utterance tier and mfa_output/ to merge it into). Must run
         # after new-fave (above) — new-fave expects exactly a Word/Phone tier
         # pair, and this 3-tier grid would break its tier pairing.
-        if run_transcription and run_alignment:
+        if do_alignment_half and run_transcription and run_alignment:
             current_step = "Step 5 – Adding utterance tier to MFA TextGrid"
             report_step = 4 if run_formants else 3
-            jobs[job_id].update(step=report_step, step_name="Adding utterance tier to MFA TextGrid")
+            job.update(step=report_step, step_name="Adding utterance tier to MFA TextGrid")
             _t = datetime.now(timezone.utc)
             _check_cancel(job_id)
             combine_textgrids(str(job_dir), stem, config.get("praat"))
@@ -1226,18 +1340,18 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         _write_processing_log(
             job_dir, job_id, config,
             audio_filename=audio_path.name,
-            submitted_at=submitted_at,
+            submitted_at=datetime.fromisoformat(job["created_at"]),
         )
-        jobs[job_id].update(status="done", step=5, step_name="Complete")
+        job.update(status="done", step=5, step_name="Complete")
         current_step = None  # marks success
 
     except StepKilled:
         cancelled_by = _cancel_requests.get(job_id)
         if cancelled_by:
-            jobs[job_id].update(status="error", cancelled=True,
-                                error=_CANCEL_MESSAGES[cancelled_by], step_name="Cancelled")
+            job.update(status="error", cancelled=True,
+                       error=_CANCEL_MESSAGES[cancelled_by], step_name="Cancelled")
         else:  # killed because the server is shutting down
-            jobs[job_id].update(
+            job.update(
                 status="error",
                 error="The server restarted while this job was running. Please submit it again.",
             )
@@ -1246,53 +1360,53 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         error_tb = traceback.format_exc()
         # Write the full traceback to disk for debugging; never send it to the client.
         (JOBS_DIR / job_id / "error.log").write_text(error_tb)
-        jobs[job_id].update(status="error", error=str(exc))
+        job.update(status="error", error=str(exc))
 
-    finally:
-        # Each step below is independently guarded — this function runs on
-        # the single background worker thread, so if a step here ever raised
-        # (or if an earlier step's raise skipped scheduler.finish() below),
-        # it wouldn't just corrupt this job's bookkeeping — every job queued
-        # behind it would appear stuck. scheduler.finish() runs first,
-        # before best-effort logging/cleanup, so queue position for the rest
-        # of the queue is correct even if a cleanup step below fails.
-        try:
-            scheduler.finish(job_id)
-        except Exception:
-            pass
+    _finish_job(run, current_step, error_tb, cancelled_by)
+    return False
 
-        completed_at = datetime.now(timezone.utc)
-        try:
-            _write_server_log(
-                job_id=job_id,
-                job_dir=job_dir,
-                audio_path=audio_path,
-                submitted_at=submitted_at,
-                completed_at=completed_at,
-                step_times=step_times,
-                failed_step=current_step,
-                error_tb=error_tb,
-                config=config,
-                cancelled_by=cancelled_by,
-            )
-        except Exception:
-            pass
-        try:
-            _cleanup_intermediates(job_dir, audio_path)
-        except Exception:
-            pass
-        # A cancelled job has nothing worth downloading — remove it entirely.
-        if cancelled_by:
-            shutil.rmtree(job_dir, ignore_errors=True)
-        _cancel_requests.pop(job_id, None)
-        try:
-            _cleanup_orphaned_audio()
-        except Exception:
-            pass
-        try:
-            _expire_old_jobs()
-        except Exception:
-            pass
+
+def _finish_job(run: _JobRun, failed_step: str | None, error_tb: str | None,
+                cancelled_by: str | None) -> None:
+    """Log and clean up a job that's over — done, failed, or cancelled.
+
+    Every step is independently guarded: this runs on a queue's worker
+    thread, and a raise here must not take the worker down with it.
+    """
+    job_id = run.job_id
+    job_dir = JOBS_DIR / job_id
+    try:
+        _write_server_log(
+            job_id=job_id,
+            job_dir=job_dir,
+            audio_path=run.audio_path,
+            submitted_at=datetime.fromisoformat(jobs[job_id]["created_at"]),
+            completed_at=datetime.now(timezone.utc),
+            step_times=run.step_times,
+            failed_step=failed_step,
+            error_tb=error_tb,
+            config=run.config,
+            cancelled_by=cancelled_by,
+        )
+    except Exception:
+        pass
+    try:
+        _cleanup_intermediates(job_dir, run.audio_path)
+    except Exception:
+        pass
+    # A cancelled job has nothing worth downloading — remove it entirely.
+    if cancelled_by:
+        shutil.rmtree(job_dir, ignore_errors=True)
+    _cancel_requests.pop(job_id, None)
+    _job_runs.pop(job_id, None)
+    try:
+        _cleanup_orphaned_audio()
+    except Exception:
+        pass
+    try:
+        _expire_old_jobs()
+    except Exception:
+        pass
 
 
 @app.post("/api/textgrid-tiers")
@@ -1699,10 +1813,11 @@ async def create_job(
         )
     except Exception:
         audio_duration_at_submit = None
-    cost = estimate_cost(
+    transcribe_cost, align_cost = estimate_stage_times(
         audio_duration_at_submit, whisper_model,
         run_transcription, run_alignment, run_formants,
     )
+    cost = transcribe_cost + align_cost
 
     job_client_info[job_id] = {
         "client_ip": client_ip,
@@ -1734,13 +1849,17 @@ async def create_job(
         "download_token": download_token,
         # 1 = no one ahead (next up); >1 = that many jobs (including this one)
         # were queued or running when this job was submitted.
-        "queue_position_at_submission": scheduler.pending_count() + scheduler.running_count() + 1,
+        "queue_position_at_submission": sum(
+            q.pending_count() + q.running_count() for q in _QUEUES.values()
+        ) + 1,
         "class_code_label": class_code_label,
     }
 
-    _job_run_args[job_id] = (audio_path, config)
-    scheduler.add(QueuedJob(job_id, submitter, cost, class_code_label))
-    executor.submit(_run_next_job)
+    run = _JobRun(job_id, audio_path, config, submitter, class_code_label,
+                  transcribe_cost, align_cost)
+    _job_runs[job_id] = run
+    # A job that skips Whisper goes straight to the alignment queue.
+    _enqueue(run, "align" if PIPELINE and not run_transcription else "transcribe")
 
     return JSONResponse({"job_id": job_id, "download_token": download_token})
 
@@ -1748,31 +1867,44 @@ async def create_job(
 def _job_status_payload(job_id: str) -> Optional[dict]:
     """Return a job's status dict (with queue position filled in), or None if unknown.
 
-    Position comes from the scheduler's predicted order, which can shift as
-    other jobs arrive (a newcomer with a short file may go ahead of you).
+    Position comes from the predicted order of whichever queue the job is
+    waiting in, which can shift as other jobs arrive (a newcomer with a short
+    file may go ahead of you). A job waiting for the alignment queue after
+    Whisper has status "running" — it has started — but still gets a position.
     """
     if job_id not in jobs:
         return None
     job = dict(jobs[job_id])
-    if job["status"] == "queued":
-        order = scheduler.predicted_order()
-        if job_id not in order:
-            # Picked by the worker, but _run_pipeline hasn't marked it running yet.
+    stage = job.get("queue")
+    if job["status"] not in ("queued", "running") or stage is None:
+        return job
+    queue = _QUEUES[stage]
+    order = queue.predicted_order()
+    if job_id not in order:
+        if job["status"] == "queued":
+            # Picked by a worker, but not marked running yet.
             job["step_name"] = "Starting…"
-            return job
-        ahead = order.index(job_id)
-        running = scheduler.running_count()
-        job["queue_position"] = ahead + 1           # 1 = next to start
-        job["queue_length"] = len(order) + running  # waiting + running
-        job["queue_ahead"] = ahead
-        if ahead == 0:
-            text = ("Next in line — starts when the current job finishes" if running
-                    else "Starting…")
+        return job
+    ahead = order.index(job_id)
+    running = queue.running_count()
+    job["queue_position"] = ahead + 1           # 1 = next to start
+    job["queue_length"] = len(order) + running  # waiting + running, in this queue
+    job["queue_ahead"] = ahead
+    jobs_ahead = f"{ahead} job{'s' if ahead != 1 else ''} ahead of yours"
+    if job["status"] == "running":  # transcribed, waiting for the alignment queue
+        if ahead:
+            text = f"Transcribed — waiting for alignment ({jobs_ahead})"
         else:
-            text = f"Waiting in queue — {ahead} job{'s' if ahead != 1 else ''} ahead of yours"
-        if job.get("class_code_label"):
-            text = f"Priority ({job['class_code_label']}) · {text}"
-        job["step_name"] = text
+            text = ("Transcribed — next in line for alignment" if running
+                    else "Transcribed — starting alignment…")
+    elif ahead:
+        text = f"Waiting in queue — {jobs_ahead}"
+    else:
+        text = ("Next in line — starts when the current job finishes" if running
+                else "Starting…")
+    if job.get("class_code_label"):
+        text = f"Priority ({job['class_code_label']}) · {text}"
+    job["step_name"] = text
     return job
 
 
@@ -1808,8 +1940,8 @@ async def get_queue():
 
     Only counts are exposed — never job IDs, which double as status lookup keys.
     """
-    running = scheduler.running_count()
-    waiting = scheduler.pending_count()
+    running = sum(q.running_count() for q in _QUEUES.values())
+    waiting = sum(q.pending_count() for q in _QUEUES.values())
     # While a class window is open, the form warns people without the code
     # that class jobs will go first. Only the time left is exposed — never
     # the code or which class it is.
@@ -1822,7 +1954,7 @@ async def get_queue():
         "queue_length": running + waiting,
         "running": running,
         "waiting": waiting,
-        "submitters": scheduler.submitter_count(),
+        "submitters": len(transcribe_queue.submitters() | align_queue.submitters()),
         "class_priority_minutes_left": priority_minutes_left,
     })
 
@@ -1897,14 +2029,19 @@ async def admin_delete_class_code(code: str, authorization: Optional[str] = Head
 
 @app.get("/api/admin/queue")
 async def admin_queue(authorization: Optional[str] = Header(None)):
-    """Running job plus waiting jobs in predicted order — who's using VxH right now."""
+    """Both queues: running jobs plus waiting jobs in predicted order.
+
+    Times are per queue: "Est. time" is that queue's share of the job, and
+    "waited" counts from when the job entered that queue.
+    """
     _require_admin(authorization)
     now = datetime.now(timezone.utc).timestamp()
-    snap = scheduler.snapshot()
 
-    def row(q: QueuedJob) -> dict:
+    def row(q: QueuedJob, stage: str, position: int) -> dict:
         info = job_client_info.get(q.job_id, {})
         return {
+            "queue": stage,
+            "position": position,  # 0 = running, then predicted start order
             "job_id": q.job_id,
             "submitter": _submitter_hash(q.submitter),
             "audio_filename": jobs.get(q.job_id, {}).get("audio_filename"),
@@ -1917,9 +2054,16 @@ async def admin_queue(authorization: Optional[str] = Header(None)):
             "step_name": jobs.get(q.job_id, {}).get("step_name"),
         }
 
+    rows = []
+    for stage, queue in _QUEUES.items():
+        snap = queue.snapshot()
+        rows += [row(q, stage, 0) for q in snap["running"]]
+        rows += [row(q, stage, i + 1) for i, q in enumerate(snap["waiting"])]
     return JSONResponse({
-        "running": [row(q) for q in snap["running"]],
-        "waiting": [row(q) for q in snap["waiting"]],
+        "jobs": rows,
+        "pipeline": PIPELINE,
+        "cpu_cores": CPU_CORES,
+        "whisper_threads": _whisper_threads.value if PIPELINE else CPU_CORES,
     })
 
 
