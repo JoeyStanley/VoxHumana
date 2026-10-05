@@ -3,6 +3,8 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+
+## [0.18.2] - 2026-10-05
 ### Added
 - Two additional cores added to processing on the server, which allows for greater speed and processing multiple jobs in parallel.
 - Two queues that run at the same time: a transcription queue (Whisper) and an alignment queue (MFA and formant extraction), each with the same fair-share ordering. While one job is in Whisper, another can be aligned, and jobs that skip Whisper (uploaded TextGrids) go straight to the alignment queue instead of waiting behind long transcriptions.
