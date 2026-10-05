@@ -15,6 +15,7 @@ import tempfile
 import tomllib
 import zipfile
 import traceback
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -47,6 +48,7 @@ from pipeline.tier_selection import (
     extract_utterance_tier,
 )
 from web.scheduler import FairScheduler, QueuedJob, estimate_cost
+from web.killable import StepProcess, StepKilled
 from web.class_codes import ClassCodeStore, code_status
 from pipeline.languages import (
     MFA_DICTIONARY_DOCS_URL,
@@ -65,7 +67,19 @@ _INDEX_HTML = Path(__file__).parent / "static" / "index.html"
 _ADMIN_HTML = Path(__file__).parent / "static" / "admin.html"
 _PYPROJECT_TOML = Path(__file__).parent.parent / "pyproject.toml"
 
-app = FastAPI(title="VoxHumana")
+@asynccontextmanager
+async def _lifespan(app):
+    yield
+    # Shutting down (e.g. a deploy restart): kill the running job's step so
+    # the process can exit promptly instead of waiting out a long Whisper
+    # run, and don't start any more queued jobs on the way out.
+    global _shutting_down
+    _shutting_down = True
+    for step in list(_running_steps.values()):
+        step.kill()
+
+
+app = FastAPI(title="VoxHumana", lifespan=_lifespan)
 
 
 def _get_app_version() -> str:
@@ -80,6 +94,11 @@ def _get_app_version() -> str:
 
 
 APP_VERSION = _get_app_version()
+
+# The production server has 2 CPU cores and no GPU, where Small transcribes in
+# about 0.8x the recording's length versus about 2.7x (plus ~4.5 min to load)
+# for Turbo — so Small is the web default. The CLI keeps its own default.
+DEFAULT_WHISPER_MODEL = "small"
 
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 MAX_OOV_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB — a plain-text pronunciation dictionary, not audio
@@ -120,6 +139,19 @@ _job_run_args: dict[str, tuple[Path, dict]] = {}
 
 # submitter_id from the browser: letters, digits, hyphens (a UUID in practice).
 _SUBMITTER_ID_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+
+# Cancellation. A waiting job is simply dropped from the scheduler; a running
+# one is stopped by killing its current step, which runs in a child process
+# (web/killable.py). _cancel_requests maps job ID -> who asked ("user" or
+# "admin") and is also checked between steps.
+_cancel_requests: dict[str, str] = {}
+_running_steps: dict[str, StepProcess] = {}
+_shutting_down = False
+_CANCEL_MESSAGES = {
+    "user":  "You cancelled this job.",
+    "admin": "This job was cancelled by the VoxHumana administrator. Email "
+             "voxhumana.ling@gmail.com with any questions.",
+}
 
 
 # Organ stops drawn from the Salt Lake Tabernacle organ — used to generate
@@ -416,7 +448,7 @@ def _write_processing_log(
     ln("")
     ln(BAR)
     if ran_transcription:
-        model = w_cfg.get("model", "turbo")
+        model = w_cfg.get("model", DEFAULT_WHISPER_MODEL)
         language = w_cfg.get("language") or None
         initial_prompt = w_cfg.get("initial_prompt") or None
         copt = w_cfg.get("condition_on_previous_text", True)
@@ -435,7 +467,7 @@ def _write_processing_log(
         ln("This TextGrid is the input to MFA alignment Step 2.")
         ln("")
         ln("Parameters:")
-        ln(f"  - model:                       {model}{dflt(model, 'turbo')}")
+        ln(f"  - model:                       {model}{dflt(model, DEFAULT_WHISPER_MODEL)}")
         ln(f"  - language:                    {language or '(auto-detect)'}{dflt(language, None)}")
         ln(f"  - initial_prompt:              {repr(initial_prompt) if initial_prompt else '(none)'}{dflt(initial_prompt, None)}")
         ln(f"  - condition_on_previous_text:  {copt}{dflt(copt, True)}")
@@ -801,6 +833,7 @@ def _write_server_log(
     failed_step: str | None,
     error_tb: str | None,
     config: dict,
+    cancelled_by: str | None = None,
 ) -> None:
     """Write a server-side diagnostic log for every job, success or failure.
 
@@ -845,7 +878,11 @@ def _write_server_log(
             break
 
     total_seconds = (completed_at - submitted_at).total_seconds()
-    status_line = "SUCCESS" if failed_step is None else f"FAILED at \"{failed_step}\""
+    if cancelled_by:
+        status_line = (f"CANCELLED by {cancelled_by} "
+                       + (f"during \"{failed_step}\"" if failed_step else "before it started"))
+    else:
+        status_line = "SUCCESS" if failed_step is None else f"FAILED at \"{failed_step}\""
     queue_position = jobs.get(job_id, {}).get("queue_position_at_submission", 1)
     wait_seconds = jobs.get(job_id, {}).get("wait_seconds", 0.0)
     client_info = job_client_info.get(job_id, {})
@@ -898,7 +935,7 @@ def _write_server_log(
     ln("")
     ln("Settings:")
     ln(f"  [Whisper]")
-    ln(f"  model:                    {w_cfg.get('model', 'turbo')}")
+    ln(f"  model:                    {w_cfg.get('model', DEFAULT_WHISPER_MODEL)}")
     ln(f"  language:                 {w_cfg.get('language') or '(auto-detect)'}")
     ln(f"  initial_prompt:           {w_cfg.get('initial_prompt') or '(none)'}")
     ln(f"  condition_on_prev_text:   {w_cfg.get('condition_on_previous_text', True)}")
@@ -987,10 +1024,11 @@ def _write_server_log(
         "class_code_label":          class_code_label,
         "estimated_cost_seconds":    estimated_cost_seconds,
         "audio_duration_at_submit":  audio_duration_at_submit,
-        "status":                    "success" if failed_step is None else "failed",
+        "status":                    ("cancelled" if cancelled_by
+                                      else "success" if failed_step is None else "failed"),
         "failed_step":               failed_step,
         "error_type":                error_type,
-        "whisper_model":             w_cfg.get("model", "turbo"),
+        "whisper_model":             w_cfg.get("model", DEFAULT_WHISPER_MODEL),
         "language":                  w_cfg.get("language"),
         "initial_prompt_used":       bool(w_cfg.get("initial_prompt")),
         "condition_on_previous_text": w_cfg.get("condition_on_previous_text", True),
@@ -1018,8 +1056,74 @@ def _write_server_log(
         f.write(json.dumps(summary) + "\n")
 
 
+def _check_cancel(job_id: str) -> None:
+    """Raise StepKilled if this job was cancelled (or the server is stopping)."""
+    if job_id in _cancel_requests or _shutting_down:
+        raise StepKilled()
+
+
+def _run_step(job_id: str, func, *args):
+    """Run one heavy pipeline step in a killable child process (web/killable.py)."""
+    _check_cancel(job_id)
+    step = StepProcess(func, *args)
+    step.start()
+    _running_steps[job_id] = step
+    try:
+        # A cancel that arrived after the check above but before the step was
+        # registered wouldn't have found it to kill — catch that here.
+        if job_id in _cancel_requests or _shutting_down:
+            step.kill()
+        return step.wait()
+    finally:
+        _running_steps.pop(job_id, None)
+
+
+def _cancel_job(job_id: str, by: str) -> str:
+    """Cancel a waiting or running job on behalf of "user" or "admin".
+
+    Returns "cancelled" (it was waiting and is gone now), "cancelling" (it's
+    running; its pipeline thread finishes the cleanup once the step dies), or
+    "finished" (too late — it already completed or failed).
+    """
+    job = jobs[job_id]
+    if job["status"] not in ("queued", "running"):
+        return "finished"
+    _cancel_requests[job_id] = by
+    if scheduler.remove(job_id):
+        audio_path, config = _job_run_args.pop(job_id)
+        job.update(status="error", cancelled=True, error=_CANCEL_MESSAGES[by],
+                   step_name="Cancelled")
+        try:
+            _write_server_log(
+                job_id=job_id,
+                job_dir=JOBS_DIR / job_id,
+                audio_path=audio_path,
+                submitted_at=datetime.fromisoformat(job["created_at"]),
+                completed_at=datetime.now(timezone.utc),
+                step_times=[],
+                failed_step=None,
+                error_tb=None,
+                config=config,
+                cancelled_by=by,
+            )
+        except Exception:
+            pass
+        shutil.rmtree(JOBS_DIR / job_id, ignore_errors=True)
+        _cancel_requests.pop(job_id, None)
+        return "cancelled"
+    # Already picked by the worker: kill its current step, if one is running.
+    # Otherwise _check_cancel() stops it before its next step.
+    job["step_name"] = "Cancelling…"
+    step = _running_steps.get(job_id)
+    if step is not None:
+        step.kill()
+    return "cancelling"
+
+
 def _run_next_job() -> None:
     """Executor tick: run whichever waiting job the scheduler picks now."""
+    if _shutting_down:
+        return
     queued = scheduler.pop_next()
     if queued is None:
         return
@@ -1041,6 +1145,7 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
     step_times: list[tuple[str, float]] = []
     current_step: str | None = None
     error_tb: str | None = None
+    cancelled_by: str | None = None
 
     steps = config.get("steps", {})
     run_transcription = steps.get("transcription", True)
@@ -1057,18 +1162,20 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
             current_step = "Step 1 – Transcribing with Whisper"
             jobs[job_id].update(step=1, step_name="Transcribing with Whisper")
             _t = datetime.now(timezone.utc)
-            whisper_result = transcribe(str(audio_path), str(job_dir), config.get("whisper"))
+            whisper_result = _run_step(job_id, transcribe, str(audio_path), str(job_dir), config.get("whisper"))
             step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
             current_step = "Step 2 – Converting transcript to TextGrid"
             jobs[job_id].update(step=2, step_name="Converting transcript to TextGrid")
             _t = datetime.now(timezone.utc)
+            _check_cancel(job_id)
             convert_whisper_to_textgrid(whisper_result, str(audio_path), str(job_dir))
             step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
             current_step = "Step 2b – Generating line-by-line transcript"
             jobs[job_id].update(step=2, step_name="Generating line-by-line transcript")
             _t = datetime.now(timezone.utc)
+            _check_cancel(job_id)
             generate_transcript(str(job_dir), stem, config.get("praat"))
             step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
@@ -1076,7 +1183,7 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
             current_step = "Step 3 – Aligning with MFA"
             jobs[job_id].update(step=3, step_name="Aligning with MFA")
             _t = datetime.now(timezone.utc)
-            mfa_output_dir = align_with_mfa(str(audio_path), str(job_dir), config.get("mfa"))
+            mfa_output_dir = _run_step(job_id, align_with_mfa, str(audio_path), str(job_dir), config.get("mfa"))
             step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
             # If the user supplied their own TextGrid (Transcribe skipped), remove the
             # whisper_output/ staging folder — it only contained their uploaded file.
@@ -1089,13 +1196,13 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
                 current_step = "Step 4 – Extracting formants with FAVE-extract"
                 jobs[job_id].update(step=4, step_name="Extracting formants with FAVE-extract")
                 _t = datetime.now(timezone.utc)
-                extract_with_fave(str(audio_path), mfa_output_dir, str(job_dir), config.get("fave_extract"))
+                _run_step(job_id, extract_with_fave, str(audio_path), mfa_output_dir, str(job_dir), config.get("fave_extract"))
                 step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
             else:
                 current_step = "Step 4 – Extracting vowel formants with new-fave"
                 jobs[job_id].update(step=4, step_name="Extracting vowel formants with new-fave")
                 _t = datetime.now(timezone.utc)
-                extract_with_newfave(str(audio_path), mfa_output_dir, str(job_dir), config.get("newfave"))
+                _run_step(job_id, extract_with_newfave, str(audio_path), mfa_output_dir, str(job_dir), config.get("newfave"))
                 step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
             # If the user supplied their own MFA TextGrid (Align skipped), remove the
             # mfa_output/ staging folder — it only contained their uploaded file.
@@ -1112,6 +1219,7 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
             report_step = 4 if run_formants else 3
             jobs[job_id].update(step=report_step, step_name="Adding utterance tier to MFA TextGrid")
             _t = datetime.now(timezone.utc)
+            _check_cancel(job_id)
             combine_textgrids(str(job_dir), stem, config.get("praat"))
             step_times.append((current_step, (datetime.now(timezone.utc) - _t).total_seconds()))
 
@@ -1122,6 +1230,17 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
         )
         jobs[job_id].update(status="done", step=5, step_name="Complete")
         current_step = None  # marks success
+
+    except StepKilled:
+        cancelled_by = _cancel_requests.get(job_id)
+        if cancelled_by:
+            jobs[job_id].update(status="error", cancelled=True,
+                                error=_CANCEL_MESSAGES[cancelled_by], step_name="Cancelled")
+        else:  # killed because the server is shutting down
+            jobs[job_id].update(
+                status="error",
+                error="The server restarted while this job was running. Please submit it again.",
+            )
 
     except Exception as exc:
         error_tb = traceback.format_exc()
@@ -1154,6 +1273,7 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
                 failed_step=current_step,
                 error_tb=error_tb,
                 config=config,
+                cancelled_by=cancelled_by,
             )
         except Exception:
             pass
@@ -1161,6 +1281,10 @@ def _run_pipeline(job_id: str, audio_path: Path, config: dict) -> None:
             _cleanup_intermediates(job_dir, audio_path)
         except Exception:
             pass
+        # A cancelled job has nothing worth downloading — remove it entirely.
+        if cancelled_by:
+            shutil.rmtree(job_dir, ignore_errors=True)
+        _cancel_requests.pop(job_id, None)
         try:
             _cleanup_orphaned_audio()
         except Exception:
@@ -1216,7 +1340,7 @@ async def create_job(
     phone_tier_index: Optional[int] = Form(None),
     word_tier_index: Optional[int] = Form(None),
     utterance_tier_index: Optional[int] = Form(None),
-    whisper_model: str = Form("turbo"),
+    whisper_model: str = Form(DEFAULT_WHISPER_MODEL),
     language: Optional[str] = Form(None),
     initial_prompt: Optional[str] = Form(None),
     condition_on_previous_text: bool = Form(True),
@@ -1588,6 +1712,15 @@ async def create_job(
         "audio_duration_at_submit": (
             round(audio_duration_at_submit, 3) if audio_duration_at_submit else None
         ),
+        # Which steps were requested, for the admin queue view.
+        "steps": {
+            "whisper":  whisper_model if run_transcription else None,
+            "mfa":      run_alignment,
+            "formants": (
+                ("FAVE-extract" if formants_engine == "fave_extract" else "new-fave")
+                if run_formants else None
+            ),
+        },
     }
 
     jobs[job_id] = {
@@ -1677,12 +1810,32 @@ async def get_queue():
     """
     running = scheduler.running_count()
     waiting = scheduler.pending_count()
+    # While a class window is open, the form warns people without the code
+    # that class jobs will go first. Only the time left is exposed — never
+    # the code or which class it is.
+    priority_until = class_codes.active_until()
+    priority_minutes_left = None
+    if priority_until is not None:
+        seconds_left = (priority_until - datetime.now(timezone.utc)).total_seconds()
+        priority_minutes_left = max(1, -(-int(seconds_left) // 60))  # round up
     return JSONResponse({
         "queue_length": running + waiting,
         "running": running,
         "waiting": waiting,
         "submitters": scheduler.submitter_count(),
+        "class_priority_minutes_left": priority_minutes_left,
     })
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str, token: str = ""):
+    """Cancel your own job. Takes the job's download token, like the download link."""
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not secrets.compare_digest(token, jobs[job_id].get("download_token", "")):
+        raise HTTPException(status_code=403, detail="Invalid token")
+    outcome = await asyncio.to_thread(_cancel_job, job_id, "user")
+    return JSONResponse({"outcome": outcome})
 
 
 @app.get("/api/class-code")
@@ -1750,13 +1903,17 @@ async def admin_queue(authorization: Optional[str] = Header(None)):
     snap = scheduler.snapshot()
 
     def row(q: QueuedJob) -> dict:
+        info = job_client_info.get(q.job_id, {})
         return {
             "job_id": q.job_id,
             "submitter": _submitter_hash(q.submitter),
             "audio_filename": jobs.get(q.job_id, {}).get("audio_filename"),
+            "audio_seconds": info.get("audio_duration_at_submit"),
+            "steps": info.get("steps"),
             "estimated_cost_seconds": round(q.cost),
             "priority_label": q.priority_label,
             "waited_seconds": round((q.started_at or now) - q.enqueued_at),
+            "running_seconds": round(now - q.started_at) if q.started_at else None,
             "step_name": jobs.get(q.job_id, {}).get("step_name"),
         }
 
@@ -1764,6 +1921,15 @@ async def admin_queue(authorization: Optional[str] = Header(None)):
         "running": [row(q) for q in snap["running"]],
         "waiting": [row(q) for q in snap["waiting"]],
     })
+
+
+@app.post("/api/admin/jobs/{job_id}/cancel")
+async def admin_cancel_job(job_id: str, authorization: Optional[str] = Header(None)):
+    _require_admin(authorization)
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    outcome = await asyncio.to_thread(_cancel_job, job_id, "admin")
+    return JSONResponse({"outcome": outcome})
 
 
 @app.get("/api/jobs/{job_id}/download")

@@ -32,21 +32,20 @@ USAGE_HALF_LIFE = 12 * 3600      # seconds for a submitter's usage to halve
 STARVATION_LIMIT = 24 * 3600     # max time a submitter goes without a turn
 ORDER_CACHE_SECONDS = 30         # predicted order is time-dependent; refresh this often
 
-# Cost estimate, in rough processing-seconds. Only the *relative* sizes matter
-# for ordering. Whisper dominates (~72% of processing time across logged jobs,
-# about 1x real-time for turbo on CPU); MFA and new-fave are each a small
-# fraction of real-time. The per-model Whisper weights are guesses relative to
-# turbo -- refine all of these from data/logs/summary.jsonl once there's
-# enough production data.
-JOB_OVERHEAD_SECONDS = 30
-WHISPER_COST_PER_AUDIO_SECOND = {
-    "small":  0.5,
-    "turbo":  1.0,
-    "medium": 1.5,
-    "large":  3.0,
+# Estimated processing time, in seconds, on the production server (2 CPU
+# cores, no GPU). Each step is a fixed startup cost plus a cost per second of
+# audio, fitted to data/from_server/summary.jsonl (559 jobs through
+# 2026-10-02). The scheduler orders jobs by these estimates and the admin
+# page shows them, so refit them when the server or the tools change.
+WHISPER_TIME = {        # model: (fixed seconds, seconds per audio second)
+    "small":  (0,   0.81),   # n=15, but only 2–3 minute files so far
+    "turbo":  (270, 2.66),   # n=64, files up to 45 minutes
+    "medium": (150, 2.0),    # no data yet — a guess between small and turbo
+    "large":  (400, 6.0),    # no usable data — a guess; needs more RAM than the server has free
 }
-ALIGNMENT_COST_PER_AUDIO_SECOND = 0.10
-FORMANTS_COST_PER_AUDIO_SECOND = 0.15
+ALIGNMENT_TIME = (80, 0.018)     # MFA: mostly startup cost (n=297)
+FORMANTS_TIME = (1, 0.26)        # new-fave (n=258); FAVE-extract has no data, assumed similar
+STEP_STARTUP_SECONDS = 5         # each heavy step starts a fresh process (web/killable.py)
 DEFAULT_AUDIO_SECONDS = 1800     # used when the audio duration can't be read
 
 
@@ -57,16 +56,17 @@ def estimate_cost(
     run_alignment: bool,
     run_formants: bool,
 ) -> float:
-    """Estimated processing cost of a job, in rough seconds."""
+    """Estimated processing time of a job on the production server, in seconds."""
     duration = audio_seconds if audio_seconds and audio_seconds > 0 else DEFAULT_AUDIO_SECONDS
-    per_second = 0.0
+    steps = []
     if run_transcription:
-        per_second += WHISPER_COST_PER_AUDIO_SECOND.get(whisper_model, 1.0)
+        steps.append(WHISPER_TIME.get(whisper_model, WHISPER_TIME["turbo"]))
     if run_alignment:
-        per_second += ALIGNMENT_COST_PER_AUDIO_SECOND
+        steps.append(ALIGNMENT_TIME)
     if run_formants:
-        per_second += FORMANTS_COST_PER_AUDIO_SECOND
-    return JOB_OVERHEAD_SECONDS + duration * per_second
+        steps.append(FORMANTS_TIME)
+    return sum(STEP_STARTUP_SECONDS + fixed + per_second * duration
+               for fixed, per_second in steps)
 
 
 @dataclass

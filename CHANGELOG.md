@@ -4,6 +4,19 @@ All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-10-05
+### Added
+- Users can cancel their own job, whether it's waiting or already running, from the processing screen, and the admin can cancel any job from the admin page. A running job stops within a few seconds, even partway through Whisper, and the uploaded file is deleted.
+- The admin queue view now shows each job's audio length and which steps (Whisper and model, MFA, new-fave/FAVE-extract) it will run.
+- The admin queue table can be sorted by any column, and shows each job's estimated processing time (plus time left for the running job).
+### Changed
+- Whisper **Small** is now the default model. On the VoxHumana server, Small transcribes in about 0.8× the recording's length, versus about 2.7× plus ~4.5 minutes of startup for Turbo. This should increase processing speed and reduce the queue and wait times.
+- Processing-time estimates (used to order the queue) are now fitted to real timings from the server's job logs instead of rough guesses.
+- The admin page is wider so the whole queue table fits.
+- New wording for the queue note beside Submit. During an active class window, it also tells people without the code how long class jobs will take priority.
+- The Submit button now says "Adding to queue…" after the upload reaches 100%, instead of sitting on "100%" while the server saves the file.
+- Whisper, MFA, and formant extraction now each run in their own process. This makes cancelling possible and keeps the web server responsive while a job runs. A server restart now stops the running job immediately instead of waiting for it to finish.
+
 ## [0.18.0] - 2026-10-04
 ### Added
 - A note saying that it's still in beta-testing mode.

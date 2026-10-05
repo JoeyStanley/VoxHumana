@@ -401,7 +401,10 @@ textarea:focus {
 /* Submit area */
 .submit-area { display: flex; gap: 12px; align-items: flex-end; }
 .submit-area .field { flex: 1; }
-.queue-status { align-self: center; font-size: 12px; font-style: italic; color: var(--pbl); line-height: 1; }
+.queue-status { flex: 1; align-self: center; font-size: 12px; font-style: italic; color: var(--pbl); line-height: 1.45; }
+.queue-status-note { margin-top: 4px; color: var(--pbm); }
+.cancel-job-btn { padding: 5px 12px; font-size: 10px; margin-top: 10px; }
+.cancel-job-btn:disabled { opacity: 0.6; cursor: default; }
 .class-code-field { max-width: 320px; }
 .class-code-status { font-size: 11px; color: var(--pbl); margin-top: 4px; min-height: 14px; line-height: 1.4; }
 .class-code-status.good { color: #3d6b2f; }

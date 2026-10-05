@@ -235,6 +235,8 @@ your Job ID. It is not shared or used for any other purpose."
 ### Shut down when tab closes
 Currently, the processing continues after closing the tab. If the email thing doesn't
 happen soon, I should fix that so that canceled jobs don't clog the queue.
+(2026-10-04: manual cancel now exists — `_cancel_job()` in web/app.py — so this would
+just need a reliable "tab closed" signal to call it.)
 
 ---
 

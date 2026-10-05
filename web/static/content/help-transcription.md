@@ -21,12 +21,12 @@ improve accuracy on names, places, or unusual vocabulary that Whisper might othe
 
 ### Model size
 
-- **Turbo** (recommended) — Fast and nearly as accurate as Large. This is the best default for fieldwork recordings.
-- **Large** — Most accurate, but significantly slower (~1× real-time). This is worth trying if Turbo produces problematic transcripts.
-- **Medium** — A useful middle ground when Turbo misses content and Large is too slow.
-- **Small** — Fastest option. Accuracy degrades noticeably on nonstandard speech; use only when speed is critical.
+- **Small** (default) — Fastest option: on the VoxHumana server, about 50 minutes for a 1-hour recording. Accuracy degrades noticeably on nonstandard speech, so check the transcript, or choose Turbo if accuracy matters more than speed.
+- **Turbo** — Nearly as accurate as Large, but about 3× slower than Small on the server (roughly 3 hours for a 1-hour recording).
+- **Medium** — A middle ground between Small and Large.
+- **Large** — Most accurate, and by far the slowest. Worth trying only if Turbo produces problematic transcripts.
 
-All models run on CPU by default. GPU access makes Whisper 5–10× faster.
+The VoxHumana server runs Whisper on its CPU (no GPU), which is why Small is the default. If you run VoxHumana on your own machine with a GPU, Whisper is 5–10× faster and Turbo is a good choice.
 
 ### Carry context across chunks (Advanced)
 

@@ -12,9 +12,9 @@ next to "Audio file" for tips on large files and supported formats.
 
 ### Step 2: Configure transcription
 
-Leave **Language** on Auto-detect for most recordings. Choose a **Whisper model**: Turbo is
-the recommended default. It is fast and nearly as accurate as Large. See the **?** button for a full
-speed–accuracy comparison.
+Leave **Language** on Auto-detect for most recordings. Choose a **Whisper model**: Small is
+the default because it is the fastest on the VoxHumana server. Turbo is more accurate but about
+3× slower. See the **?** button for a full speed–accuracy comparison.
 
 ### Step 3: Configure alignment
 
