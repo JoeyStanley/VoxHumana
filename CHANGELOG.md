@@ -3,6 +3,14 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+### Added
+- Two additional cores added to processing on the server, which allows for greater speed and processing multiple jobs in parallel.
+- Two queues that run at the same time: a transcription queue (Whisper) and an alignment queue (MFA and formant extraction), each with the same fair-share ordering. While one job is in Whisper, another can be aligned, and jobs that skip Whisper (uploaded TextGrids) go straight to the alignment queue instead of waiting behind long transcriptions.
+- Core sharing between the two queues. While Whisper is running, the alignment queue gets 1 core and Whisper gets the rest. When the alignment queue is idle, Whisper borrows that core back, re-checking before each 30-second window. When nothing needs Whisper, alignment steps may use every core.
+- Each job's server log now records the server's core count, memory, whether the two-queue pipeline was on, and how long the job waited between queues, so time estimates can be refit per hardware setup.
+- The admin page shows which queue each job is in, and how many cores Whisper is currently using.
+### Changed
+- Servers with fewer than 3 cores keep the old single queue (each job runs start to finish). `VXH_PIPELINE=0/1` and `VXH_CPU_CORES` override the automatic choice.
 
 ## [0.18.1] - 2026-10-05
 ### Added

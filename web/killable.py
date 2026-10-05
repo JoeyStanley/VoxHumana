@@ -15,6 +15,7 @@ module to find _child_entry, and importing web.app there would re-run the
 whole server setup in every child.
 """
 
+import importlib
 import multiprocessing
 import os
 import signal
@@ -32,9 +33,14 @@ class StepKilled(Exception):
     """The step's process was killed (cancel or shutdown) before it finished."""
 
 
-def _child_entry(conn, func, args, kwargs):
+def _child_entry(conn, func_ref, args, kwargs, env):
     os.setsid()
+    # Set env (e.g. thread limits) before importing the step's module: numpy,
+    # torch, and joblib read their thread settings when first imported.
+    os.environ.update(env)
     try:
+        module_name, func_name = func_ref
+        func = getattr(importlib.import_module(module_name), func_name)
         payload = ("ok", func(*args, **kwargs), None)
     except BaseException as exc:
         payload = ("error", exc, traceback.format_exc())
@@ -49,10 +55,16 @@ def _child_entry(conn, func, args, kwargs):
 
 
 class StepProcess:
-    """One step function, run in a child process: start(), then wait() or kill()."""
+    """One step function, run in a child process: start(), then wait() or kill().
 
-    def __init__(self, func, *args, **kwargs):
-        self._func, self._args, self._kwargs = func, args, kwargs
+    `func` must be a module-level function. It's passed to the child by name
+    (not pickled) so its module is only imported after `env` is applied.
+    """
+
+    def __init__(self, func, *args, env: dict | None = None, **kwargs):
+        self._func_ref = (func.__module__, func.__qualname__)
+        self._args, self._kwargs = args, kwargs
+        self._env = {k: str(v) for k, v in (env or {}).items()}
         self._proc = None
         self._conn = None
         self._killed = False
@@ -64,7 +76,7 @@ class StepProcess:
         # running steps itself on shutdown instead (see app.py).
         self._proc = _ctx.Process(
             target=_child_entry,
-            args=(child_conn, self._func, self._args, self._kwargs),
+            args=(child_conn, self._func_ref, self._args, self._kwargs, self._env),
         )
         self._proc.start()
         child_conn.close()  # so recv() sees EOF if the child dies

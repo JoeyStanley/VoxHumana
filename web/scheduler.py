@@ -49,6 +49,35 @@ STEP_STARTUP_SECONDS = 5         # each heavy step starts a fresh process (web/k
 DEFAULT_AUDIO_SECONDS = 1800     # used when the audio duration can't be read
 
 
+def estimate_stage_times(
+    audio_seconds: Optional[float],
+    whisper_model: str,
+    run_transcription: bool,
+    run_alignment: bool,
+    run_formants: bool,
+) -> tuple[float, float]:
+    """Estimated seconds of (transcription, alignment + formant extraction) work.
+
+    The two halves are queued separately (see web/app.py), so each queue
+    orders its jobs by its own half.
+    """
+    duration = audio_seconds if audio_seconds and audio_seconds > 0 else DEFAULT_AUDIO_SECONDS
+
+    def step_time(fixed_and_rate):
+        fixed, per_second = fixed_and_rate
+        return STEP_STARTUP_SECONDS + fixed + per_second * duration
+
+    transcription = (
+        step_time(WHISPER_TIME.get(whisper_model, WHISPER_TIME["turbo"]))
+        if run_transcription else 0.0
+    )
+    alignment = (
+        (step_time(ALIGNMENT_TIME) if run_alignment else 0.0)
+        + (step_time(FORMANTS_TIME) if run_formants else 0.0)
+    )
+    return transcription, alignment
+
+
 def estimate_cost(
     audio_seconds: Optional[float],
     whisper_model: str,
@@ -56,17 +85,10 @@ def estimate_cost(
     run_alignment: bool,
     run_formants: bool,
 ) -> float:
-    """Estimated processing time of a job on the production server, in seconds."""
-    duration = audio_seconds if audio_seconds and audio_seconds > 0 else DEFAULT_AUDIO_SECONDS
-    steps = []
-    if run_transcription:
-        steps.append(WHISPER_TIME.get(whisper_model, WHISPER_TIME["turbo"]))
-    if run_alignment:
-        steps.append(ALIGNMENT_TIME)
-    if run_formants:
-        steps.append(FORMANTS_TIME)
-    return sum(STEP_STARTUP_SECONDS + fixed + per_second * duration
-               for fixed, per_second in steps)
+    """Estimated processing time of a whole job on the production server, in seconds."""
+    return sum(estimate_stage_times(
+        audio_seconds, whisper_model, run_transcription, run_alignment, run_formants,
+    ))
 
 
 @dataclass
@@ -190,13 +212,21 @@ class FairScheduler:
         with self._lock:
             return len(self._running)
 
-    def submitter_count(self) -> int:
+    def submitters(self) -> set[str]:
         """Distinct submitters with a job waiting or running."""
         with self._lock:
-            return len(
+            return (
                 {j.submitter for j in self._pending.values()}
                 | {j.submitter for j in self._running.values()}
             )
+
+    def submitter_count(self) -> int:
+        return len(self.submitters())
+
+    def is_idle(self) -> bool:
+        """Nothing waiting and nothing running."""
+        with self._lock:
+            return not self._pending and not self._running
 
     def predicted_order(self, now: Optional[float] = None) -> list[str]:
         """Waiting job IDs in the order they'd start if nothing else arrived.

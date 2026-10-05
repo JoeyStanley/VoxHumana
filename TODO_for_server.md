@@ -240,8 +240,17 @@ uv run uvicorn web.app:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
 IMPORTANT: Always use `--workers 1`. The pipeline uses an in-memory job store and
-a single-threaded executor — multiple workers would have separate job stores and
+in-process job queues — multiple workers would have separate job stores and
 break job status polling.
+
+**Queue setup (optional environment variables).** With 3 or more CPU cores, VoxHumana
+runs two queues at once (Whisper in one, MFA + formant extraction in the other) and
+shares cores between them. With fewer, it falls back to a single queue. To override:
+- `VXH_PIPELINE=0` forces the single queue (e.g. if memory gets tight); `VXH_PIPELINE=1`
+  forces two queues.
+- `VXH_CPU_CORES=N` sets how many cores VoxHumana treats as its own (default: all of them).
+Set these the same way as `VXH_ROOT_PATH` (an `Environment=` line in the systemd unit).
+The admin page shows which setup is active.
 
 **If VoxHumana is deployed under a sub-path** (e.g. `https://your-domain.byu.edu/VoxHumana/`
 instead of owning the whole domain), you MUST also set `VXH_ROOT_PATH` in the

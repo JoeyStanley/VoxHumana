@@ -378,12 +378,18 @@ While we're at it, add other versions of MFA.
 
 ## Multiple jobs at once
 
-**Status (2026-10-02): scheduling done, parallelism deferred.** The single worker now picks
-jobs by fair share across submitters, cheapest jobs first, with 24-hour aging and class-code
-priority (`web/scheduler.py`, `web/class_codes.py`, `/admin`). Not done yet:
-- Pipelining (start the next job's Whisper while the previous job is in MFA/new-fave).
-- Multiple lanes, e.g. one express lane reserved for short jobs so a class never waits
-  behind a multi-hour Whisper run. Needs the production server's core/RAM/GPU numbers first.
+**Status (2026-10-05): two-queue pipeline done.** Fair-share scheduling (cheapest jobs first,
+24-hour aging, class-code priority) runs in two queues at once: transcription (Whisper) and
+alignment (MFA + formants), with the alignment queue's core lent to Whisper when it's idle.
+The server went from 2 to 4 cores / 10 GB RAM on 2026-10-05. Not done yet:
+- **Priority preemption** (discussed 2026-10-05): when class-code jobs arrive, drop a running
+  non-priority Whisper job to 1 core, or pause it at a 30-second window boundary
+  (`_follow_thread_target()` in `pipeline/transcribe_with_whisper.py` is where a pause would
+  go), and run 2–3 alignment jobs side by side. Running several MFA jobs at once needs testing
+  first. Open question: preempt for class codes only, or for short jobs too?
+- Refit the time estimates in `web/scheduler.py` once there are ~20–30 jobs on the new
+  hardware (filter `summary.jsonl` on `cpu_cores` and `pipeline`). Revisit Small vs. Turbo
+  as the default then: Turbo may be much faster without the old memory pressure.
 - Auto-deploy (`scripts/deploy.sh`) restarts the server on every push, which wipes the
   in-memory queue and kills the running job. Consider waiting until the queue is idle.
 - Tune the cost weights in `web/scheduler.py` against `data/logs/summary.jsonl`.
