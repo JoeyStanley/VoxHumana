@@ -539,3 +539,7 @@ Update `document.title` to reflect what's happening:
   ## UXUI
 
   Check with the UX/UI folks in ODH to see if they can offer advice on this.
+
+  ## Copyright
+
+  Look into what it takes to copyright this stuff. Intellectual property. 

@@ -6,6 +6,7 @@ import tgt
 from new_fave import fave_audio_textgrid, write_data
 
 from pipeline.combine_preliquid_sequences import combine_preliquid_sequences
+from pipeline.errors import UserFacingError
 from pipeline.tier_selection import extract_word_phone_tiers
 
 RESOURCES_DIR = Path(__file__).parent / "resources"
@@ -138,7 +139,7 @@ def extract_with_newfave(audio_path, mfa_output_dir, job_dir, config=None):
     n_tiers = len(tg_for_validation.tiers)
     if n_tiers != 2:
         tier_names = ", ".join(repr(t.name) for t in tg_for_validation.tiers)
-        raise RuntimeError(
+        raise UserFacingError(
             f"Expected exactly 2 tiers (words, then phones) in {textgrid_path.name}, "
             f"found {n_tiers}: {tier_names}. new-fave pairs a speaker's tiers "
             "positionally, not by name, so an extra tier (e.g. an 'utterance' tier "

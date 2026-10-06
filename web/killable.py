@@ -22,6 +22,8 @@ import signal
 import threading
 import traceback
 
+from pipeline.errors import UserFacingError
+
 # "spawn" (not fork): forking a process that has torch loaded and other
 # threads running isn't safe; spawn starts a clean interpreter.
 _ctx = multiprocessing.get_context("spawn")
@@ -94,7 +96,7 @@ class StepProcess:
         if self._killed:
             raise StepKilled()
         if msg is None:
-            raise RuntimeError(
+            raise UserFacingError(
                 f"This step stopped unexpectedly (exit code {self._proc.exitcode}). "
                 "The server may have run out of memory."
             )
