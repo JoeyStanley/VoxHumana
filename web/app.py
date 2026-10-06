@@ -42,6 +42,7 @@ from pipeline.align_with_mfa import align_with_mfa, merge_or_validate_pronunciat
 from pipeline.extract_with_newfave import extract_with_newfave, LANGUAGE_DEFAULTS, PRELIQUID_RECODE_RULES
 from pipeline.extract_with_fave import extract_with_fave, get_fave_version
 from pipeline.combine_textgrids import combine_textgrids
+from pipeline.errors import UserFacingError
 from pipeline.tier_selection import (
     list_tier_names,
     guess_tier_roles,
@@ -314,6 +315,50 @@ def _cleanup_intermediates(job_dir: Path, audio_path: Path) -> None:
 
 
 _AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif"}
+
+# ffmpeg demuxers an upload may be read with, whatever its extension says.
+# Keeps the decode check (and Whisper, later) away from ffmpeg's playlist,
+# concat, and image readers, which can be made to read other files on the
+# server. "mov" covers .m4a; "w64" is Sony Wave64, which some field
+# recorders save with a .wav extension.
+_AUDIO_DEMUXERS = "wav,w64,mp3,flac,mov,ogg,aiff"
+
+
+def _is_decodable_audio(path: Path) -> bool:
+    """True if ffmpeg can decode an audio stream from the start of the file.
+
+    Run on every upload, so a file that isn't really audio is rejected and
+    deleted right away rather than queued to fail later in Whisper. Uses
+    ffmpeg because that's what Whisper decodes with; only the first few
+    seconds are decoded, to keep it quick.
+    """
+    cmd = [
+        "ffmpeg", "-nostdin", "-v", "error",
+        "-format_whitelist", _AUDIO_DEMUXERS, "-i", str(path),
+        "-map", "0:a:0", "-t", "5", "-f", "null", "-",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"VoxHumana: could not check upload {path} with ffmpeg: {exc!r}", flush=True)
+        return False
+    return proc.returncode == 0
+
+
+def _user_error_message(exc: Exception, current_step: str | None) -> str:
+    """What to tell the user about a failed job.
+
+    Only UserFacingError messages are shown as-is. Any other exception can
+    carry tool output, server paths, and version details, so the user gets
+    a generic message instead; the full traceback is in the job's error.log.
+    """
+    if isinstance(exc, UserFacingError):
+        return str(exc)
+    if current_step:
+        what = current_step.split(" – ", 1)[-1]  # drop the "Step 3 – " prefix
+        what = what[:1].lower() + what[1:]
+        return f"Something went wrong while {what}. The details were logged on the server."
+    return "Something went wrong while processing this job. The details were logged on the server."
 
 
 def _looks_like_pronunciation_dict(text: str) -> bool:
@@ -1360,7 +1405,7 @@ def _run_stage(run: _JobRun, stage: str) -> bool:
         error_tb = traceback.format_exc()
         # Write the full traceback to disk for debugging; never send it to the client.
         (JOBS_DIR / job_id / "error.log").write_text(error_tb)
-        job.update(status="error", error=str(exc))
+        job.update(status="error", error=_user_error_message(exc, current_step))
 
     _finish_job(run, current_step, error_tb, cancelled_by)
     return False
@@ -1409,6 +1454,13 @@ def _finish_job(run: _JobRun, failed_step: str | None, error_tb: str | None,
         pass
 
 
+def _textgrid_parse_error(filename: str) -> str:
+    # Deliberately not the parser's own message: tgt sometimes raises with
+    # just the server-side path of the file as the message.
+    return (f"Could not read {filename} as a Praat TextGrid. Make sure it's a TextGrid "
+            "saved from Praat in text (not binary) format.")
+
+
 @app.post("/api/textgrid-tiers")
 async def get_textgrid_tiers(textgrid: UploadFile = File(...)):
     """
@@ -1433,8 +1485,10 @@ async def get_textgrid_tiers(textgrid: UploadFile = File(...)):
 
     try:
         tier_names = list_tier_names(tmp_path)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Could not parse TextGrid: {exc}")
+    except Exception:
+        raise HTTPException(
+            status_code=400, detail=_textgrid_parse_error(textgrid.filename or "this file"),
+        )
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -1577,14 +1631,23 @@ async def create_job(
                        "formant-prediction method.",
             )
 
+    # The file picker's accept= list is only a hint to the browser; enforce
+    # it here, before anything is written to disk.
+    original_name = audio.filename or "audio.wav"
+    suffix = Path(original_name).suffix
+    if suffix.lower() not in _AUDIO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{original_name} isn't a supported audio file type. VoxHumana "
+                   f"accepts {', '.join(sorted(_AUDIO_EXTENSIONS))} files.",
+        )
+
     job_id = _generate_job_id()
     while job_id in jobs:
         job_id = _generate_job_id()
     job_dir = JOBS_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    original_name = audio.filename or "audio.wav"
-    suffix = Path(original_name).suffix or ".wav"
     safe_stem = _sanitize_stem(original_name)
     audio_path = job_dir / f"{safe_stem}{suffix}"
 
@@ -1602,6 +1665,14 @@ async def create_job(
                            "See the User Guide for tips on splitting long recordings.",
                 )
             fh.write(chunk)
+
+    if not await asyncio.to_thread(_is_decodable_audio, audio_path):
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise HTTPException(
+            status_code=400,
+            detail=f"VoxHumana couldn't read {original_name} as audio. It may be damaged, "
+                   "or not actually an audio file. Try re-exporting it as a WAV file.",
+        )
 
     # If a TextGrid was uploaded (Transcribe skipped), route it to the right directory:
     #   - Align is running  → whisper_output/ (utterance TextGrid for MFA)
@@ -1630,12 +1701,9 @@ async def create_job(
         if not run_alignment:
             try:
                 tier_names = list_tier_names(tg_path)
-            except Exception as exc:
+            except Exception:
                 shutil.rmtree(job_dir, ignore_errors=True)
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Could not parse {tg_original} as a TextGrid: {exc}",
-                )
+                raise HTTPException(status_code=400, detail=_textgrid_parse_error(tg_original))
             guessed_phone, guessed_word = guess_tier_roles(tier_names)
             phone_idx = phone_tier_index if phone_tier_index is not None else guessed_phone
             word_idx = word_tier_index if word_tier_index is not None else guessed_word
@@ -1665,12 +1733,9 @@ async def create_job(
             # user-selected (or best-effort guessed) utterance tier.
             try:
                 tier_names = list_tier_names(tg_path)
-            except Exception as exc:
+            except Exception:
                 shutil.rmtree(job_dir, ignore_errors=True)
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Could not parse {tg_original} as a TextGrid: {exc}",
-                )
+                raise HTTPException(status_code=400, detail=_textgrid_parse_error(tg_original))
             guessed_utterance = guess_utterance_tier(tier_names)
             utterance_idx = (
                 utterance_tier_index if utterance_tier_index is not None else guessed_utterance
@@ -1745,9 +1810,19 @@ async def create_job(
             merged_path = await asyncio.to_thread(
                 merge_or_validate_pronunciations, dictionary, new_pronunciations_path, oov_dir,
             )
-        except RuntimeError as exc:
+        except UserFacingError as exc:
             shutil.rmtree(job_dir, ignore_errors=True)
             raise HTTPException(status_code=400, detail=str(exc))
+        except Exception:
+            # Not the user's fault, and the message has server paths and MFA's
+            # output in it: log it here, show something generic.
+            traceback.print_exc()
+            shutil.rmtree(job_dir, ignore_errors=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Something went wrong while checking your custom pronunciations. "
+                       "The details were logged on the server.",
+            )
 
         if oov_mode == "upload" and not oov_merge_with_builtin:
             # Validated above for phone compatibility, but the actual
@@ -1875,6 +1950,10 @@ def _job_status_payload(job_id: str) -> Optional[dict]:
     if job_id not in jobs:
         return None
     job = dict(jobs[job_id])
+    # Anyone can look up any job ID, and the token is what authorizes
+    # downloading or cancelling. The submitter's browser already has it from
+    # the submit response.
+    job.pop("download_token", None)
     stage = job.get("queue")
     if job["status"] not in ("queued", "running") or stage is None:
         return job
@@ -1959,12 +2038,22 @@ async def get_queue():
     })
 
 
+def _job_token_matches(job_id: str, token: str) -> bool:
+    """Check a job's download token, which also authorizes cancelling it.
+
+    Compared as bytes: compare_digest raises on non-ASCII str arguments,
+    which would turn a junk token into a 500 instead of a 403.
+    """
+    expected = jobs[job_id].get("download_token", "")
+    return secrets.compare_digest(token.encode(), expected.encode())
+
+
 @app.post("/api/jobs/{job_id}/cancel")
 async def cancel_job(job_id: str, token: str = ""):
     """Cancel your own job. Takes the job's download token, like the download link."""
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    if not secrets.compare_digest(token, jobs[job_id].get("download_token", "")):
+    if not _job_token_matches(job_id, token):
         raise HTTPException(status_code=403, detail="Invalid token")
     outcome = await asyncio.to_thread(_cancel_job, job_id, "user")
     return JSONResponse({"outcome": outcome})
@@ -2080,7 +2169,7 @@ async def admin_cancel_job(job_id: str, authorization: Optional[str] = Header(No
 async def download_results(job_id: str, token: str = ""):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    if token != jobs[job_id].get("download_token", ""):
+    if not _job_token_matches(job_id, token):
         raise HTTPException(status_code=403, detail="Invalid download token")
     if jobs[job_id]["status"] not in ("done", "error"):
         raise HTTPException(status_code=400, detail="Job not complete")
@@ -2098,6 +2187,9 @@ async def download_results(job_id: str, token: str = ""):
                 continue
             # Skip the uploaded audio file kept server-side
             if f.name == audio_filename:
+                continue
+            # The traceback is for the admin; it has server paths and tool output in it.
+            if f.name == "error.log" and f.parent == job_dir:
                 continue
             zf.write(f, f.relative_to(job_dir))
 

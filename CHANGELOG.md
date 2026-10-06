@@ -3,6 +3,10 @@
 All notable changes to VoxHumana will be documented here.
 
 ## [Unreleased]
+### Security
+- Uploaded audio is now checked on the server. It must have a supported extension (.wav, .mp3, .flac, .m4a, .ogg, .aiff, .aif) and actually decode as audio, or it's rejected immediately and nothing is kept. Previously any file was saved and queued, then failed later in Whisper.
+- Error messages no longer include internal details such as tool output, server file paths, or software versions. Problems you can fix (no speech detected, wrong TextGrid tiers, bad phone symbols, timeouts) still get a specific message; anything else says which step failed, and the details go to the server's error log. The "Download partial results" zip no longer includes that log.
+- Browser-internal job status responses no longer include the job's download token. 
 
 ## [0.18.2] - 2026-10-05
 ### Added

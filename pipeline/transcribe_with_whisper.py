@@ -3,6 +3,8 @@ import json
 import torch
 from pathlib import Path
 
+from pipeline.errors import UserFacingError
+
 
 def _follow_thread_target(model, thread_target):
     """Re-check how many CPU threads to use before each 30-second window.
@@ -39,19 +41,30 @@ def transcribe(audio_path, job_dir, config=None, thread_target=None):
     initial_prompt = config.get("initial_prompt", None)
     condition_on_previous_text = config.get("condition_on_previous_text", True)
 
+    # Decode up front rather than letting model.transcribe() do it: on a bad
+    # file, Whisper's loader raises with ffmpeg's entire stderr (version,
+    # build flags, server paths) as the message.
+    try:
+        audio = whisper.load_audio(audio_path)
+    except RuntimeError as exc:
+        raise UserFacingError(
+            "VoxHumana couldn't decode this audio file. It may be damaged, or in a "
+            "format the server can't read. Try re-exporting it as a WAV file."
+        ) from exc
+
     model = whisper.load_model(model_size)
     if thread_target is not None:
         torch.set_num_threads(max(1, thread_target.value))
         _follow_thread_target(model, thread_target)
     result = model.transcribe(
-        audio_path,
+        audio,
         language=language,
         initial_prompt=initial_prompt,
         condition_on_previous_text=condition_on_previous_text,
     )
 
     if not result["segments"]:
-        raise RuntimeError(
+        raise UserFacingError(
             "No speech was detected in this audio. If this is a stereo file, check "
             "that the two channels aren't out of phase -- mixing to mono for "
             "transcription can cancel the audio out entirely."

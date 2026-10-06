@@ -5,6 +5,8 @@ from pathlib import Path
 
 import tgt
 
+from pipeline.errors import UserFacingError
+
 # FAVE-extract (https://github.com/JoFrhwld/FAVE) lives in its own venv, not
 # the main project venv: it pins numpy <2.0, which cannot coexist with the
 # numpy >=2.0 that new-fave/librosa/openai-whisper resolve to under this
@@ -203,7 +205,7 @@ def extract_with_fave(audio_path, mfa_output_dir, job_dir, config=None):
     n_tiers = len(tg.tiers)
     if n_tiers != 2:
         tier_names = ", ".join(repr(t.name) for t in tg.tiers)
-        raise RuntimeError(
+        raise UserFacingError(
             f"Expected exactly 2 tiers (words, then phones) in {textgrid_path.name}, "
             f"found {n_tiers}: {tier_names}. FAVE-extract's --mfa mode pairs a "
             "single speaker's tiers positionally as (word, phone); remove any "
@@ -275,7 +277,7 @@ def extract_with_fave(audio_path, mfa_output_dir, job_dir, config=None):
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.communicate()  # drain pipes so the process exits cleanly
-                raise RuntimeError(
+                raise UserFacingError(
                     f"FAVE-extract timed out after {timeout // 60} minutes. "
                     "The recording may be too long. Try splitting it into shorter segments."
                 )

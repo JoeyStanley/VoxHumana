@@ -3,6 +3,7 @@ import subprocess
 import shutil
 from pathlib import Path
 
+from pipeline.errors import UserFacingError
 from pipeline.languages import MFA_G2P_MODEL_BY_DICTIONARY, mfa_dictionary_file, mfa_g2p_model_file
 
 
@@ -22,9 +23,10 @@ def merge_or_validate_pronunciations(dictionary_name, new_pronunciations_path, t
 
     Returns the path to the merged copy (target_dir / "<dictionary_name>_merged.dict").
 
-    Raises RuntimeError with a user-facing message - naming the specific bad
-    phone(s) when MFA reports a PhoneMismatchError - on any failure. Safe to
-    catch and re-raise as an HTTP 400 from a request handler.
+    Raises UserFacingError - naming the specific bad phone(s) when MFA reports
+    a PhoneMismatchError - for problems with the user's pronunciations, safe
+    to re-raise as an HTTP 400 from a request handler. Raises RuntimeError
+    (with server paths and MFA's output, for the log) for anything else.
     """
     target_dir = Path(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -51,7 +53,7 @@ def merge_or_validate_pronunciations(dictionary_name, new_pronunciations_path, t
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.communicate()
-            raise RuntimeError("Adding custom pronunciations to the dictionary timed out.")
+            raise UserFacingError("Adding custom pronunciations to the dictionary timed out.")
 
     if proc.returncode != 0:
         combined = f"{stdout}\n{stderr}"
@@ -75,8 +77,8 @@ def merge_or_validate_pronunciations(dictionary_name, new_pronunciations_path, t
                     if line.startswith("ERROR conda"):
                         break
                     phones.append(line)
-            phones_str = ", ".join(phones) if phones else "(see details below)"
-            raise RuntimeError(
+            phones_str = ", ".join(phones) if phones else "(MFA didn't list them)"
+            raise UserFacingError(
                 "One or more custom pronunciations use phone symbols that aren't part of "
                 f"the '{dictionary_name}' dictionary's phone set (unrecognized: {phones_str}). "
                 "Double check each phone against that dictionary's phone inventory — a common "
@@ -237,7 +239,7 @@ def align_with_mfa(audio_path, job_dir, config=None):
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.communicate()  # drain pipes so the process exits cleanly
-            raise RuntimeError(
+            raise UserFacingError(
                 f"MFA alignment timed out after {timeout // 60} minutes. "
                 "The recording may be too long. Try splitting it into shorter segments."
             )
